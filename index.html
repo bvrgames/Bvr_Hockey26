@@ -619,7 +619,7 @@ function rinkOutline(step){
 }
 
 /* ---------- камера ---------- */
-var cam={x:0,y:15.2,z:-12.4,pitch:0.80,yaw:0,shake:0};
+var cam={x:0,y:15.2,z:-12.4,pitch:0.80,yaw:0,shake:0, targetYaw:0, targetDist:0, focusX:0, focusZ:0};
 var CAMLOCK=false;
 var camYawT=0;
 var F;
@@ -1154,7 +1154,7 @@ var gkRush=[false,false];
 var offT=0;   /* время удержания отложенного офсайда (для мигания) */
 var icing={armed:false,team:-1};
 var QUALITY=0, fpsAvg=60, qTimer=0, qHold=0;
-var CAM_TYPE=2;      /* фиксированная камера «лёд» */
+var CAM_TYPE=1;      /* фиксированная камера «классика» — дефолт для NHL feel */
 /* PORTRAIT объявлена и уже вычислена настоящим layout() выше — здесь её
    повторно не заводим: было var PORTRAIT=false, который выполнялся уже
    ПОСЛЕ первого layout() и молча затирал верно посчитанную ориентацию
@@ -1165,8 +1165,8 @@ var MATCH_MIN=3;
 var CAM_PRESETS=[
   /* трансляция */ {land:{y:9.6,d:19.0,pitch:0.44,fk:1.02,fx:0.86,fz:0.16},
                     port:{y:13.5,d:23.0,pitch:0.50,fk:0.74,fx:0.90,fz:0.40}},
-  /* классика   */ {land:{y:15.2,d:12.4,pitch:0.80,fk:1.02,fx:1.00,fz:0.55},
-                    port:{y:22.0,d:14.0,pitch:0.94,fk:0.76,fx:1.00,fz:0.60}},
+  /* классика   */ {land:{y:14.0,d:14.0,pitch:0.65,fk:1.02,fx:0.95,fz:0.45},
+                    port:{y:20.0,d:14.0,pitch:0.80,fk:0.76,fx:1.00,fz:0.55}},
   /* лёд        */ {land:{y:10.5,d:15.5,pitch:0.60,fk:1.05,fx:0.92,fz:0.32},
                     /* портретные числа ниже пересчитаны: раньше PORTRAIT никогда
                        не включался (см. комментарий выше), поэтому эти цифры
@@ -1184,7 +1184,50 @@ function zoneOf(x,dir){ var v=x*dir; return v>BLUE_X?1:(v<-BLUE_X?-1:0); }
 function onIce(t){ return players.filter(function(p){return p.team===t&&!p.goalie&&!p.boxed;}); }
 /* Стартовая расстановка по ролям: 0 левый край, 1 центр, 2 правый край,
    3 и 4 защитники. Защитники стоят сзади, крайние шире, центр по оси. */
-var TURN_RATE=9.0;   /* рад/с: успевает за резкой сменой направления */
+/* ---------- PHASE 1: Player feel constants (tunable) ---------- */
+var PLAYER_CFG = {
+  /* base skating */
+  maxSpeed: 7.0,         // was 8.6
+  accel: 10,             // was 13
+  damping: 0.95,         // was 0.975 — heavier slide
+  turnRate: 6.5,         // was 9.0 rad/s — more gradual turn
+  /* with puck penalty */
+  puckSpeedMul: 0.94,
+  /* press assist (when pressing stick toward target) */
+  pressRange: 2.6,       // was 2.6
+  pressMaxSpeed: 9.6,    // was 9.6
+  pressAccel: 17,        // was 17
+  /* sprint (RT) */
+  sprintMaxSpeed: 9.5,   // was 11.4
+  sprintAccel: 16,       // was 16
+  /* AI speeds */
+  aiBaseMaxSpeed: 9.0,   // was 9.0
+  aiAttackMaxSpeed: 8.4, // was 8.4
+  aiChaseMaxSpeed: 9.7,  // was 9.7
+  aiTacticAttackBonus: 0.5,
+  aiOffsidesMaxSpeed: 10.2,
+  /* puck pickup at stick end */
+  pickupReachSkater: 0.85,  // was 1.05 (body center)
+  pickupReachGoalie: 1.35,  // unchanged
+  pickupHeight: 0.85,       // unchanged
+  pickupMaxSpeed: 24,       // unchanged
+  /* poke check */
+  pokeRangeCarrier: 1.6,   // was 2.0
+  pokeRangeLoose: 1.8,     // was 1.8
+  /* body check */
+  checkRange: 1.7,         // was 1.9
+  checkMinSpeed: 4.2,      // unchanged
+  checkDownTime: 1.5,      // unchanged
+  checkKnockback: 9,       // unchanged
+  checkPuckKnockback: 5.5, // unchanged
+  /* shot/pass */
+  shotBaseSpeed: 17,       // unchanged per user request
+  shotPowerScale: 17,      // unchanged
+  passFreeTime: 0.16,      // unchanged
+  shotFreeTime: 0.2        // unchanged
+};
+/* TURN_RATE kept as alias for backward compat */
+var TURN_RATE = PLAYER_CFG.turnRate;
 var LANEZ=[-7.6,0,7.6,-5.2,5.2], DEPTH=[6.5,4.5,6.5,-4.0,-4.0];
 var NAMES=[['Тарасов','Гурьев','Лукоянов','Шипачёв','Кагарлицкий','Соколов'],
            ['Адамчук','Журавлёв','Бурмистров','Провольнев','Юдин','Панюков']];
@@ -1372,14 +1415,14 @@ function doPoke(p){
   var o=puck.owner;
   if(o && o.team!==p.team){
     var d=Math.hypot(o.x-p.x,o.z-p.z);
-    if(d<2.0){
+    if(d<PLAYER_CFG.pokeRangeCarrier){
       puck.owner=null; puck.free=0.35;
       var a=Math.atan2(puck.z-p.z,puck.x-p.x);
       puck.vx=Math.cos(a)*7; puck.vz=Math.sin(a)*7;
       SFX.stick(); if(p.team===HUMAN) buzz(14,'soft');
     }
   } else if(!puck.owner){
-    if(Math.hypot(puck.x-p.x,puck.z-p.z)<1.8){ puck.owner=p; puck.vx=0;puck.vz=0; }
+    if(Math.hypot(puck.x-p.x,puck.z-p.z)<PLAYER_CFG.pokeRangeLoose){ puck.owner=p; puck.vx=0;puck.vz=0; }
   }
 }
 function doCheck(p){
@@ -1390,7 +1433,7 @@ function doCheck(p){
     var o=arr[i];
     if(o.team===p.team||o.goalie||o.down>0||o.boxed) continue;
     var d=Math.hypot(o.x-p.x,o.z-p.z);
-    if(d<1.9 && p.spd>4.2){
+    if(d<PLAYER_CFG.checkRange && p.spd>PLAYER_CFG.checkMinSpeed){
       /* запоминаем до того, как отберём шайбу: ниже puck.owner уже null,
          и чистый силовой на владельце засчитывался как нарушение */
       var wasCarrier = (puck.owner===o);
@@ -1750,12 +1793,22 @@ function sim(dt){
       for(var i=0;i<players.length;i++){
         var p=players[i];
         if(p.down>0||p.boxed) continue;
-        var d=Math.hypot(p.x-puck.x,p.z-puck.z);
-        var reach = p.goalie?1.35:1.05;
-        if(d<reach && puck.y<0.85 && Math.hypot(puck.vx,puck.vz)<24){
-          if(p.goalie){ puck.vx=rnd(-6,6); puck.vz=rnd(-6,6); puck.free=0.3; icing.armed=false; SFX.save(); }
-          else { puck.owner=p; lastTouch=p; icing.armed=false; SFX.stick(); }
-          break;
+        if(p.goalie){
+          /* вратарь: подбор по телу (как раньше) */
+          var d=Math.hypot(p.x-puck.x,p.z-puck.z);
+          if(d<PLAYER_CFG.pickupReachGoalie && puck.y<PLAYER_CFG.pickupHeight && Math.hypot(puck.vx,puck.vz)<PLAYER_CFG.pickupMaxSpeed){
+            puck.vx=rnd(-6,6); puck.vz=rnd(-6,6); puck.free=0.3; icing.armed=false; SFX.save();
+            break;
+          }
+        } else {
+          /* полевой игрок: подбор по концу клюшки */
+          var stickX=p.x+Math.cos(p.yaw)*0.95;
+          var stickZ=p.z+Math.sin(p.yaw)*0.95;
+          var d=Math.hypot(stickX-puck.x,stickZ-puck.z);
+          if(d<PLAYER_CFG.pickupReachSkater && puck.y<PLAYER_CFG.pickupHeight && Math.hypot(puck.vx,puck.vz)<PLAYER_CFG.pickupMaxSpeed){
+            puck.owner=p; lastTouch=p; icing.armed=false; SFX.stick();
+            break;
+          }
         }
       }
     }
@@ -1792,7 +1845,7 @@ function sim(dt){
       p.x=clamp(p.x,-RL+1,RL-1); p.z=clamp(p.z,-RW+1,RW-1);
       continue;
     }
-    var ax=0,az=0,maxs=8.6,accel=13;
+    var ax=0,az=0,maxs=PLAYER_CFG.maxSpeed,accel=PLAYER_CFG.accel;
     var hsp = HS[p.team], humanP = (p===hsp.ctrl) && (p.team===HUMAN || (NET.on && NET.role==='host'));
     if(humanP && state==='play'){
       var inp2 = (p.team===HUMAN)?IN:NIN;
@@ -1801,12 +1854,12 @@ function sim(dt){
       var PR=hsp.press;
       if(PR.on && Math.hypot(inp2.mx,inp2.mz)<0.35){
         ax=PR.x; az=PR.z;
-        if(PR.d<2.6){ maxs=9.6; accel=17; }
+        if(PR.d<PLAYER_CFG.pressRange){ maxs=PLAYER_CFG.pressMaxSpeed; accel=PLAYER_CFG.pressAccel; }
       } else if(PR.on){
         ax=lerp(ax,PR.x,0.55); az=lerp(az,PR.z,0.55);
       }
-      if(inp2.RT){ maxs=11.4; accel=16; }
-      if(puck.owner===p){ maxs*=0.94; }
+      if(inp2.RT){ maxs=PLAYER_CFG.sprintMaxSpeed; accel=PLAYER_CFG.sprintAccel; }
+      if(puck.owner===p){ maxs*=PLAYER_CFG.puckSpeedMul; }
     } else {
       var tx,tz;
       var carrier = puck.owner;
@@ -1943,10 +1996,10 @@ function sim(dt){
       var dx=tx-p.x, dz=tz-p.z, L=Math.hypot(dx,dz)||1;
       ax=dx/L; az=dz/L;
       if(L<1.2){ax*=L;az*=L;}
-      maxs = att?8.4:9.0;
-      if(chaser===p && !att) maxs=9.7;
-      if(TACTIC[p.team]===1) maxs+=0.5;
-      if(p.os) maxs=10.2;
+      maxs = att?PLAYER_CFG.aiAttackMaxSpeed:PLAYER_CFG.aiBaseMaxSpeed;
+      if(chaser===p && !att) maxs=PLAYER_CFG.aiChaseMaxSpeed;
+      if(TACTIC[p.team]===1) maxs+=PLAYER_CFG.aiTacticAttackBonus;
+      if(p.os) maxs=PLAYER_CFG.aiOffsidesMaxSpeed;
 
       p._cd=(p._cd||0)-dt;
       if(carrier===p){
@@ -1993,7 +2046,7 @@ function sim(dt){
     p.vx+=ax*accel*dt; p.vz+=az*accel*dt;
     var sp=Math.hypot(p.vx,p.vz);
     if(sp>maxs){p.vx=p.vx/sp*maxs;p.vz=p.vz/sp*maxs;sp=maxs;}
-    p.vx*=0.975; p.vz*=0.975;
+    p.vx*=PLAYER_CFG.damping; p.vz*=PLAYER_CFG.damping;
     p.x+=p.vx*dt; p.z+=p.vz*dt;
     p.x=clamp(p.x,-RL+0.8,RL-0.8); p.z=clamp(p.z,-RW+0.8,RW-0.8);
     p.spd=sp;
@@ -2005,7 +2058,7 @@ function sim(dt){
       var tgt=Math.atan2(p.vz,p.vx);
       var dy=tgt-p.yaw;
       dy=Math.atan2(Math.sin(dy),Math.cos(dy));
-      p.yaw+=clamp(dy,-TURN_RATE*dt,TURN_RATE*dt);
+      p.yaw+=clamp(dy,-PLAYER_CFG.turnRate*dt,PLAYER_CFG.turnRate*dt);
       p._back=(Math.cos(p.yaw)*p.vx+Math.sin(p.yaw)*p.vz) < -0.30*sp;
     } else p._back=false;
     p.stride+=dt*(2.5+sp*1.6);
@@ -2043,26 +2096,83 @@ function sim(dt){
 
 function camUpdate(dt){
   if(CAMLOCK) return;
-  var fx = puck.owner?puck.owner.x:puck.x;
-  var fz = puck.owner?puck.owner.z:puck.z;
-  var CP=camPreset();
-  cam.y=lerp(cam.y, CP.y, Math.min(1,dt*3));
-  cam.pitch=lerp(cam.pitch, CP.pitch, Math.min(1,dt*3));
-  /* портретная камера стоит за своими воротами и смотрит в сторону чужих —
-     атака всегда идёт снизу вверх экрана. Разворот зависит от того, в какую
-     сторону атакует управляемая команда, а не зашит на одну сторону. */
-  var AD=attackDir(HUMAN);
-  cam.yaw=lerp(cam.yaw, PORTRAIT?(AD>0?Math.PI/2:-Math.PI/2):0, Math.min(1,dt*4));
-  updYaw();
-  if(PORTRAIT){
-    cam.x=lerp(cam.x, clamp(fx*CP.fx,-19,19)-AD*CP.d, Math.min(1,dt*3.4));
-    cam.z=lerp(cam.z, clamp(fz*CP.fz,-6,6), Math.min(1,dt*3.0));
-  } else {
-    cam.x=lerp(cam.x, clamp(fx*CP.fx,-19,19), Math.min(1,dt*3.4));
-    cam.z=lerp(cam.z, -CP.d + clamp(fz*CP.fz,-5,5), Math.min(1,dt*2.6));
-  }
-  if(cam.shake>0) cam.shake=Math.max(0,cam.shake-dt*30);
 
+  // Determine focus target with smooth transition between carrier and loose puck
+  var carrier = puck.owner;
+  var targetFocusX, targetFocusZ;
+  if(carrier){
+    targetFocusX = carrier.x;
+    targetFocusZ = carrier.z;
+  } else {
+    targetFocusX = puck.x;
+    targetFocusZ = puck.z;
+  }
+
+  // Smooth focus transition (lerp instead of instant switch)
+  cam.focusX = lerp(cam.focusX, targetFocusX, Math.min(1, dt * 5));
+  cam.focusZ = lerp(cam.focusZ, targetFocusZ, Math.min(1, dt * 5));
+
+  var CP = camPreset();
+  var AD = attackDir(HUMAN);
+
+  // Compute dynamic distance based on game state
+  var baseDist = CP.d;
+  var dynamicDist = baseDist;
+  if(carrier){
+    // Closer when carrier has puck, wider when play is spread
+    var puckSpeed = Math.hypot(puck.vx, puck.vz);
+    var spread = 0;
+    for(var i=0;i<players.length;i++){
+      var p = players[i];
+      if(p.team === carrier.team && !p.goalie && !p.boxed){
+        spread += Math.hypot(p.x - carrier.x, p.z - carrier.z);
+      }
+    }
+    spread = spread / 5; // average spread
+    dynamicDist = baseDist + Math.min(spread * 0.3, 4.0); // max +4m for spread
+    dynamicDist = Math.max(dynamicDist, baseDist - 2.0); // min -2m for tight play
+  }
+
+  // Compute target yaw - look ahead in direction of play
+  var targetYaw = 0;
+  if(!PORTRAIT){
+    if(carrier){
+      // Lead yaw slightly in direction of carrier velocity
+      var vx = carrier.vx, vz = carrier.vz;
+      var sp = Math.hypot(vx, vz);
+      if(sp > 0.5){
+        var moveDir = Math.atan2(vz, vx);
+        targetYaw = moveDir * 0.15; // subtle lead (15% of movement direction)
+      }
+    } else if(Math.hypot(puck.vx, puck.vz) > 1.0){
+      // Loose puck: slight lead in puck velocity direction
+      var moveDir = Math.atan2(puck.vz, puck.vx);
+      targetYaw = moveDir * 0.1;
+    }
+  } else {
+    // Portrait: fixed yaw based on attack direction
+    targetYaw = AD > 0 ? Math.PI/2 : -Math.PI/2;
+  }
+
+  // Smooth yaw transition - cam.yaw is what toWorld() uses, so must be gradual
+  cam.targetYaw = targetYaw;
+  cam.yaw = lerp(cam.yaw, cam.targetYaw, Math.min(1, dt * 3));
+  updYaw();
+
+  // Smooth height and pitch
+  cam.y = lerp(cam.y, CP.y, Math.min(1, dt * 3));
+  cam.pitch = lerp(cam.pitch, CP.pitch, Math.min(1, dt * 3));
+
+  // Position with dynamic distance
+  if(PORTRAIT){
+    cam.x = lerp(cam.x, clamp(cam.focusX * CP.fx, -19, 19) - AD * dynamicDist, Math.min(1, dt * 3.4));
+    cam.z = lerp(cam.z, clamp(cam.focusZ * CP.fz, -6, 6), Math.min(1, dt * 3.0));
+  } else {
+    cam.x = lerp(cam.x, clamp(cam.focusX * CP.fx, -19, 19), Math.min(1, dt * 3.4));
+    cam.z = lerp(cam.z, -dynamicDist + clamp(cam.focusZ * CP.fz, -5, 5), Math.min(1, dt * 2.6));
+  }
+
+  if(cam.shake > 0) cam.shake = Math.max(0, cam.shake - dt * 30);
 }
 
 /* ---------- разметка ---------- */
@@ -3642,14 +3752,39 @@ function animPick(p){
     if(vz>0.9) return (p.vz>0) ? 'shuffle_c' : 'shuffle_b';
     return 'ready';
   }
-  if(p.down>0) return 'fall';
+  if(p.down>0){ p._animState='fall'; return 'fall'; }
   if(p._act && p._actT>0) return p._act;
   var sp=p.spd||0;
-  if(sp<0.40) return 'ready';
-  if(p._back) return 'skate_back';
-  if(sp<1.7)  return 'glide';
-  if(sp<5.0)  return 'skate_forward';
-  return 'skate_fast';
+
+  // Initial state without hysteresis
+  var state;
+  if(sp<0.40) state='ready';
+  else if(p._back) state='skate_back';
+  else if(sp<1.5) state='glide';
+  else if(sp<4.5) state='skate_forward';
+  else state='skate_fast';
+
+  // Hysteresis: only for forward ladder states (glide/skate_forward/skate_fast)
+  // and only when NOT skating backward. Prevents flicker on adjacent thresholds.
+  var isForward = (state==='glide' || state==='skate_forward' || state==='skate_fast');
+  if(isForward && !p._back && p._animState){
+    var prev = p._animState;
+    var prevForward = (prev==='glide' || prev==='skate_forward' || prev==='skate_fast');
+    if(prevForward){
+      // DOWN transitions require 0.25 m/s extra drop
+      if(prev==='skate_fast' && state==='skate_forward' && sp < 4.25) state='skate_forward';
+      else if(prev==='skate_forward' && state==='glide' && sp < 1.25) state='glide';
+      // UP transitions use standard thresholds (already computed)
+    }
+  }
+
+  // Hysteresis on glide -> ready boundary (not part of forward ladder)
+  if(state==='ready' && p._animState==='glide' && !p._back && sp >= 0.15){
+    state = 'glide';
+  }
+
+  p._animState = state;
+  return state;
 }
 function animRate(p, name){
   var sp=p.spd||0;
