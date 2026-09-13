@@ -194,9 +194,9 @@
 
   <div id="pad">
     <div class="btn" id="bY"><b>Y</b><i>в разрез</i></div>
-    <div class="btn" id="bX"><b>X</b><i>навес</i></div>
-    <div class="btn" id="bB"><b>B</b><i>бросок</i></div>
-    <div class="btn" id="bA"><b>A</b><i>пас</i></div>
+    <div class="btn" id="bX"><b>X</b><i>силовой</i></div>
+    <div class="btn" id="bB"><b>B</b><i>отбор (поке)</i></div>
+    <div class="btn" id="bA"><b>A</b><i>прессинг / перекл.</i></div>
     <div class="btn" id="bRT"><b>RT</b><i>ускорение</i></div>
     <div id="bPause" title="Пауза"><span></span><span></span></div>
   </div>
@@ -1188,7 +1188,7 @@ function onIce(t){ return players.filter(function(p){return p.team===t&&!p.goali
 var PLAYER_CFG = {
   /* base skating */
   maxSpeed: 7.0,         // was 8.6
-  accel: 10,             // was 13
+  accel: 12,             // was 13 (10 was too sluggish)
   damping: 0.95,         // was 0.975 — heavier slide
   turnRate: 6.5,         // was 9.0 rad/s — more gradual turn
   /* with puck penalty */
@@ -1852,11 +1852,14 @@ function sim(dt){
       var wv=toWorld(inp2.mx,inp2.mz,[0,0]);
       ax=wv[0]; az=wv[1];
       var PR=hsp.press;
-      if(PR.on && Math.hypot(inp2.mx,inp2.mz)<0.35){
-        ax=PR.x; az=PR.z;
+      if(PR.on){
+        // Auto-approach: blend stick input with press direction when A held
+        // If stick is significantly deflected (>0.35), manual input has more weight
+        var stickMag = Math.hypot(inp2.mx, inp2.mz);
+        var blend = stickMag > 0.35 ? 0.55 : 0.0;  // 0 = full auto, 0.55 = blend
+        ax = blend === 0 ? PR.x : lerp(ax, PR.x, blend);
+        az = blend === 0 ? PR.z : lerp(az, PR.z, blend);
         if(PR.d<PLAYER_CFG.pressRange){ maxs=PLAYER_CFG.pressMaxSpeed; accel=PLAYER_CFG.pressAccel; }
-      } else if(PR.on){
-        ax=lerp(ax,PR.x,0.55); az=lerp(az,PR.z,0.55);
       }
       if(inp2.RT){ maxs=PLAYER_CFG.sprintMaxSpeed; accel=PLAYER_CFG.sprintAccel; }
       if(puck.owner===p){ maxs*=PLAYER_CFG.puckSpeedMul; }
@@ -2097,41 +2100,43 @@ function sim(dt){
 function camUpdate(dt){
   if(CAMLOCK) return;
 
-  // Determine focus target with smooth transition between carrier and loose puck
+  // Determine focus target
   var carrier = puck.owner;
   var targetFocusX, targetFocusZ;
+  var focusLerp = 5;  // default for carrier
   if(carrier){
     targetFocusX = carrier.x;
     targetFocusZ = carrier.z;
   } else {
-    targetFocusX = puck.x;
-    targetFocusZ = puck.z;
+    // Loose puck: focus on nearest HUMAN-team player to puck, not puck itself
+    // This prevents camera chasing puck across entire rink
+    var nearestDist = 1e9, nearestP = null;
+    for(var i=0;i<players.length;i++){
+      var p = players[i];
+      if(p.team !== HUMAN || p.goalie || p.boxed) continue;
+      var d = Math.hypot(p.x - puck.x, p.z - puck.z);
+      if(d < nearestDist){ nearestDist = d; nearestP = p; }
+    }
+    if(nearestP){
+      targetFocusX = nearestP.x;
+      targetFocusZ = nearestP.z;
+    } else {
+      // Fallback: if no human players (edge case), use puck position
+      targetFocusX = puck.x;
+      targetFocusZ = puck.z;
+    }
+    focusLerp = 1.5;  // slower lerp for loose puck (0.6s to 95%)
   }
 
-  // Smooth focus transition (lerp instead of instant switch)
-  cam.focusX = lerp(cam.focusX, targetFocusX, Math.min(1, dt * 5));
-  cam.focusZ = lerp(cam.focusZ, targetFocusZ, Math.min(1, dt * 5));
+  // Smooth focus transition - slower for loose puck
+  cam.focusX = lerp(cam.focusX, targetFocusX, Math.min(1, dt * focusLerp));
+  cam.focusZ = lerp(cam.focusZ, targetFocusZ, Math.min(1, dt * focusLerp));
 
   var CP = camPreset();
   var AD = attackDir(HUMAN);
 
-  // Compute dynamic distance based on game state
-  var baseDist = CP.d;
-  var dynamicDist = baseDist;
-  if(carrier){
-    // Closer when carrier has puck, wider when play is spread
-    var puckSpeed = Math.hypot(puck.vx, puck.vz);
-    var spread = 0;
-    for(var i=0;i<players.length;i++){
-      var p = players[i];
-      if(p.team === carrier.team && !p.goalie && !p.boxed){
-        spread += Math.hypot(p.x - carrier.x, p.z - carrier.z);
-      }
-    }
-    spread = spread / 5; // average spread
-    dynamicDist = baseDist + Math.min(spread * 0.3, 4.0); // max +4m for spread
-    dynamicDist = Math.max(dynamicDist, baseDist - 2.0); // min -2m for tight play
-  }
+  // Fixed distance — no dynamic spread calculation
+  var dist = CP.d;
 
   // Compute target yaw - look ahead in direction of play
   var targetYaw = 0;
@@ -2163,13 +2168,13 @@ function camUpdate(dt){
   cam.y = lerp(cam.y, CP.y, Math.min(1, dt * 3));
   cam.pitch = lerp(cam.pitch, CP.pitch, Math.min(1, dt * 3));
 
-  // Position with dynamic distance
+  // Position with fixed distance
   if(PORTRAIT){
-    cam.x = lerp(cam.x, clamp(cam.focusX * CP.fx, -19, 19) - AD * dynamicDist, Math.min(1, dt * 3.4));
+    cam.x = lerp(cam.x, clamp(cam.focusX * CP.fx, -19, 19) - AD * dist, Math.min(1, dt * 3.4));
     cam.z = lerp(cam.z, clamp(cam.focusZ * CP.fz, -6, 6), Math.min(1, dt * 3.0));
   } else {
     cam.x = lerp(cam.x, clamp(cam.focusX * CP.fx, -19, 19), Math.min(1, dt * 3.4));
-    cam.z = lerp(cam.z, -dynamicDist + clamp(cam.focusZ * CP.fz, -5, 5), Math.min(1, dt * 2.6));
+    cam.z = lerp(cam.z, -dist + clamp(cam.focusZ * CP.fz, -5, 5), Math.min(1, dt * 2.6));
   }
 
   if(cam.shake > 0) cam.shake = Math.max(0, cam.shake - dt * 30);
