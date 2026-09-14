@@ -2128,9 +2128,20 @@ function camUpdate(dt){
     focusLerp = 1.5;  // slower lerp for loose puck (0.6s to 95%)
   }
 
-  // Smooth focus transition - slower for loose puck
-  cam.focusX = lerp(cam.focusX, targetFocusX, Math.min(1, dt * focusLerp));
-  cam.focusZ = lerp(cam.focusZ, targetFocusZ, Math.min(1, dt * focusLerp));
+  // Focus = carrier position (clamped to rink with small margin)
+  var FOCUS_MARGIN = 1.0;
+  var focusTargetX = clamp(carrier ? carrier.x : targetFocusX, -RL + FOCUS_MARGIN, RL - FOCUS_MARGIN);
+  var focusTargetZ = clamp(carrier ? carrier.z : targetFocusZ, -RW + FOCUS_MARGIN, RW - FOCUS_MARGIN);
+
+  // Smooth focus (gain 20 = instant)
+  cam.focusX = lerp(cam.focusX, focusTargetX, Math.min(1, dt * 20));
+  cam.focusZ = lerp(cam.focusZ, focusTargetZ, Math.min(1, dt * 20));
+
+  // SAFETY: Clamp focus
+  if(!isFinite(cam.focusX) || !isFinite(cam.focusZ)){
+    cam.focusX = isFinite(cam.focusX) ? cam.focusX : 0;
+    cam.focusZ = isFinite(cam.focusZ) ? cam.focusZ : 0;
+  }
 
   var CP = camPreset();
   var AD = attackDir(HUMAN);
@@ -2173,8 +2184,32 @@ function camUpdate(dt){
     cam.x = lerp(cam.x, clamp(cam.focusX * CP.fx, -19, 19) - AD * dist, Math.min(1, dt * 3.4));
     cam.z = lerp(cam.z, clamp(cam.focusZ * CP.fz, -6, 6), Math.min(1, dt * 3.0));
   } else {
-    cam.x = lerp(cam.x, clamp(cam.focusX * CP.fx, -19, 19), Math.min(1, dt * 3.4));
-    cam.z = lerp(cam.z, -dist + clamp(cam.focusZ * CP.fz, -5, 5), Math.min(1, dt * 2.6));
+    // LANDSCAPE: state A — upper board works, attack offset, symmetric fz=0.85
+    var MARGIN = 3.0;
+    var standsXinner = RL + 2.2;
+    var maxCamX = Math.min(27, standsXinner - MARGIN);
+
+    var baseTargetX = cam.focusX * CP.fx;
+    var ATTACK_OFFSET = 3.5;
+
+    // Smoothed attack offset (prevents jerk on possession change)
+    cam.attackOffsetX = (cam.attackOffsetX !== undefined ? cam.attackOffsetX : 0);
+    var desiredAttackOffsetX = (carrier && carrier.team === HUMAN) ? AD * ATTACK_OFFSET : 0;
+    cam.attackOffsetX = lerp(cam.attackOffsetX, desiredAttackOffsetX, Math.min(1, dt * 3.0));
+
+    var targetX = baseTargetX + cam.attackOffsetX;
+    targetX = clamp(targetX, -maxCamX, maxCamX);
+
+    var FZ_BOARD = 0.85;
+    var standsZinner = RW + 2.2;
+    var safeZmin = -standsZinner + MARGIN;   // -14.2
+    var safeZmax = standsZinner - MARGIN;    // 14.2
+
+    var targetZ = -dist + cam.focusZ * FZ_BOARD;
+    targetZ = clamp(targetZ, safeZmin, safeZmax);
+
+    cam.x = lerp(cam.x, targetX, Math.min(1, dt * 5.0));
+    cam.z = lerp(cam.z, targetZ, Math.min(1, dt * 5.0));
   }
 
   if(cam.shake > 0) cam.shake = Math.max(0, cam.shake - dt * 30);
