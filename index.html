@@ -48,8 +48,6 @@
     border-top:20px solid #fff;animation:bounceArrow 1.5s ease-in-out infinite}
   #rotate .text{font-size:14px;letter-spacing:.08em;line-height:1.5;color:rgba(255,255,255,.8)}
   #rotate .brand{font-size:28px;font-weight:800;letter-spacing:.18em;color:#ffd166;margin-top:10px;text-transform:uppercase}
-  #rotate .fsbtn{margin-top:18px;padding:12px 28px;font-size:15px;font-weight:700;letter-spacing:.08em;color:#05070c;background:#ffd166;border:none;border-radius:8px;cursor:pointer;animation:fsPulse 1.5s ease-in-out infinite}
-  @keyframes fsPulse{0%,100%{box-shadow:0 0 0 0 rgba(255,209,102,.6)}50%{box-shadow:0 0 0 10px rgba(255,209,102,0)}}
   @keyframes rotatePhone{
     0%,100%{transform:rotate(0deg)}
     25%{transform:rotate(-90deg)}
@@ -248,7 +246,6 @@
     <div class="arrow"></div>
     <div class="text">Поверни телефон горизонтально</div>
     <div class="brand">BVR HOCKEY</div>
-    <button class="fsbtn" id="fsBtn" style="display:none">Нажми, чтобы начать</button>
   </div>
 
   <div id="start">
@@ -425,51 +422,30 @@ function layout(){
   }
 
 
-  var rEl=document.getElementById('rotate');
-  var fsBtn=document.getElementById('fsBtn');
-  if(PORTRAIT){
-    rEl.style.display='flex';
-    if(fsBtn) fsBtn.style.display='none';
-  }else{
-    rEl.style.display='flex';
-    if(fsBtn) fsBtn.style.display='block';
-  }
+  document.getElementById('rotate').style.display=PORTRAIT?'flex':'none';
   document.body.classList.toggle('portrait', PORTRAIT);
 }
 window.addEventListener('resize',layout);
 function requestFullscreenOnLandscape(){
   if(window.screen && window.screen.orientation && window.screen.orientation.type){
     if(window.screen.orientation.type.startsWith('landscape')){
-      try{ if(TG && TG.requestFullscreen) TG.requestFullscreen(); }catch(e){ console.error('Fullscreen denied (TG):', e); }
-      try{ document.documentElement.requestFullscreen(); }catch(e){ console.error('Fullscreen denied (DOM):', e); }
+      try{ if(TG && TG.requestFullscreen) TG.requestFullscreen(); }catch(e){}
+      try{ document.documentElement.requestFullscreen(); }catch(e){}
     }
   }
 }
-// Keep as fallback but don't rely on it — orientationchange is NOT a user gesture
 window.addEventListener('orientationchange',function(){
   /* Android перестраивает окно не сразу и не одним шагом */
   [0,120,300,600].forEach(function(t){ setTimeout(layout,t); });
-  // requestFullscreenOnLandscape() removed — requires user gesture
+  requestFullscreenOnLandscape();
 });
-// Also listen to screen.orientation.change (modern API) — kept as fallback only
+// Also listen to screen.orientation.change (modern API)
 if(window.screen && window.screen.orientation){
   window.screen.orientation.addEventListener('change', requestFullscreenOnLandscape);
 }
 if(window.visualViewport){
   window.visualViewport.addEventListener('resize',layout);
   window.visualViewport.addEventListener('scroll',layout);
-}
-// Fullscreen button click handler — THIS is the user gesture
-var fsBtn=document.getElementById('fsBtn');
-if(fsBtn){
-  fsBtn.addEventListener('click',function(){
-    requestFullscreenOnLandscape();
-    // Hide rotate overlay after a short delay to let fullscreen transition
-    setTimeout(function(){
-      var rEl=document.getElementById('rotate');
-      if(rEl) rEl.style.display='none';
-    }, 300);
-  });
 }
 layout();
 
