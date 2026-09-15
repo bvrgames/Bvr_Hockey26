@@ -2204,8 +2204,8 @@ function camUpdate(dt){
 
     var FZ_BOARD = 0.85;
     var standsZinner = RW + 2.2;
-    var safeZmin = -standsZinner + MARGIN;   // -14.2
-    var safeZmax = standsZinner - MARGIN;    // 14.2
+    var safeZmin = -25.0;  // relaxed: allow camera to go further back for lower board visibility
+    var safeZmax = standsZinner - MARGIN;    // 14.2 (unchanged upper)
 
     var targetZ = -dist + cam.focusZ * FZ_BOARD;
     targetZ = clamp(targetZ, safeZmin, safeZmax);
