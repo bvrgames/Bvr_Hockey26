@@ -36,8 +36,27 @@
   #sub{font-size:10px;letter-spacing:.10em;text-transform:uppercase;
     color:rgba(255,255,255,.62);line-height:1.2}
 
-  #rotate{position:absolute;inset:0;z-index:20;display:none;align-items:center;justify-content:center;
-    background:#05070c;text-align:center;padding:26px;font-size:15px;line-height:1.6}
+  #rotate{position:absolute;inset:0;z-index:20;display:none;flex-direction:column;align-items:center;justify-content:center;
+    background:#05070c;text-align:center;padding:26px;color:#fff}
+  #rotate .phone{width:80px;height:150px;border:4px solid #fff;border-radius:28px;position:relative;margin-bottom:18px;
+    animation:rotatePhone 2s ease-in-out infinite}
+  #rotate .phone::before{content:'';position:absolute;left:50%;top:10px;transform:translateX(-50%);
+    width:30px;height:4px;background:#fff;border-radius:2px}
+  #rotate .phone::after{content:'';position:absolute;left:50%;bottom:10px;transform:translateX(-50%);
+    width:20px;height:20px;border:3px solid #fff;border-radius:50%}
+  #rotate .arrow{width:0;height:0;border-left:12px solid transparent;border-right:12px solid transparent;
+    border-top:20px solid #fff;animation:bounceArrow 1.5s ease-in-out infinite}
+  #rotate .text{font-size:14px;letter-spacing:.08em;line-height:1.5;color:rgba(255,255,255,.8)}
+  #rotate .brand{font-size:28px;font-weight:800;letter-spacing:.18em;color:#ffd166;margin-top:10px;text-transform:uppercase}
+  @keyframes rotatePhone{
+    0%,100%{transform:rotate(0deg)}
+    25%{transform:rotate(-90deg)}
+    75%{transform:rotate(90deg)}
+  }
+  @keyframes bounceArrow{
+    0%,100%{transform:translateY(0)}
+    50%{transform:translateY(10px)}
+  }
 
   #pad{position:absolute;inset:0;z-index:5;pointer-events:none}
   .btn{position:absolute;pointer-events:auto;border-radius:50%;display:flex;flex-direction:column;
@@ -222,7 +241,12 @@
 
   <canvas id="stick"></canvas>
   <div id="fps"></div>
-  <div id="rotate">Поверни телефон горизонтально 🔄</div>
+  <div id="rotate">
+    <div class="phone"></div>
+    <div class="arrow"></div>
+    <div class="text">Поверни телефон горизонтально</div>
+    <div class="brand">BVR HOCKEY</div>
+  </div>
 
   <div id="start">
     <div class="card">
@@ -398,7 +422,7 @@ function layout(){
   }
 
 
-  document.getElementById('rotate').style.display='none';
+  document.getElementById('rotate').style.display=PORTRAIT?'flex':'none';
   document.body.classList.toggle('portrait', PORTRAIT);
 }
 window.addEventListener('resize',layout);
@@ -4236,7 +4260,7 @@ function frame(now){
   if(state==='menu'||PAUSED){ uiIdle=0; if(_padDim){ _padDim=false; padFade(false); } }
   else {
     uiIdle+=dt;
-    if(!_padDim && uiIdle>2.6){ _padDim=true; padFade(true); }
+    if(!_padDim && uiIdle>8){ _padDim=true; padFade(true); }
   }
   if(GLOK){ marksFlush(dt); boardUpdate(); }
 
