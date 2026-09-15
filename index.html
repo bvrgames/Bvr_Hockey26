@@ -2149,9 +2149,9 @@ function camUpdate(dt){
   var focusTargetX = clamp(carrier ? carrier.x : targetFocusX, -RL + FOCUS_MARGIN, RL - FOCUS_MARGIN);
   var focusTargetZ = clamp(carrier ? carrier.z : targetFocusZ, -RW + FOCUS_MARGIN, RW - FOCUS_MARGIN);
 
-  // Smooth focus (gain 20 = instant)
-  cam.focusX = lerp(cam.focusX, focusTargetX, Math.min(1, dt * 20));
-  cam.focusZ = lerp(cam.focusZ, focusTargetZ, Math.min(1, dt * 20));
+  // Smooth focus (gain 6 = ~0.4-0.5s, smooth on possession change/faceoff)
+  cam.focusX = lerp(cam.focusX, focusTargetX, Math.min(1, dt * 6));
+  cam.focusZ = lerp(cam.focusZ, focusTargetZ, Math.min(1, dt * 6));
 
   // SAFETY: Clamp focus
   if(!isFinite(cam.focusX) || !isFinite(cam.focusZ)){
