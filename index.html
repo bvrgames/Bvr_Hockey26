@@ -350,7 +350,23 @@ function viewSize(){
 }
 function layout(){
   var vs=viewSize(); W=vs[0]; H=vs[1];
-  PORTRAIT = (W < H*0.95);
+
+  // Robust orientation detection: use screen.orientation (immune to browser chrome)
+  // Falls back to visualViewport-based aspect ratio if unavailable.
+  try{
+    if(window.screen && window.screen.orientation && window.screen.orientation.type){
+      // "portrait-primary", "portrait-secondary", "landscape-primary", "landscape-secondary"
+      PORTRAIT = window.screen.orientation.type.startsWith('portrait');
+    }else if(window.matchMedia){
+      // CSS media query also reflects physical orientation
+      PORTRAIT = window.matchMedia('(orientation: portrait)').matches;
+    }else{
+      // Fallback: aspect ratio (old method) — may misfire on iPhone Safari landscape
+      PORTRAIT = (W < H*0.95);
+    }
+  }catch(e){
+    PORTRAIT = (W < H*0.95);
+  }
   DPR=Math.min(QC().dpr, window.devicePixelRatio||1);
   cv.width=Math.round(W*DPR); cv.height=Math.round(H*DPR);
   stickCv.style.cssText='position:absolute;left:0;top:0;width:'+W+'px;height:'+H+'px;pointer-events:none;z-index:5';
