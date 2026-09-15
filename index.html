@@ -2067,7 +2067,23 @@ function sim(dt){
     if(sp>maxs){p.vx=p.vx/sp*maxs;p.vz=p.vz/sp*maxs;sp=maxs;}
     p.vx*=PLAYER_CFG.damping; p.vz*=PLAYER_CFG.damping;
     p.x+=p.vx*dt; p.z+=p.vz*dt;
+    // Rectangular clamp first
     p.x=clamp(p.x,-RL+0.8,RL-0.8); p.z=clamp(p.z,-RW+0.8,RW-0.8);
+    // Corner projection: keep players inside rounded corners (CORNER=7.0)
+    var cornerSafe = CORNER - 0.8;           // 6.2 — safe radius inside corner arc
+    var cornerX = RL - cornerSafe;           // 23.8 — x threshold where corner starts
+    var cornerZ = RW - cornerSafe;           // 8.8  — z threshold where corner starts
+    var ax = Math.abs(p.x), az = Math.abs(p.z);
+    if(ax > cornerX && az > cornerZ){
+      var cx = (p.x > 0 ? 1 : -1) * (RL - CORNER); // ±23
+      var cz = (p.z > 0 ? 1 : -1) * (RW - CORNER); // ±8
+      var dx = p.x - cx, dz = p.z - cz;
+      var d = Math.hypot(dx, dz);
+      if(d > cornerSafe){
+        p.x = cx + dx/d * cornerSafe;
+        p.z = cz + dz/d * cornerSafe;
+      }
+    }
     p.spd=sp;
     /* Разворот доводим с ограничением скорости, а не ставим мгновенно:
        мгновенная установка выглядит как телепорт, а на резкой смене
