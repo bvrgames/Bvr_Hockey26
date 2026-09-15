@@ -2761,8 +2761,13 @@ function buildNetTex(){
 function buildCrowdTex(){
   var TW=QC().crowd, TH=QC().crowd/2, c=mkCanvas(TW,TH), g=c.getContext('2d');
   var gr=g.createLinearGradient(0,0,0,TH);
-  gr.addColorStop(0,'#10161f'); gr.addColorStop(0.5,'#24314a'); gr.addColorStop(1,'#36445e');
+  gr.addColorStop(0,'#0a0d12'); gr.addColorStop(0.5,'#141c28'); gr.addColorStop(1,'#1c2636');
   g.fillStyle=gr; g.fillRect(0,0,TW,TH);
+
+  // Human silhouette colors
+  var SKIN = ['#e8c5a0','#d4a57a','#c8966e','#b8855c'];          // 4 skin/hair tones
+  var CLOTHES = ['#c83a3a','#3a7bc8','#d4b83a','#8a8a8a','#4aa84a','#5a3a7a']; // 6 clothing colors
+
   var rows=Math.round(34*TW/1024);
   for(var r=0;r<rows;r++){
     var y=TH-14-r*(TH/(rows+2));
@@ -2771,11 +2776,34 @@ function buildCrowdTex(){
     for(var x=-6;x<TW+6;x+=stp){
       var kk=((x*13+r*29)%17);
       if(kk<7) continue;
-      g.fillStyle = kk>14?'rgba(214,222,238,0.72)':(kk>12?'rgba(206,126,112,0.66)':'rgba(126,148,186,0.60)');
+
+      // Deterministic pseudo-random from kk for color selection
+      var skinIdx = (kk * 3) % SKIN.length;
+      var clothIdx = (kk * 7) % CLOTHES.length;
       var px=x+((r%2)?stp*0.45:0);
       var pw=Math.max(3,Math.round(7*TW/1024));
-      g.fillRect(px,y,pw,pw);
-      g.fillStyle='rgba(0,0,0,0.35)'; g.fillRect(px,y+pw,pw,Math.max(1,pw*0.4));
+      var ph=Math.max(4,Math.round(pw*1.6)); // body taller than wide
+      var headR=Math.max(2,Math.round(pw*0.55));
+      var headY=y - headR*0.3; // head slightly above body top
+      var bodyY=y;
+      var bodyX=px + Math.round((pw - Math.round(pw*0.7))/2);
+      var bodyW=Math.max(2,Math.round(pw*0.7));
+
+      // Body (rounded rect / oval)
+      g.fillStyle = CLOTHES[clothIdx];
+      g.beginPath();
+      g.ellipse(px + pw/2, bodyY + ph*0.55, bodyW/2, ph/2, 0, 0, 6.283);
+      g.fill();
+
+      // Head (oval)
+      g.fillStyle = SKIN[skinIdx];
+      g.beginPath();
+      g.ellipse(px + pw/2, headY, headR, headR*0.85, 0, 0, 6.283);
+      g.fill();
+
+      // Shadow under seat (kept from original)
+      g.fillStyle='rgba(0,0,0,0.45)';
+      g.fillRect(px, y+ph, pw, Math.max(1,Math.round(pw*0.35)));
     }
   }
   /* горизонтальные проходы */
