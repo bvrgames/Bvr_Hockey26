@@ -3009,11 +3009,12 @@ function buildScene(){
   var s0=outlineOff(2.2,1.2), s1=outlineOff(9.5,1.2);
   d=D(); acc=0;
   var P2=perim(s0), REP=14;
+  var STANDS_BASE_Y = 3.0;  // raised from BH(1.05) — real rinks: glass 1.8-2.4m above boards, then stands
   for(i=0;i<s0.length;i++){
     var q1=s0[i], q2=s0[(i+1)%s0.length], q3=s1[(i+1)%s1.length], q4=s1[i];
     var sg=Math.hypot(q2[0]-q1[0],q2[1]-q1[1]);
     var v0=acc/P2*REP, v1=(acc+sg)/P2*REP; acc+=sg;
-    quad(d,[q1[0],BH,q1[1]],[q2[0],BH,q2[1]],[q3[0],9.6,q3[1]],[q4[0],9.6,q4[1]],
+    quad(d,[q1[0],STANDS_BASE_Y,q1[1]],[q2[0],STANDS_BASE_Y,q2[1]],[q3[0],9.6,q3[1]],[q4[0],9.6,q4[1]],
          col,[[v0,1],[v1,1],[v1,0],[v0,0]]);
   }
   GEO.stands=glBuild(d);
