@@ -402,10 +402,23 @@ function layout(){
   document.body.classList.toggle('portrait', PORTRAIT);
 }
 window.addEventListener('resize',layout);
+function requestFullscreenOnLandscape(){
+  if(window.screen && window.screen.orientation && window.screen.orientation.type){
+    if(window.screen.orientation.type.startsWith('landscape')){
+      try{ if(TG && TG.requestFullscreen) TG.requestFullscreen(); }catch(e){}
+      try{ document.documentElement.requestFullscreen(); }catch(e){}
+    }
+  }
+}
 window.addEventListener('orientationchange',function(){
   /* Android перестраивает окно не сразу и не одним шагом */
   [0,120,300,600].forEach(function(t){ setTimeout(layout,t); });
+  requestFullscreenOnLandscape();
 });
+// Also listen to screen.orientation.change (modern API)
+if(window.screen && window.screen.orientation){
+  window.screen.orientation.addEventListener('change', requestFullscreenOnLandscape);
+}
 if(window.visualViewport){
   window.visualViewport.addEventListener('resize',layout);
   window.visualViewport.addEventListener('scroll',layout);
@@ -4447,7 +4460,6 @@ document.getElementById('bJoin').addEventListener('click',function(){
   if(!TG) return;
   try{ TG.ready(); }catch(e){}
   try{ TG.expand(); }catch(e){}                    /* на весь экран */
-  try{ if(TG.requestFullscreen) TG.requestFullscreen(); }catch(e){}
   try{ TG.disableVerticalSwipes && TG.disableVerticalSwipes(); }catch(e){}  /* свайп вниз не закрывает игру */
   try{ TG.setHeaderColor && TG.setHeaderColor('#05070c'); }catch(e){}
   try{ TG.setBackgroundColor && TG.setBackgroundColor('#05070c'); }catch(e){}
