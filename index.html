@@ -2611,8 +2611,9 @@ function meshToGL(m){
 /* ---------- контур площадки со смещением наружу ---------- */
 function outlineOff(off,step){
   var r=CORNER+off, L=RL+off, Wd=RW+off, pts=[], i;
+  var CORNER_SEGS = 16;  // fixed segments per 90° corner — guarantees equal point counts for all offsets
   function arc(cx,cz,a0,a1){
-    var n=Math.max(3,Math.round(Math.abs(a1-a0)*r/step));
+    var n = CORNER_SEGS;
     for(i=0;i<=n;i++){ var a=a0+(a1-a0)*i/n; pts.push([cx+Math.cos(a)*r, cz+Math.sin(a)*r]); }
   }
   function line(x0,z0,x1,z1){
