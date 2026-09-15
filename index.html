@@ -635,14 +635,16 @@ function rinkOutline(step){
 }
 
 /* ---------- камера ---------- */
-var cam={x:0,y:15.2,z:-12.4,pitch:0.80,yaw:0,shake:0, targetYaw:0, targetDist:0, focusX:0, focusZ:0};
+var cam={x:0,y:15.2,z:-12.4,pitch:0.80,yaw:0,renderYaw:0,shake:0, targetYaw:0, targetDist:0, focusX:0, focusZ:0};
 var CAMLOCK=false;
 var camYawT=0;
 var F;
 
 var _t=[0,0,0];
 var _cyw=1,_syw=0;
+var _cry=1,_sry=0;
 function updYaw(){ _cyw=Math.cos(cam.yaw); _syw=Math.sin(cam.yaw); }
+function updRenderYaw(){ _cry=Math.cos(cam.renderYaw); _sry=Math.sin(cam.renderYaw); }
 function proj(x,y,z,o){
   var dx=x-cam.x, dy=y-cam.y, dz=z-cam.z;
   var rx=dx*_cyw - dz*_syw;
@@ -2186,7 +2188,9 @@ function camUpdate(dt){
     cam.x = lerp(cam.x, clamp(cam.focusX * CP.fx, -19, 19) - AD * dist, Math.min(1, dt * 3.4));
     cam.z = lerp(cam.z, clamp(cam.focusZ * CP.fz, -6, 6), Math.min(1, dt * 3.0));
   } else {
-    // LANDSCAPE: state A — upper board works, attack offset, symmetric fz=0.85
+    // LANDSCAPE: symmetric board coverage — camera flips side at center ice
+    // Upper half (focusZ > 0): camera at Z=-dist, looks +Z (renderYaw=0)
+    // Lower half (focusZ < 0): camera at Z=+dist, looks -Z (renderYaw=PI)
     var MARGIN = 3.0;
     var standsXinner = RL + 2.2;
     var maxCamX = Math.min(27, standsXinner - MARGIN);
@@ -2207,7 +2211,19 @@ function camUpdate(dt){
     var safeZmin = -standsZinner + MARGIN;   // -14.2
     var safeZmax = standsZinner - MARGIN;    // 14.2
 
-    var targetZ = -dist + cam.focusZ * FZ_BOARD;
+    // Desired render yaw: 0 for upper half, PI for lower half
+    var desiredRenderYaw = (cam.focusZ < 0) ? Math.PI : 0;
+    cam.renderYaw = (cam.renderYaw !== undefined ? cam.renderYaw : 0);
+    cam.renderYaw = lerp(cam.renderYaw, desiredRenderYaw, Math.min(1, dt * 2.0));
+    updRenderYaw();
+
+    // Interpolate targetZ between the two camera positions based on renderYaw
+    // renderYaw=0: targetZ = -dist + focusZ*FZ_BOARD (standard)
+    // renderYaw=PI: targetZ = +dist + focusZ*FZ_BOARD (flipped)
+    var t = cam.renderYaw / Math.PI;  // 0..1
+    var targetZ_standard = -dist + cam.focusZ * FZ_BOARD;
+    var targetZ_flipped  =  dist + cam.focusZ * FZ_BOARD;
+    var targetZ = targetZ_standard * (1 - t) + targetZ_flipped * t;
     targetZ = clamp(targetZ, safeZmin, safeZmax);
 
     cam.x = lerp(cam.x, targetX, Math.min(1, dt * 5.0));
@@ -2268,8 +2284,10 @@ function m4model(o,ox,oy,oz,yaw,k,ky){
 var MV=m4(), MP=m4(), MVP=m4(), MTMP=m4();
 
 /* вид: точно повторяет старую proj() — рыскание вокруг Y, затем тангаж */
+/* ВАЖНО: используем cam.renderYaw для отрисовки (может быть 0 или PI),
+   а cam.yaw оставляем всегда 0 для toWorld() ввода */
 function buildView(o){
-  var cy=Math.cos(cam.yaw), sy=Math.sin(cam.yaw);
+  var cy=_cry, sy=_sry;  // cam.renderYaw (cos/sin обновлены в updRenderYaw)
   var cp=Math.cos(cam.pitch), sp=Math.sin(cam.pitch);
   /* строки матрицы поворота */
   var r00=cy,        r01=0,   r02=-sy;
