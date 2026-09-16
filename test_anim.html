@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Skate Slide Animation Test</title>
+<style>
+  body { margin:0; background:#111; overflow:hidden; }
+  canvas { display:block; width:100vw; height:100vh; }
+  #info { position:fixed; top:10px; left:10px; color:#fff; font:14px monospace; z-index:1; background:rgba(0,0,0,0.6); padding:6px 10px; border-radius:4px; }
+</style>
+</head>
+<body>
+<div id="info">Loading...</div>
+<canvas id="c"></canvas>
+<script>
+"use strict";
+
+/* ===========================================================
+   Minimal test page — plays 'skate_slide' clip on skater model.
+   Fetches HD_DATA from index.html on same origin.
+   =========================================================== */
+
+var canvas = document.getElementById('c');
+var gl = canvas.getContext('webgl2', { antialias: true, alpha: false });
+if (!gl) { document.getElementById('info').textContent = 'WebGL2 not supported'; throw 'no webgl2'; }
+
+function resize() {
+  var dpr = window.devicePixelRatio || 1;
+  canvas.width = window.innerWidth * dpr;
+  canvas.height = window.innerHeight * dpr;
+  gl.viewport(0, 0, canvas.width, canvas.height);
+}
+window.addEventListener('resize', resize);
+resize();
+
+/* ─── Shaders ─── */
+var VS = [
+'#version 300 es',
+'in vec3 aPos; in vec3 aNrm; in vec3 aCol; in float aSlot;',
+'in vec4 aJoint; in vec4 aWeight;',
+'uniform mat4 uMVP; uniform mat4 uM;',
+'uniform mat4 uBones[26];',
+'uniform vec3 uTeam[3];',
+'out vec3 vN; out vec3 vC; out vec3 vW;',
+'void main(){',
+'  mat4 sk = uBones[int(aJoint.x)]*aWeight.x',
+'          + uBones[int(aJoint.y)]*aWeight.y',
+'          + uBones[int(aJoint.z)]*aWeight.z',
+'          + uBones[int(aJoint.w)]*aWeight.w;',
+'  vec4 sp = sk*vec4(aPos,1.0);',
+'  vec3 sn = mat3(sk)*aNrm;',
+'  vec4 w  = uM*vec4(sp.xyz,1.0);',
+'  vW=w.xyz;',
+'  vN=mat3(uM)*sn;',
+'  int sl=int(aSlot+0.5);',
+'  vC = (sl==0) ? aCol : uTeam[sl-1]*(0.30+0.78*aCol.r);',
+'  gl_Position=uMVP*vec4(sp.xyz,1.0);',
+'}'
+].join('\n');
+
+var FS = [
+'#version 300 es',
+'precision highp float;',
+'in vec3 vN; in vec3 vC; in vec3 vW;',
+'uniform vec3 uCam;',
+'uniform vec3 uSunDir;',
+'uniform vec3 uSunCol;',
+'uniform float uExposure;',
+'uniform float uAmbK;',
+'out vec4 frag;',
+'vec3 aces(vec3 x){',
+'  const float a=2.51, b=0.03, c=2.43, d=0.59, e=0.14;',
+'  return clamp((x*(a*x+b))/(x*(c*x+d)+e), 0.0, 1.0);',
+'}',
+'void main(){',
+'  vec3 n=normalize(vN);',
+'  vec3 L=normalize(uSunDir);',
+'  float diff=max(dot(n,L),0.0);',
+'  vec3 amb=vC*uAmbK;',
+'  vec3 col=amb + vC*uSunCol*diff;',
+'  col*=uExposure;',
+'  col=aces(col);',
+'  frag=vec4(pow(col,vec3(1.0/2.2)),1.0);',
+'}'
+].join('\n');
+
+function compile(src, type) {
+  var s = gl.createShader(type);
+  gl.shaderSource(s, src);
+  gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw gl.getShaderInfoLog(s);
+  return s;
+}
+function link(vs, fs) {
+  var p = gl.createProgram();
+  gl.attachShader(p, compile(vs, gl.VERTEX_SHADER));
+  gl.attachShader(p, compile(fs, gl.FRAGMENT_SHADER));
+  gl.bindAttribLocation(p, 0, 'aPos');
+  gl.bindAttribLocation(p, 1, 'aNrm');
+  gl.bindAttribLocation(p, 2, 'aCol');
+  gl.bindAttribLocation(p, 3, 'aSlot');
+  gl.bindAttribLocation(p, 4, 'aJoint');
+  gl.bindAttribLocation(p, 5, 'aWeight');
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw gl.getProgramInfoLog(p);
+  return p;
+}
+
+var prog = link(VS, FS);
+var U = {};
+['uMVP','uM','uCam','uSunDir','uSunCol','uExposure','uAmbK'].forEach(function(k) {
+  U[k] = gl.getUniformLocation(prog, k);
+});
+U.uBones = gl.getUniformLocation(prog, 'uBones[0]');
+U.uTeam = gl.getUniformLocation(prog, 'uTeam[0]');
+
+/* ─── Helpers ─── */
+function b64bytes(s) {
+  var bin = atob(s), n = bin.length, u = new Uint8Array(n);
+  for (var i = 0; i < n; i++) u[i] = bin.charCodeAt(i);
+  return u;
+}
+function m4persp(fov, asp, near, far) {
+  var f = 1.0 / Math.tan(fov / 2), nf = 1 / (near - far);
+  return new Float32Array([f/asp,0,0,0, 0,f,0,0, 0,0,(far+near)*nf,-1, 0,0,2*far*near*nf,0]);
+}
+function m4lookAt(eye, center, up) {
+  var zx=eye[0]-center[0], zy=eye[1]-center[1], zz=eye[2]-center[2];
+  var zl=1/Math.sqrt(zx*zx+zy*zy+zz*zz); zx*=zl; zy*=zl; zz*=zl;
+  var xx=up[1]*zz-up[2]*zy, xy=up[2]*zx-up[0]*zz, xz=up[0]*zy-up[1]*zx;
+  var xl=1/Math.sqrt(xx*xx+xy*xy+xz*xz); xx*=xl; xy*=xl; xz*=xl;
+  var yx=zy*xz-zz*xy, yy=zz*xx-zx*xz, yz=zx*xy-zy*xx;
+  return new Float32Array([
+    xx,yx,zx,0, xy,yy,zy,0, xz,yz,zz,0,
+    -(xx*eye[0]+xy*eye[1]+xz*eye[2]),
+    -(yx*eye[0]+yy*eye[1]+yz*eye[2]),
+    -(zx*eye[0]+zy*eye[1]+zz*eye[2]),1
+  ]);
+}
+function m4mul(a, b) {
+  var o = new Float32Array(16);
+  for (var i = 0; i < 4; i++)
+    for (var j = 0; j < 4; j++) {
+      var s = 0;
+      for (var k = 0; k < 4; k++) s += a[i+k*4] * b[k+j*4];
+      o[i+j*4] = s;
+    }
+  return o;
+}
+function m4identity() {
+  return new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]);
+}
+function m4trans(x, y, z) {
+  return new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, x,y,z,1]);
+}
+function m4rotY(a) {
+  var c=Math.cos(a), s=Math.sin(a);
+  return new Float32Array([c,0,s,0, 0,1,0,0, -s,0,c,0, 0,0,0,1]);
+}
+
+/* ─── Matrices ─── */
+var IAM=[1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1];
+function qMulA(a,ai,b,bi,o,oi){
+  var ax=a[ai],ay=a[ai+1],az=a[ai+2],aw=a[ai+3];
+  var bx=b[bi],by=b[bi+1],bz=b[bi+2],bw=b[bi+3];
+  o[oi]=aw*bx+ax*bw+ay*bz-az*by;
+  o[oi+1]=aw*by-ax*bz+ay*bw+az*bx;
+  o[oi+2]=aw*bz+ax*by-ay*bx+az*bw;
+  o[oi+3]=aw*bw-ax*bx-ay*by-az*bz;
+}
+function qSlerp(a,ai,b,bi,t,o,oi){
+  var dot=a[ai]*b[bi]+a[ai+1]*b[bi+1]+a[ai+2]*b[bi+2]+a[ai+3]*b[bi+3];
+  if(dot<0){b=bi; dot=-dot; for(var j=0;j<4;j++){b[bi+j]=-b[bi+j];}}
+  if(dot>0.9995){for(var j=0;j<4;j++) o[oi+j]=a[ai+j]+t*(b[bi+j]-a[ai+j]); return;}
+  var th=Math.acos(Math.min(1,Math.max(-1,dot)));
+  var s1=Math.sin((1-t)*th)/Math.sin(th), s2=Math.sin(t*th)/Math.sin(th);
+  for(var j=0;j<4;j++) o[oi+j]=s1*a[ai+j]+s2*b[bi+j];
+}
+function trsToMat(o,oi,tx,ty,tz,q,qi){
+  var x=q[qi],y=q[qi+1],z=q[qi+2],w=q[qi+3];
+  var xx=x*x,xy=x*y,xz=x*z,xw=x*w,yy=y*y,yz=y*z,yw=y*w,zz=z*z,zw=z*w;
+  o[oi]=1-2*(yy+zz); o[oi+1]=2*(xy+zw); o[oi+2]=2*(xz-yw); o[oi+3]=0;
+  o[oi+4]=2*(xy-zw); o[oi+5]=1-2*(xx+zz); o[oi+6]=2*(yz+xw); o[oi+7]=0;
+  o[oi+8]=2*(xz+yw); o[oi+9]=2*(yz-xw); o[oi+10]=1-2*(xx+yy); o[oi+11]=0;
+  o[oi+12]=tx; o[oi+13]=ty; o[oi+14]=tz; o[oi+15]=1;
+}
+function matMulA(o,oi,a,ai,b,bi){
+  for(var i=0;i<4;i++) for(var j=0;j<4;j++){
+    var s=0; for(var k=0;k<4;k++) s+=a[ai+k*4+j]*b[bi+i*4+k];
+    o[oi+i*4+j]=s;
+  }
+}
+
+/* ─── Animation sampling ─── */
+function clipSample(M, clip, t, out, once) {
+  var n = clip.n, nb = M.nb;
+  var phase = (t / clip.dur) * n;
+  if (once) phase = Math.min(phase, n - 1.001);
+  else phase = phase % n;
+  var i0 = Math.floor(phase), f = phase - i0;
+  var i1 = (i0 + 1) % n;
+  var q = clip.q;
+  for (var b = 0; b < nb; b++)
+    for (var k = 0; k < 4; k++) {
+      var a0 = q[i0*nb*4 + b*4 + k], a1 = q[i1*nb*4 + b*4 + k];
+      out[b*4+k] = a0 + f*(a1-a0);
+    }
+  return phase;
+}
+function hipAt(clip, phase, dim) {
+  var n = clip.n, i0 = Math.floor(phase), f = phase - i0;
+  var i1 = (i0+1)%n;
+  var h0 = clip.hips[i0*3+dim], h1 = clip.hips[i1*3+dim];
+  return h0 + f*(h1-h0);
+}
+function skinPose(M, t) {
+  var nb = M.nb;
+  var clip = M.clips['skate_slide'];
+  if (!clip) return;
+  var phase = clipSample(M, clip, t, M.qA, false);
+  var hx = 0, hy = 0, hz = 0;
+  if (clip.hips) hx = hipAt(clip, phase, 0), hy = hipAt(clip, phase, 1), hz = hipAt(clip, phase, 2);
+  for (var i = 0; i < nb; i++) qMulA(M.restR, i*4, M.qA, i*4, M.tmpQ, i*4);
+  for (var i = 0; i < nb; i++)
+    trsToMat(M.tmpLocal, i*16, M.restT[i*3], M.restT[i*3+1], M.restT[i*3+2], M.tmpQ, i*4);
+  var hb = M.hip * 16;
+  M.tmpLocal[hb+12] += hx; M.tmpLocal[hb+13] += hy; M.tmpLocal[hb+14] += hz;
+  for (var i = 0; i < nb; i++) {
+    var p = M.parent[i];
+    if (p < 0) { for (var k = 0; k < 16; k++) M.tmpWorld[i*16+k] = M.tmpLocal[i*16+k]; }
+    else matMulA(M.tmpWorld, i*16, M.tmpWorld, p*16, M.tmpLocal, i*16);
+  }
+  var base = 0;
+  for (var i = 0; i < nb; i++) matMulA(M.pal, base+i*16, M.tmpWorld, i*16, M.ibm, i*16);
+}
+
+/* ─── Parse model ─── */
+function hdModel(PD) {
+  var nv = PD.nv, ni = PD.ni;
+  var b = b64bytes(PD.mesh);
+  var dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+  var o = 0, i, k;
+  var pos = new Float32Array(nv*3), nrm = new Float32Array(nv*3),
+      col = new Float32Array(nv*3), slot = new Float32Array(nv),
+      jnt = new Float32Array(nv*4), wgt = new Float32Array(nv*4);
+  var lo = PD.lo, sc = PD.sc;
+  for (i = 0; i < nv; i++)
+    for (k = 0; k < 3; k++) pos[i*3+k] = (dv.getInt16(o+(i*3+k)*2, true)+32767)*sc[k]+lo[k];
+  o += nv*6;
+  for (i = 0; i < nv*3; i++) nrm[i] = dv.getInt8(o+i)/127;
+  o += nv*3;
+  for (i = 0; i < nv*3; i++) col[i] = b[o+i]/255;
+  o += nv*3;
+  for (i = 0; i < nv; i++) slot[i] = b[o+i];
+  o += nv;
+  for (i = 0; i < nv*4; i++) jnt[i] = b[o+i];
+  o += nv*4;
+  for (i = 0; i < nv; i++) {
+    var ws = 0;
+    for (k = 0; k < 4; k++) ws += b[o+i*4+k];
+    if (ws < 1) { wgt[i*4]=1; wgt[i*4+1]=0; wgt[i*4+2]=0; wgt[i*4+3]=0; continue; }
+    for (k = 0; k < 4; k++) wgt[i*4+k] = b[o+i*4+k]/ws;
+  }
+  o += nv*4;
+  var idx = new Uint16Array(ni);
+  for (i = 0; i < ni; i++) idx[i] = dv.getUint16(o+i*2, true);
+
+  var vao = gl.createVertexArray(); gl.bindVertexArray(vao);
+  function ab(loc, arr, n) {
+    var bb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, bb);
+    gl.bufferData(gl.ARRAY_BUFFER, arr, gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, n, gl.FLOAT, false, 0, 0);
+  }
+  ab(0,pos,3); ab(1,nrm,3); ab(2,col,3); ab(3,slot,1); ab(4,jnt,4); ab(5,wgt,4);
+  var ib = gl.createBuffer();
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
+  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STATIC_DRAW);
+  gl.bindVertexArray(null);
+
+  var nb = PD.bones.length;
+  var M = {
+    nv: nv, ni: ni, nb: nb, vao: vao, ib: ib, hip: PD.hip,
+    names: PD.bones, parent: new Int16Array(PD.parent),
+    restT: new Float32Array(nb*3), restR: new Float32Array(nb*4),
+    ibm: new Float32Array(nb*16), stride: nb*16
+  };
+  for (i = 0; i < nb; i++) {
+    for (k = 0; k < 3; k++) M.restT[i*3+k] = PD.restT[i][k];
+    for (k = 0; k < 4; k++) M.restR[i*4+k] = PD.restR[i][k];
+    for (k = 0; k < 16; k++) M.ibm[i*16+k] = PD.ibm[i][k];
+  }
+  var raw = b64bytes(PD.anim);
+  var adv = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
+  M.clips = {};
+  for (var cn in PD.clips) {
+    var c = PD.clips[cn];
+    var q = new Float32Array(c.n * nb * 4);
+    for (i = 0; i < q.length; i++) q[i] = adv.getInt16(c.rot+i*2, true)/32767;
+    var hp = null;
+    if (c.hips !== undefined) {
+      hp = new Float32Array(c.n * 3);
+      for (i = 0; i < hp.length; i++) hp[i] = adv.getInt16(c.hips+i*2, true)/4096;
+    }
+    M.clips[cn] = { n: c.n, dur: c.dur, q: q, hips: hp };
+  }
+  M.pal = new Float32Array(M.stride);
+  M.tmpLocal = new Float32Array(nb*16);
+  M.tmpWorld = new Float32Array(nb*16);
+  M.tmpQ = new Float32Array(nb*4);
+  M.qA = new Float32Array(nb*4);
+  return M;
+}
+
+/* ─── Load & play ─── */
+var MODEL = null;
+
+function init() {
+  document.getElementById('info').textContent = 'Fetching HD_DATA...';
+
+  fetch('index.html').then(function(r) { return r.text(); }).then(function(html) {
+    var m = html.match(/var\s+HD_DATA\s*=\s*(\{[\s\S]*?\});\s*var\s+OPTS/);
+    if (!m) { document.getElementById('info').textContent = 'HD_DATA not found'; return; }
+
+    var HD_DATA;
+    try { eval('HD_DATA = ' + m[1]); } catch(e) {
+      document.getElementById('info').textContent = 'Parse error: ' + e.message;
+      return;
+    }
+
+    MODEL = hdModel(HD_DATA.skater);
+
+    document.getElementById('info').textContent =
+      'Loaded! Bones: ' + MODEL.nb +
+      ', Verts: ' + MODEL.nv +
+      ', Clips: ' + Object.keys(MODEL.clips).join(', ') +
+      '\nPlaying: skate_slide (' + MODEL.clips.skate_slide.dur.toFixed(2) + 's loop)';
+
+    requestAnimationFrame(loop);
+  }).catch(function(e) {
+    document.getElementById('info').textContent = 'Fetch error: ' + e.message;
+  });
+}
+
+var startTime = performance.now();
+
+function loop() {
+  if (!MODEL) return;
+  var t = ((performance.now() - startTime) / 1000.0) % MODEL.clips.skate_slide.dur;
+
+  gl.enable(gl.DEPTH_TEST);
+  gl.depthFunc(gl.LEQUAL);
+  gl.clearColor(0.15, 0.15, 0.18, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+  /* Camera: side view */
+  var aspect = canvas.width / canvas.height;
+  var proj = m4persp(0.7, aspect, 0.1, 100);
+  var eye = [5, 1.2, 3];
+  var view = m4lookAt(eye, [0, 0.8, 0], [0, 1, 0]);
+  var VP = m4mul(proj, view);
+  var model = m4identity();
+
+  skinPose(MODEL, t);
+
+  gl.useProgram(prog);
+  gl.uniformMatrix4fv(U.uMVP, false, VP);
+  gl.uniformMatrix4fv(U.uM, false, model);
+  gl.uniformMatrix4fv(U.uBones, false, MODEL.pal);
+  gl.uniform3f(U.uCam, eye[0], eye[1], eye[2]);
+  gl.uniform3f(U.uSunDir, 0.4, 0.8, 0.3);
+  gl.uniform3f(U.uSunCol, 1.3, 1.3, 1.2);
+  gl.uniform1f(U.uExposure, 1.8);
+  gl.uniform1f(U.uAmbK, 0.35);
+
+  /* Team colors: red/white */
+  var team = new Float32Array(9);
+  team[0] = 0.8; team[1] = 0.15; team[2] = 0.15;  /* slot 1: red */
+  team[3] = 0.34*0.8+0.10; team[4] = 0.34*0.15+0.10; team[5] = 0.34*0.15+0.10;
+  team[6] = 0.30*0.8+0.05; team[7] = 0.30*0.15+0.05; team[8] = 0.30*0.15+0.05;
+  gl.uniform3fv(U.uTeam, team);
+
+  gl.bindVertexArray(MODEL.vao);
+  gl.drawElements(gl.TRIANGLES, MODEL.ni, gl.UNSIGNED_SHORT, 0);
+  gl.bindVertexArray(null);
+
+  requestAnimationFrame(loop);
+}
+
+init();
+</script>
+</body>
+</html>
