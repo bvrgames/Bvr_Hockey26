@@ -18,7 +18,7 @@
 
 /* ===========================================================
    Minimal test page — plays 'skate_slide' clip on skater model.
-   Fetches HD_DATA from index.html on same origin.
+   Loads HD_DATA.skater from local JSON asset.
    =========================================================== */
 
 var canvas = document.getElementById('c');
@@ -316,30 +316,24 @@ function hdModel(PD) {
 var MODEL = null;
 
 function init() {
-  document.getElementById('info').textContent = 'Fetching HD_DATA...';
+  document.getElementById('info').textContent = 'Loading skater model...';
 
-  fetch('index.html').then(function(r) { return r.text(); }).then(function(html) {
-    var m = html.match(/var\s+HD_DATA\s*=\s*(\{[\s\S]*?\});\s*var\s+OPTS/);
-    if (!m) { document.getElementById('info').textContent = 'HD_DATA not found'; return; }
+  fetch('assets/hd_data_test.json')
+    .then(function(r) { return r.json(); })
+    .then(function(HD_DATA) {
+      MODEL = hdModel(HD_DATA.skater);
 
-    var HD_DATA;
-    try { eval('HD_DATA = ' + m[1]); } catch(e) {
-      document.getElementById('info').textContent = 'Parse error: ' + e.message;
-      return;
-    }
+      document.getElementById('info').textContent =
+        'Loaded! Bones: ' + MODEL.nb +
+        ', Verts: ' + MODEL.nv +
+        ', Clips: ' + Object.keys(MODEL.clips).join(', ') +
+        '\nPlaying: skate_slide (' + MODEL.clips.skate_slide.dur.toFixed(2) + 's loop)';
 
-    MODEL = hdModel(HD_DATA.skater);
-
-    document.getElementById('info').textContent =
-      'Loaded! Bones: ' + MODEL.nb +
-      ', Verts: ' + MODEL.nv +
-      ', Clips: ' + Object.keys(MODEL.clips).join(', ') +
-      '\nPlaying: skate_slide (' + MODEL.clips.skate_slide.dur.toFixed(2) + 's loop)';
-
-    requestAnimationFrame(loop);
-  }).catch(function(e) {
-    document.getElementById('info').textContent = 'Fetch error: ' + e.message;
-  });
+      requestAnimationFrame(loop);
+    })
+    .catch(function(e) {
+      document.getElementById('info').textContent = 'Load error: ' + e.message;
+    });
 }
 
 var startTime = performance.now();
