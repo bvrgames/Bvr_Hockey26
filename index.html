@@ -241,6 +241,9 @@
 
   <canvas id="stick"></canvas>
   <div id="fps"></div>
+  <div id="netdbg" style="display:none;position:fixed;left:10px;top:10px;z-index:99;pointer-events:none;
+       font:11px/1.4 monospace;font-weight:700;color:#0f0;background:rgba(0,0,0,.65);padding:4px 8px;
+       border-radius:4px;white-space:pre"></div>
   <div id="rotate">
     <div class="phone"></div>
     <div class="arrow"></div>
@@ -1212,6 +1215,26 @@ var HS=[mkHS(),mkHS()];
 var NET={on:false,role:null,code:'',url:'',ws:null,peer:false,sendT:0,
          a:null,b:null,at:0,bt:0,status:'',ping:0};
 var NIN={mx:0,mz:0,_A:false,_B:false,_X:false,_Y:false,RT:false,LB:false};
+/* TEMP debug (диагностика лагов у гостя, живой тест на реальных
+   устройствах) — счётчики факта отправки/приёма 's'/'i' по сети.
+   Удалить вместе с #netdbg и netSnap()/netSendInput()/onmessage
+   инкрементами, когда причина лагов найдена и починена. */
+var NETDBG={sSent:0,sRecv:0,iSent:0,iRecv:0,tLast:0};
+setInterval(function(){
+  if(!NET.on) return;
+  var now=performance.now();
+  if(!NETDBG.tLast) NETDBG.tLast=now;
+  var dt=Math.max(0.001,(now-NETDBG.tLast)/1000); NETDBG.tLast=now;
+  var r=function(v){ return (v/dt).toFixed(1); };
+  var el=document.getElementById('netdbg');
+  if(el){
+    el.style.display='block';
+    el.textContent='NET role:'+NET.role+' peer:'+NET.peer+'\n'+
+      's sent:'+r(NETDBG.sSent)+'/s  recv:'+r(NETDBG.sRecv)+'/s\n'+
+      'i sent:'+r(NETDBG.iSent)+'/s  recv:'+r(NETDBG.iRecv)+'/s';
+  }
+  NETDBG.sSent=0; NETDBG.sRecv=0; NETDBG.iSent=0; NETDBG.iRecv=0;
+},1000);
 var NEDGE={A:false,B:false,X:false,Y:false,LB:false};
 var _npv={A:false,B:false,X:false,Y:false,LB:false};
 var controlled=null, chargeT=0, checkT=0, pokeT=0;
@@ -4149,8 +4172,8 @@ function netConnect(url, code, cb){
       state='face'; stateT=0.9;
       audioInit(); SFX.whistle();
     }
-    else if(m.t==='s' && NET.role==='guest'){ netRecvSnap(m); }
-    else if(m.t==='i' && NET.role==='host'){ netRecvInput(m); }
+    else if(m.t==='s' && NET.role==='guest'){ NETDBG.sRecv++; netRecvSnap(m); }
+    else if(m.t==='i' && NET.role==='host'){ NETDBG.iRecv++; netRecvInput(m); }
   };
 }
 function netSend(o){
@@ -4170,6 +4193,7 @@ function netSnap(){
     d.push(r2(p.x),r2(p.z),r2(p.yaw),(p.down>0?1:0)+(p.boxed?2:0),r1(p.stride));
   }
   netSend({t:'s',d:d,k:Date.now()});
+  NETDBG.sSent++; /* TEMP debug: see AskUserQuestion/report — remove after diagnosing guest lag */
 }
 function r2(v){ return Math.round(v*100)/100; }
 function r1(v){ return Math.round(v*10)/10; }
@@ -4222,6 +4246,7 @@ function netApply(){
 function netSendInput(){
   var b=(IN._A?1:0)|(IN._B?2:0)|(IN._X?4:0)|(IN._Y?8:0)|(IN.RT?16:0)|(IN._LB?32:0);
   netSend({t:'i',m:[r2(IN.mx),r2(IN.mz)],b:b,tc:TACTIC[HUMAN]});
+  NETDBG.iSent++; /* TEMP debug — see netSnap() comment */
 }
 function netRecvInput(m){
   NIN.mx=m.m[0]; NIN.mz=m.m[1];
