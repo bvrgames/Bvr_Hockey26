@@ -244,6 +244,13 @@
   <div id="netdbg" style="display:none;position:fixed;left:10px;top:10px;z-index:99;pointer-events:none;
        font:11px/1.4 monospace;font-weight:700;color:#0f0;background:rgba(0,0,0,.65);padding:4px 8px;
        border-radius:4px;white-space:pre"></div>
+  <!-- Отдельно от #rotate: не полноэкранный, не блокирует меню/игру под собой,
+       не задет paintLang() (тот стирает содержимое #rotate целиком через textContent).
+       Показывается только если автоматический requestFullscreen (через orientationchange —
+       не user gesture, на части Android-браузеров глушится) не сработал. -->
+  <button id="fsHint" style="display:none;position:fixed;right:10px;top:10px;z-index:99;
+       padding:8px 14px;font-size:13px;font-weight:700;letter-spacing:.04em;color:#05070c;
+       background:#ffd166;border:none;border-radius:8px;cursor:pointer">Нажми — на весь экран</button>
   <div id="rotate">
     <div class="phone"></div>
     <div class="arrow"></div>
@@ -427,6 +434,9 @@ function layout(){
 
   document.getElementById('rotate').style.display=PORTRAIT?'flex':'none';
   document.body.classList.toggle('portrait', PORTRAIT);
+  /* fsHint — отдельная не-полноэкранная кнопка (см. ниже), скрываем при
+     возврате в portrait вместе с #rotate. Не меняет поведение #rotate. */
+  if(PORTRAIT){ var fh0=document.getElementById('fsHint'); if(fh0) fh0.style.display='none'; }
 }
 window.addEventListener('resize',layout);
 function requestFullscreenOnLandscape(){
@@ -451,6 +461,42 @@ if(window.visualViewport){
   window.visualViewport.addEventListener('scroll',layout);
 }
 layout();
+
+/* ---- Android fullscreen safety-net ----
+   Чисто добавочно: ничего выше не менялось. requestFullscreenOnLandscape()
+   по-прежнему вызывается автоматически из orientationchange — на iPhone
+   этого достаточно. Но requestFullscreen(), вызванный НЕ из клика (а из
+   orientationchange — это не user gesture), на части Android-браузеров
+   молча отклоняется. Раньше кнопку-фикс клали ВНУТРЬ #rotate и держали
+   #rotate видимым в landscape, ожидая клика — это перекрывало меню
+   полноэкранным оверлеем (#rotate: inset:0; z-index:20) и ломало вход в
+   игру. Сейчас кнопка #fsHint — отдельный маленький элемент вне #rotate,
+   #rotate по-прежнему скрывается сразу при повороте, как и было. */
+function isFullscreenNow(){ return !!(document.fullscreenElement || (TG && TG.isFullscreen)); }
+function checkFsHint(){
+  setTimeout(function(){
+    var fh=document.getElementById('fsHint'); if(!fh) return;
+    var land=window.screen && window.screen.orientation && window.screen.orientation.type &&
+              window.screen.orientation.type.startsWith('landscape');
+    fh.style.display=(land && !isFullscreenNow())?'block':'none';
+  },600); /* даём автоматической попытке время отработать/провалиться */
+}
+window.addEventListener('orientationchange',checkFsHint);
+if(window.screen && window.screen.orientation){
+  window.screen.orientation.addEventListener('change',checkFsHint);
+}
+document.addEventListener('fullscreenchange',function(){
+  if(isFullscreenNow()){ var fh=document.getElementById('fsHint'); if(fh) fh.style.display='none'; }
+});
+(function(){
+  var fh=document.getElementById('fsHint');
+  if(fh) fh.addEventListener('click',function(){
+    requestFullscreenOnLandscape(); /* теперь вызван из настоящего клика */
+    fh.style.display='none';
+  });
+})();
+requestFullscreenOnLandscape(); /* попытка сразу, если уже landscape при загрузке — раньше срабатывала только по событию поворота, поэтому invite-переходы (телефон уже боком) не получали даже попытки */
+checkFsHint(); /* и safety-net кнопка, если попытка не прошла */
 
 
 /* ============================================================
@@ -4196,9 +4242,10 @@ function netSnap(){
   d.push(players.indexOf(HS[0].ctrl), players.indexOf(HS[1].ctrl));
   d.push(gkRush[0]?1:0, gkRush[1]?1:0);
   d.push(offWarn, penaltyLeft(0)|0, penaltyLeft(1)|0);
+  d.push(r2(HS[0].aimX||0), r2(HS[0].aimZ||0), r2(HS[1].aimX||0), r2(HS[1].aimZ||0));
   for(var i=0;i<players.length;i++){
     var p=players[i];
-    d.push(r2(p.x),r2(p.z),r2(p.yaw),(p.down>0?1:0)+(p.boxed?2:0),r1(p.stride));
+    d.push(r2(p.x),r2(p.z),r2(p.yaw),(p.down>0?1:0)+(p.boxed?2:0),r1(p.stride),r1(p.spd||0));
   }
   netSend({t:'s',d:d,k:Date.now()});
   NETDBG.sSent++; /* TEMP debug: see AskUserQuestion/report — remove after diagnosing guest lag */
@@ -4220,6 +4267,13 @@ function netRecvSnap(m){
   HS[1].ctrl=players[d[8]]||HS[1].ctrl;
   gkRush[0]=!!d[9]; gkRush[1]=!!d[10];
   offWarn=d[11];
+  HS[0].aimX=d[14];
+  HS[0].aimZ=d[15];
+  HS[1].aimX=d[16];
+  HS[1].aimZ=d[17];
+  /* sim() у гостя не бежит — controlled/индикатор больше нигде не
+     обновляются; раньше замораживались на игроке со старта матча */
+  controlled = HS[HUMAN].ctrl;
   document.getElementById('s1').textContent=score[0];
   document.getElementById('s2').textContent=score[1];
 }
@@ -4228,10 +4282,10 @@ function netApply(){
   var t=performance.now();
   var span=Math.max(16,NET.bt-NET.at);
   var k=clamp((t-NET.bt)/span+1,0,1.1);
-  var A=NET.a,B=NET.b, base=14;
+  var A=NET.a,B=NET.b, base=18;
   for(var i=0;i<players.length;i++){
-    var o=base+i*5;
-    if(o+4>=B.length) break;
+    var o=base+i*6;
+    if(o+5>=B.length) break;
     var p=players[i];
     var ax=A[o]!==undefined?A[o]:B[o], az=A[o+1]!==undefined?A[o+1]:B[o+1];
     p.x=ax+(B[o]-ax)*k;
@@ -4242,6 +4296,7 @@ function netApply(){
     var fl=B[o+3];
     p.down=(fl&1)?1:0; p.boxed=(fl&2)?1:0;
     p.stride=B[o+4];
+    p.spd=B[o+5];
   }
   var pa0=A[0],pa2=A[2];
   puck.x=pa0+(B[0]-pa0)*k;
