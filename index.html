@@ -4473,7 +4473,8 @@ paintChips(); paintOpts();
 
 /* --- онлайн: сервер, код, ссылка --- */
 var srvEl=document.getElementById('srv'), codeEl=document.getElementById('rcode');
-try{ srvEl.value=localStorage.getItem('bvr_srv')||''; }catch(e){}
+var DEFAULT_SRV='https://bvr-hockey-relay.bvrhockey.workers.dev';
+try{ srvEl.value=localStorage.getItem('bvr_srv')||DEFAULT_SRV; }catch(e){ srvEl.value=DEFAULT_SRV; }
 srvEl.addEventListener('change',function(){
   try{ localStorage.setItem('bvr_srv',srvEl.value.trim()); }catch(e){}
 });
