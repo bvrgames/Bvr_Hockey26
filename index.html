@@ -1229,9 +1229,17 @@ setInterval(function(){
   var el=document.getElementById('netdbg');
   if(el){
     el.style.display='block';
+    var extra='';
+    if(NET.role==='host'){
+      /* TEMP: замыкаем цепочку "пакет пришёл -> значение осмысленное ->
+         применяется к движению" — видно ли NIN живьём и на каком игроке. */
+      var gp=HS[1-HUMAN]&&HS[1-HUMAN].ctrl, gi=gp?players.indexOf(gp):-1;
+      extra='\nNIN mx,mz: '+NIN.mx.toFixed(2)+','+NIN.mz.toFixed(2)+
+        '\nguest ctrl: idx='+gi+(gp?' team='+gp.team+' x='+gp.x.toFixed(1)+' z='+gp.z.toFixed(1):' (нет игрока!)');
+    }
     el.textContent='NET role:'+NET.role+' peer:'+NET.peer+'\n'+
       's sent:'+r(NETDBG.sSent)+'/s  recv:'+r(NETDBG.sRecv)+'/s\n'+
-      'i sent:'+r(NETDBG.iSent)+'/s  recv:'+r(NETDBG.iRecv)+'/s';
+      'i sent:'+r(NETDBG.iSent)+'/s  recv:'+r(NETDBG.iRecv)+'/s'+extra;
   }
   NETDBG.sSent=0; NETDBG.sRecv=0; NETDBG.iSent=0; NETDBG.iRecv=0;
 },1000);
