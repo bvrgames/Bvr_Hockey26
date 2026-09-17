@@ -1052,7 +1052,25 @@ stage.addEventListener('touchmove', tMove,{passive:false});
 stage.addEventListener('touchend',  tUp, {passive:false});
 stage.addEventListener('touchcancel',tUp,{passive:false});
 window.addEventListener('blur',releaseAll);
-document.addEventListener('visibilitychange',function(){ if(document.hidden) releaseAll(); });
+document.addEventListener('visibilitychange',function(){
+  if(document.hidden) releaseAll();
+  else netTimeReset();
+});
+window.addEventListener('pageshow',netTimeReset);
+function netTimeReset(){
+  /* rAF был приостановлен на неизвестное время. last устарел — без
+     сброса будет один кадр с клампованным dt (не страшно, и так
+     ограничен 42мс), но netApply() посчитает span по огромному
+     разрыву NET.bt-NET.at и может дать рывок экстраполяции в СТАРОМ
+     (до-паузы) направлении. Обнуляем оба источника времени и
+     схлопываем A=B, чтобы после паузы просто показать последнее
+     известное состояние без угадывания — не дёргаться. */
+  last=performance.now();
+  if(NET.on){
+    NET.at=NET.bt=performance.now();
+    if(NET.b) NET.a=NET.b;
+  }
+}
 
 /* мышь — для отладки на компьютере */
 stage.addEventListener('mousedown',function(e){
@@ -4177,7 +4195,7 @@ function netApply(){
   if(!NET.b) return;
   var t=performance.now();
   var span=Math.max(16,NET.bt-NET.at);
-  var k=clamp((t-NET.bt)/span+1,0,1.6);
+  var k=clamp((t-NET.bt)/span+1,0,1.1);
   var A=NET.a,B=NET.b, base=14;
   for(var i=0;i<players.length;i++){
     var o=base+i*5;
@@ -4479,10 +4497,21 @@ srvEl.addEventListener('change',function(){
   try{ localStorage.setItem('bvr_srv',srvEl.value.trim()); }catch(e){}
 });
 function shareLink(code){
-  var base=location.origin+location.pathname;
-  var url=base+'?room='+code+'&srv='+encodeURIComponent(srvEl.value.trim());
-  document.getElementById('netlink').textContent='ссылка другу: '+url;
-  try{ if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(url).catch(function(){}); }catch(e){}
+  /* Внутри Telegram — нативная диплинка на мини-апп (открывается сразу
+     в полноэкранном режиме, не как внешний сайт) + системное окно
+     "Отправить кому" через t.me/share/url (не требует настройки inline-
+     режима бота, в отличие от switchInlineQuery). Вне Telegram (тест в
+     обычном браузере) — прежнее поведение: прямая веб-ссылка в буфер. */
+  var deepLink='https://t.me/bvr_games_bot/hockeytg?startapp='+code;
+  var webLink=location.origin+location.pathname+'?room='+code+'&srv='+encodeURIComponent(srvEl.value.trim());
+  var shown=TG?deepLink:webLink;
+  document.getElementById('netlink').textContent='ссылка другу: '+shown;
+  if(TG && TG.openTelegramLink){
+    var shareUrl='https://t.me/share/url?url='+encodeURIComponent(deepLink)+
+                  '&text='+encodeURIComponent('Го катать в BVR Hockey — комната '+code);
+    try{ TG.openTelegramLink(shareUrl); return; }catch(e){}
+  }
+  try{ if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(shown).catch(function(){}); }catch(e){}
 }
 document.getElementById('bHost').addEventListener('click',function(){
   var u=srvEl.value.trim(); if(!u){ netStatus('впиши адрес сервера'); return; }
