@@ -1289,6 +1289,39 @@ setInterval(function(){
   }
   NETDBG.sSent=0; NETDBG.sRecv=0; NETDBG.iSent=0; NETDBG.iRecv=0;
 },1000);
+
+/* ---------- client-side prediction (гость, только свой игрок) ----------
+   PRED — предсказанное состояние (x,z,vx,vz,yaw,spd,stride,_back) своего
+   персонажа, считается КАЖДЫЙ кадр локально из своего же ввода функциями
+   humanMoveIntent/humanMoveIntegrate (теми же, что использует sim() на
+   хосте — см. выше). PRED_LOG — история своего ввода с таймштампами, на
+   случай доигрывания после коррекции. PRED_ERR — визуальная ошибка после
+   коррекции, гасится плавно (не рывком), а не применяется мгновенно.
+   Действия (пас/бросок/чек/поук) НЕ предсказываются — только движение:
+   спекулятивно выполнять их локально означало бы дублировать игровые
+   эффекты (шайба и т.п.), которые авторитетны только на хосте. */
+var PRED=null, PRED_ERR={x:0,z:0}, PRED_LOG=[];
+function predResetTo(p){
+  PRED={p:p, x:p.x, z:p.z, vx:p.vx||0, vz:p.vz||0, yaw:p.yaw, spd:p.spd||0, stride:p.stride||0, _back:false};
+  PRED_ERR.x=0; PRED_ERR.z=0;
+}
+function netPredictGuest(dt){
+  if(!NET.b) return;
+  var myP=HS[HUMAN].ctrl;
+  if(!myP || myP.boxed || myP.down>0 || myP.goalie){ PRED=null; return; }
+  if(!PRED || PRED.p!==myP) predResetTo(myP);
+  if(state==='play'){
+    var mi=humanMoveIntent(myP, HS[HUMAN], IN);
+    humanMoveIntegrate(PRED, mi[0], mi[1], mi[2], mi[3], dt);
+  }
+  /* визуальная ошибка после последней коррекции гасится за ~120мс —
+     это и есть требование "плавно, без рывка" */
+  var decay=Math.min(1, dt/0.12);
+  PRED_ERR.x-=PRED_ERR.x*decay; PRED_ERR.z-=PRED_ERR.z*decay;
+  myP.x=PRED.x+PRED_ERR.x; myP.z=PRED.z+PRED_ERR.z;
+  myP.yaw=PRED.yaw; myP.vx=PRED.vx; myP.vz=PRED.vz; myP.spd=PRED.spd; myP.stride=PRED.stride;
+  myP._back=PRED._back;
+}
 var NEDGE={A:false,B:false,X:false,Y:false,LB:false};
 var _npv={A:false,B:false,X:false,Y:false,LB:false};
 var controlled=null, chargeT=0, checkT=0, pokeT=0;
@@ -1761,6 +1794,66 @@ function addSpray(p){
     life:rnd(0.22,0.5),max:0.5});
 }
 
+/* ---------- движение человека-игрока: вынесено в отдельные функции,
+   чтобы предсказание на госте (netPredictGuest) считало ТЕМ ЖЕ кодом,
+   что и sim() на хосте — без риска расхождения между предсказанным и
+   авторитетным движением. sim() ниже вызывает их вместо старого
+   инлайн-кода; поведение не изменилось, просто вынесено. ---------- */
+function humanMoveIntent(p, hsp, inp2){
+  var ax=0,az=0,maxs=PLAYER_CFG.maxSpeed,accel=PLAYER_CFG.accel;
+  var wv=toWorld(inp2.mx,inp2.mz,[0,0]);
+  ax=wv[0]; az=wv[1];
+  var PR=hsp.press;
+  if(PR.on){
+    // Auto-approach: blend stick input with press direction when A held
+    // If stick is significantly deflected (>0.35), manual input has more weight
+    var stickMag = Math.hypot(inp2.mx, inp2.mz);
+    var blend = stickMag > 0.35 ? 0.55 : 0.0;  // 0 = full auto, 0.55 = blend
+    ax = blend === 0 ? PR.x : lerp(ax, PR.x, blend);
+    az = blend === 0 ? PR.z : lerp(az, PR.z, blend);
+    if(PR.d<PLAYER_CFG.pressRange){ maxs=PLAYER_CFG.pressMaxSpeed; accel=PLAYER_CFG.pressAccel; }
+  }
+  if(inp2.RT){ maxs=PLAYER_CFG.sprintMaxSpeed; accel=PLAYER_CFG.sprintAccel; }
+  if(puck.owner===p){ maxs*=PLAYER_CFG.puckSpeedMul; }
+  return [ax,az,maxs,accel];
+}
+function humanMoveIntegrate(st, ax, az, maxs, accel, dt){
+  st.vx+=ax*accel*dt; st.vz+=az*accel*dt;
+  var sp=Math.hypot(st.vx,st.vz);
+  if(sp>maxs){st.vx=st.vx/sp*maxs;st.vz=st.vz/sp*maxs;sp=maxs;}
+  st.vx*=PLAYER_CFG.damping; st.vz*=PLAYER_CFG.damping;
+  st.x+=st.vx*dt; st.z+=st.vz*dt;
+  // Rectangular clamp first
+  st.x=clamp(st.x,-RL+0.8,RL-0.8); st.z=clamp(st.z,-RW+0.8,RW-0.8);
+  // Corner projection: keep players inside rounded corners (CORNER=7.0)
+  var cornerSafe = CORNER - 0.8;           // 6.2 — safe radius inside corner arc
+  var cornerX = RL - cornerSafe;           // 23.8 — x threshold where corner starts
+  var cornerZ = RW - cornerSafe;           // 8.8  — z threshold where corner starts
+  var axm = Math.abs(st.x), azm = Math.abs(st.z);
+  if(axm > cornerX && azm > cornerZ){
+    var cx = (st.x > 0 ? 1 : -1) * (RL - CORNER); // ±23
+    var cz = (st.z > 0 ? 1 : -1) * (RW - CORNER); // ±8
+    var dx = st.x - cx, dz = st.z - cz;
+    var d = Math.hypot(dx, dz);
+    if(d > cornerSafe){
+      st.x = cx + dx/d * cornerSafe;
+      st.z = cz + dz/d * cornerSafe;
+    }
+  }
+  st.spd=sp;
+  /* Разворот доводим с ограничением скорости, а не ставим мгновенно:
+     мгновенная установка выглядит как телепорт, а на резкой смене
+     направления игрок успевает мгновение ехать спиной — это и включает
+     клип заднего хода. */
+  if(sp>0.5){
+    var tgt=Math.atan2(st.vz,st.vx);
+    var dy=tgt-st.yaw;
+    dy=Math.atan2(Math.sin(dy),Math.cos(dy));
+    st.yaw+=clamp(dy,-PLAYER_CFG.turnRate*dt,PLAYER_CFG.turnRate*dt);
+    st._back=(Math.cos(st.yaw)*st.vx+Math.sin(st.yaw)*st.vz) < -0.30*sp;
+  } else st._back=false;
+  st.stride+=dt*(2.5+sp*1.6);
+}
 function sim(dt){
   if(state==='menu') return;
   if(state==='over'){ stateT-=dt; return; }
@@ -1997,20 +2090,8 @@ function sim(dt){
     var hsp = HS[p.team], humanP = (p===hsp.ctrl) && (p.team===HUMAN || (NET.on && NET.role==='host'));
     if(humanP && state==='play'){
       var inp2 = (p.team===HUMAN)?IN:NIN;
-      var wv=toWorld(inp2.mx,inp2.mz,[0,0]);
-      ax=wv[0]; az=wv[1];
-      var PR=hsp.press;
-      if(PR.on){
-        // Auto-approach: blend stick input with press direction when A held
-        // If stick is significantly deflected (>0.35), manual input has more weight
-        var stickMag = Math.hypot(inp2.mx, inp2.mz);
-        var blend = stickMag > 0.35 ? 0.55 : 0.0;  // 0 = full auto, 0.55 = blend
-        ax = blend === 0 ? PR.x : lerp(ax, PR.x, blend);
-        az = blend === 0 ? PR.z : lerp(az, PR.z, blend);
-        if(PR.d<PLAYER_CFG.pressRange){ maxs=PLAYER_CFG.pressMaxSpeed; accel=PLAYER_CFG.pressAccel; }
-      }
-      if(inp2.RT){ maxs=PLAYER_CFG.sprintMaxSpeed; accel=PLAYER_CFG.sprintAccel; }
-      if(puck.owner===p){ maxs*=PLAYER_CFG.puckSpeedMul; }
+      var mi=humanMoveIntent(p, hsp, inp2);
+      ax=mi[0]; az=mi[1]; maxs=mi[2]; accel=mi[3];
     } else {
       var tx,tz;
       var carrier = puck.owner;
@@ -2194,41 +2275,8 @@ function sim(dt){
         }
       }
     }
-    p.vx+=ax*accel*dt; p.vz+=az*accel*dt;
-    var sp=Math.hypot(p.vx,p.vz);
-    if(sp>maxs){p.vx=p.vx/sp*maxs;p.vz=p.vz/sp*maxs;sp=maxs;}
-    p.vx*=PLAYER_CFG.damping; p.vz*=PLAYER_CFG.damping;
-    p.x+=p.vx*dt; p.z+=p.vz*dt;
-    // Rectangular clamp first
-    p.x=clamp(p.x,-RL+0.8,RL-0.8); p.z=clamp(p.z,-RW+0.8,RW-0.8);
-    // Corner projection: keep players inside rounded corners (CORNER=7.0)
-    var cornerSafe = CORNER - 0.8;           // 6.2 — safe radius inside corner arc
-    var cornerX = RL - cornerSafe;           // 23.8 — x threshold where corner starts
-    var cornerZ = RW - cornerSafe;           // 8.8  — z threshold where corner starts
-    var ax = Math.abs(p.x), az = Math.abs(p.z);
-    if(ax > cornerX && az > cornerZ){
-      var cx = (p.x > 0 ? 1 : -1) * (RL - CORNER); // ±23
-      var cz = (p.z > 0 ? 1 : -1) * (RW - CORNER); // ±8
-      var dx = p.x - cx, dz = p.z - cz;
-      var d = Math.hypot(dx, dz);
-      if(d > cornerSafe){
-        p.x = cx + dx/d * cornerSafe;
-        p.z = cz + dz/d * cornerSafe;
-      }
-    }
-    p.spd=sp;
-    /* Разворот доводим с ограничением скорости, а не ставим мгновенно:
-       мгновенная установка выглядит как телепорт, а на резкой смене
-       направления игрок успевает мгновение ехать спиной — это и включает
-       клип заднего хода. */
-    if(sp>0.5){
-      var tgt=Math.atan2(p.vz,p.vx);
-      var dy=tgt-p.yaw;
-      dy=Math.atan2(Math.sin(dy),Math.cos(dy));
-      p.yaw+=clamp(dy,-PLAYER_CFG.turnRate*dt,PLAYER_CFG.turnRate*dt);
-      p._back=(Math.cos(p.yaw)*p.vx+Math.sin(p.yaw)*p.vz) < -0.30*sp;
-    } else p._back=false;
-    p.stride+=dt*(2.5+sp*1.6);
+    humanMoveIntegrate(p, ax, az, maxs, accel, dt);
+    var sp=p.spd;
     if(sp>5.6&&Math.random()<0.32*QC().spray) addSpray(p);
     if(GLOK && QC().marks && sp>2.2 && state==='play'){
       var px0=p._mx, pz0=p._mz;
@@ -4260,6 +4308,11 @@ function netRecvSnap(m){
   NET.a=NET.b; NET.at=NET.bt;
   NET.b=m.d;   NET.bt=performance.now();
   if(!NET.a){ NET.a=m.d; NET.at=NET.bt-60; }
+  var replayFrom=Math.max(NET.at, NET.bt-300); /* client-side prediction:
+    снэпшот, скорее всего, ещё не учитывает ввод, отправленный после
+    ПРЕДЫДУЩЕГО снэпшота — от этой отметки и доигрываем накопленное (см.
+    конец функции). Потолок 300мс — если предыдущий снэпшот пришёл давно
+    (потерян пакет и т.п.), не переигрываем всё подряд без ограничения. */
   var d=m.d;
   score[0]=d[3]; score[1]=d[4]; clock=d[5];
   var ns=STN[d[6]]||'play';
@@ -4290,6 +4343,37 @@ function netRecvSnap(m){
   goalieCtl  = HS[HUMAN].goalieCtl;
   document.getElementById('s1').textContent=score[0];
   document.getElementById('s2').textContent=score[1];
+
+  /* client-side prediction: коррекция предсказанного движения СВОЕГО
+     игрока по свежему авторитетному снэпшоту. Индекс своего игрока уже
+     известен из d[7]/d[8] (HS[0]/HS[1].ctrl) — не нужно искать заново. */
+  var myIdx=(HUMAN===0)?d[7]:d[8];
+  if(myIdx>=0 && players[myIdx]){
+    var mo=20+myIdx*6;
+    if(mo+5<d.length){
+      var authX=d[mo], authZ=d[mo+1], authYaw=d[mo+2], authSpd=d[mo+5];
+      if(!PRED || PRED.p!==players[myIdx]) predResetTo(players[myIdx]);
+      /* визуальная ошибка = насколько предсказание разошлось с правдой;
+         копится (не перезаписывается), чтобы вторая коррекция не рвала
+         ещё не догашенную первую — и потом плавно гасится в netPredictGuest */
+      PRED_ERR.x+=PRED.x-authX;
+      PRED_ERR.z+=PRED.z-authZ;
+      PRED.x=authX; PRED.z=authZ; PRED.yaw=authYaw; PRED.spd=authSpd;
+      PRED.vx=Math.cos(authYaw)*authSpd; PRED.vz=Math.sin(authYaw)*authSpd;
+      /* доигрываем свой ввод, отправленный после предыдущего снэпшота —
+         этот снэпшот его ещё не мог учесть */
+      var prevT=replayFrom;
+      for(var ri=0; ri<PRED_LOG.length; ri++){
+        var e=PRED_LOG[ri];
+        if(e.t<=replayFrom) continue;
+        var edt=Math.min(0.05,(e.t-prevT)/1000); prevT=e.t;
+        if(edt<=0) continue;
+        var mi2=humanMoveIntent(players[myIdx], HS[HUMAN], e);
+        humanMoveIntegrate(PRED, mi2[0], mi2[1], mi2[2], mi2[3], edt);
+      }
+      while(PRED_LOG.length && PRED_LOG[0].t<=replayFrom) PRED_LOG.shift();
+    }
+  }
 }
 function netApply(){
   if(!NET.b) return;
@@ -4323,6 +4407,11 @@ function netSendInput(){
   var b=(IN._A?1:0)|(IN._B?2:0)|(IN._X?4:0)|(IN._Y?8:0)|(IN.RT?16:0)|(IN._LB?32:0);
   netSend({t:'i',m:[r2(IN.mx),r2(IN.mz)],b:b,tc:TACTIC[HUMAN]});
   NETDBG.iSent++; /* TEMP debug — see netSnap() comment */
+  /* client-side prediction: история своего ввода для доигрывания после
+     коррекции по снэпшоту (см. PRED_LOG выше и netRecvSnap ниже) */
+  var nowT=performance.now();
+  PRED_LOG.push({t:nowT, mx:IN.mx, mz:IN.mz, RT:IN.RT});
+  while(PRED_LOG.length && PRED_LOG[0].t<nowT-2000) PRED_LOG.shift();
 }
 function netRecvInput(m){
   NIN.mx=m.m[0]; NIN.mz=m.m[1];
@@ -4413,6 +4502,9 @@ function frame(now){
 
   if(NET.on && NET.role==='guest'){
     netApply();
+    netPredictGuest(dt); /* client-side prediction: перекрывает x/z/yaw
+      СВОЕГО игрока (netApply выше уже посчитал сетевую интерполяцию для
+      всех, включая его — тут же сразу перезаписываем предсказанием) */
     camUpdate(dt);
     updateFxOnly(dt);
     NET.sendT-=dt;
