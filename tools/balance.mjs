@@ -1,14 +1,14 @@
 // AI balance report: N full matches on autopilot (team 0 = the player's team driven by the AI at "normal", team 1 = the
 // CPU opponent at --ai level), each from a different seed, fully deterministic (?frozen + __hk.step). Prints the average
 // match statistics from bus events plus a breakdown of where the shots came from.
-// usage: node tools/balance.mjs [--seeds 5] [--seed0 1] [--len 180] [--ai easy|normal|hard] [--browser chromium|webkit] [--json out.json]
+// usage: node tools/balance.mjs [--seeds 5] [--seed0 1] [--len 180] [--ai easy|normal|hard] [--side 0|1] [--browser chromium|webkit] [--json out.json]
 import { writeFileSync } from 'node:fs';
 import { startServer } from './serve.mjs';
 import { openGame, isError } from './browser.mjs';
 
 const args = process.argv.slice(2);
 const opt = (k, d) => { const i = args.indexOf('--' + k); return i >= 0 ? args[i + 1] : d; };
-const N = +opt('seeds', 5), SEED0 = +opt('seed0', 1), LEN = +opt('len', 180), AI = opt('ai', 'normal');
+const N = +opt('seeds', 5), SEED0 = +opt('seed0', 1), LEN = +opt('len', 180), AI = opt('ai', 'normal'), SIDE = +opt('side', 0);
 const port = +opt('port', 8495);
 const CHUNK = 0.5;   // s of simulation between samples (possession / zone time)
 
@@ -51,7 +51,7 @@ try {
     const errs = [];
     page.on('pageerror', (e) => errs.push(e.message));
     page.on('console', (m) => { if (m.type() === 'error') errs.push(m.text()); });
-    await page.goto(`http://127.0.0.1:${port}/index.html?autostart=${LEN}&autopilot&seed=${seed}&frozen&ai=${AI}${opt('extra','')}#q0`, { waitUntil: 'load', timeout: 120000 });
+    await page.goto(`http://127.0.0.1:${port}/index.html?autostart=${LEN}&autopilot&seed=${seed}&frozen&ai=${AI}&side=${SIDE}${opt('extra','')}#q0`, { waitUntil: 'load', timeout: 120000 });
     await page.waitForFunction('window.__hk && __hk.match().id', null, { timeout: 60000 });
     await page.evaluate(LOGGER);
     const samples = [];
@@ -67,7 +67,7 @@ try {
     await page.close();
     if (!sum) { console.log(`seed ${seed}: match did not finish`); continue; }
     const shots = analyse(log, samples);
-    runs.push({ seed, sum, shots, errs, stops: log.filter((l) => l[0] === 'stoppage').map((l) => [l[2].reason, l[2].t]) });
+    runs.push({ seed, sum, shots, errs, stops: log.filter((l) => l[0] === 'stoppage').map((l) => [l[2].reason, l[2].t]), raw: log.filter((l) => ['shot', 'pickup', 'pass', 'pass:recv', 'poke', 'hit', 'faceoff'].includes(l[0])) });
     const tm = sum.teams;
     console.log(`seed ${seed}: ${sum.score.join(':')} · shots ${tm[0].shots}:${tm[1].shots} · sog ${tm[0].sog}:${tm[1].sog} · passes ${tm[0].passesDone}/${tm[0].passes} ${tm[1].passesDone}/${tm[1].passes}` +
       (errs.length ? ` · ERRORS ${errs.length}: ${errs[0]}` : ''));
@@ -106,7 +106,7 @@ const rows = [
   ['в зоне атаки с шайбой, с', zone, (v) => v.toFixed(0), ''],
   ['с в зоне атаки на бросок', [0, 1].map((t) => (shots[t] ? zone[t] / shots[t] : zone[t])), (v) => v.toFixed(1), 'меньше'],
 ];
-console.log(`\nсредние за ${runs.length} матч(ей) по ${LEN} с · команда 0 = автопилот (normal), команда 1 = ИИ соперника (${AI})`);
+console.log(`\nсредние за ${runs.length} матч(ей) по ${LEN} с · команда ${SIDE} = автопилот (normal), команда ${1 - SIDE} = ИИ соперника (${AI})`);
 console.log('показатель'.padEnd(32) + 'кома. 0'.padStart(9) + 'кома. 1'.padStart(9) + '   цель');
 for (const [name, v, f, goal] of rows) console.log(name.padEnd(32) + f(v[0]).padStart(9) + f(v[1]).padStart(9) + '   ' + goal);
 const nErr = runs.reduce((a, r) => a + r.errs.length, 0);

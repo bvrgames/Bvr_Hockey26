@@ -328,13 +328,15 @@
      ?seed=N           предсказуемый Math.random (одинаковые решения ИИ от прогона к прогону)
      ?frozen           старт в заморозке: игра идёт только через __hk.step — полностью воспроизводимо
      ?ai=easy|hard     уровень ИИ соперника (по умолчанию normal)
+     ?side=1           в одиночной игре играть за команду 1 (проверка симметрии)
    Идея и формат прогонов взяты из INKWAVE (Jayden Davis, MIT) — см. THIRD_PARTY.md. */
 var TEST=(function(){
   var q=new URLSearchParams(location.search);
   var t={autostart:q.has('autostart'), autoLen:+q.get('autostart')||0,
          autopilot:q.has('autopilot'), seed:q.has('seed')?(+q.get('seed')||1):0,
          frozen:q.has('frozen'), skipRender:false, errors:[],
-         ai:({easy:1,normal:1,hard:1})[q.get('ai')]?q.get('ai'):'normal'};
+         ai:({easy:1,normal:1,hard:1})[q.get('ai')]?q.get('ai'):'normal',
+         side:q.get('side')==='1'?1:0};
   if(t.seed){
     /* mulberry32 */
     var a=t.seed>>>0;
@@ -1306,7 +1308,7 @@ function setPaused(v){
 }
 
 /* ---------- состояние ---------- */
-var HUMAN=0;
+var HUMAN=TEST.side;
 var players=[], puck={x:0,y:0.05,z:0,vx:0,vz:0,vy:0,owner:null,free:0};
 var score=[0,0], period=1, clock=5*60, state='menu', stateT=0;
 function mkHS(){ return {ctrl:null, charge:0, pressT:0, pressCd:0, autoT:0,
@@ -1628,6 +1630,7 @@ function bestMate(p, mode){
 }
 /* ---------- что нужно событиям: время симуляции, последний пас и бросок ---------- */
 var SIMT=0;                 /* секунды симуляции с загрузки (только у хоста / в одиночной игре) */
+var SIMF=0;                 /* номер кадра симуляции — чередует порядок обхода игроков */
 var LASTPASS=null;          /* {from, to, t} — для «пас дошёл» */
 var LASTRECV=null;          /* {from, to, t} — последний дошедший пас: для передачи при голе */
 var LASTSHOT=null;          /* {p, t} — чтобы отличить сейв после броска от простого подбора */
@@ -1778,6 +1781,8 @@ var AI_LV={
 /* соперник-компьютер получает уровень ?ai=, партнёры живого игрока — normal */
 function aiLevel(team){ return AI_LV[(!NET.on && team!==HUMAN) ? TEST.ai : 'normal']; }
 
+/* clamp, которому всё равно, в каком порядке границы (для «от своих ворот до синей» с любой стороны) */
+function clampR(v,a,b){ return a<b ? clamp(v,a,b) : clamp(v,b,a); }
 /* расстояние от точки до отрезка */
 function segDist(px,pz, ax,az, bx,bz){
   var dx=bx-ax, dz=bz-az, L2=dx*dx+dz*dz||1e-6;
@@ -2312,8 +2317,14 @@ function sim(dt){
     }
   }
 
-  /* --- игроки --- */
-  for(var k=0;k<players.length;k++){
+  /* --- игроки ---
+     Порядок обхода чередуется каждый кадр. При постоянном порядке команда 0
+     (первая в players[]) в спорный кадр всегда действовала раньше: её защитник
+     успевал выбить шайбу до броска/паса владельца из команды 1, а её владелец —
+     сыграть до того, как до него дотянутся. */
+  SIMF=(SIMF+1)|0;
+  for(var k0=0;k0<players.length;k0++){
+    var k=(SIMF&1)?players.length-1-k0:k0;
     var p=players[k];
     if(p.boxed) continue;
     if(p.goalie){
@@ -2327,7 +2338,9 @@ function sim(dt){
         p.vz=lerp(p.vz, gw[1]*gsp, Math.min(1,dt*9));
         p.x+=p.vx*dt; p.z+=p.vz*dt;
         var gx0=p.dir*GOAL_X;
-        p.x=clamp(p.x, gx0-p.dir*3.4, gx0-p.dir*(-0.35));
+        /* (была ещё строка clamp(p.x, gx0-dir*3.4, gx0+dir*0.35): при dir<0 границы
+           шли в обратном порядке, и вратарь команды 0 под управлением прыгал
+           между двумя точками. Правильные границы — строкой ниже) */
         p.x=p.dir>0?clamp(p.x,GOAL_X-3.4,GOAL_X+0.35):clamp(p.x,-GOAL_X-0.35,-GOAL_X+3.4);
         p.z=clamp(p.z,-3.0,3.0);
         p.spd=Math.hypot(p.vx,p.vz);
@@ -2378,7 +2391,9 @@ function sim(dt){
         tx = gx - p.dir*3.0;
         tz = clamp(p.z*0.55, -8, 8);
         /* защитник с шайбой не идёт на ворота сам — доводит до синей и ищет пас */
-        if(IS_D) tx = clamp(tx, -RL+3, blueOpp - p.dir*0.5);
+        /* с направлением: у команды 1 (атака в −x) прежний clamp(tx,-RL+3,blueOpp-dir*0.5)
+           не останавливал защитника у синей, а гнал его к чужим воротам */
+        if(IS_D) tx = (p.dir>0) ? Math.min(tx, blueOpp-0.5) : Math.max(tx, blueOpp+0.5);
         if(near && nd<3.6){
           var ex=p.x-near.x, ez=p.z-near.z, eL=Math.hypot(ex,ez)||1;
           tx += ex/eL*2.6; tz += ez/eL*5.2;
@@ -2429,7 +2444,10 @@ function sim(dt){
             }
           } else {
             /* шайба выше — отходим к своей синей и держим ширину */
-            tx = clamp(px - p.dir*6.5, ownGx + p.dir*2.5, blueOwn);
+            /* границы по порядку для обеих сторон: у команды 1 прежний
+               clamp(v, ownGx+dir*2.5, blueOwn) шёл с min > max, и её защитники
+               всегда стояли у своих ворот вместо синей линии */
+            tx = clampR(px - p.dir*6.5, ownGx + p.dir*2.5, blueOwn);
             tz = clamp(LANE*0.8 + pz*0.25, -RW+2.5, RW-2.5);
           }
           if(TC===1) tx = clamp(tx + p.dir*3.2, -RL+3, RL-3);   /* атака: выше */
@@ -4865,7 +4883,7 @@ function paintOpts(){
     el.addEventListener('click',function(){
       ONLINE=o[1];
       document.getElementById('netbox').style.display=ONLINE?'flex':'none';
-      if(!ONLINE){ NET.on=false; HUMAN=0; try{if(NET.ws)NET.ws.close();}catch(e){} }
+      if(!ONLINE){ NET.on=false; HUMAN=TEST.side; try{if(NET.ws)NET.ws.close();}catch(e){} }
       paintOpts(); netStatus(NET.status||'не подключено');
     });
     ph.appendChild(el);
@@ -5038,7 +5056,7 @@ document.getElementById('go').addEventListener('click',function(){
   if(ONLINE){
     if(!NET.on || NET.role!=='host' || !NET.peer) return;
     netSend({t:'cfg',a:selMy,b:selOp,min:MODES[selMode].m,id:mid});
-  } else { NET.on=false; HUMAN=0; }
+  } else { NET.on=false; HUMAN=TEST.side; }
   TEAM[0]=CLUBS[selMy]; TEAM[1]=CLUBS[selOp];
   buildTeamMeshes();
   MATCH_MIN=MODES[selMode].m;
