@@ -58,12 +58,25 @@ try {
   await host.page.waitForFunction('__hk.st()==="over"', null, { timeout: 10000 }).catch(() => fails.push('host match did not end'));
   await guest.page.waitForFunction('__hk.match().summary', null, { timeout: 5000 }).catch(() => fails.push('guest got no match:summary'));
   const H2 = await snap(host), G2 = await snap(guest);
+  const shown = (g) => g.page.evaluate('getComputedStyle(document.getElementById("overscr")).display!=="none"');
+  if (!(await shown(host))) fails.push('host: result screen not shown');
+  if (!(await shown(guest))) fails.push('guest: result screen not shown after match:end');
+  if (await guest.page.evaluate('getComputedStyle(document.getElementById("oAgain")).display!=="none"')) fails.push('guest: rematch button visible (only the host starts a rematch)');
+  const guestText = await guest.page.evaluate('document.getElementById("oScore").textContent');
+  if (G2.m.summary && guestText.replace(/\s/g, '') !== G2.m.summary.score.join(':')) fails.push(`guest result shows "${guestText}", summary ${G2.m.summary.score}`);
   if (!H2.m.summary) fails.push('host has no match:summary');
   if (H2.m.summary && G2.m.summary) {
     if (H2.m.summary.score.join() !== G2.m.summary.score.join()) fails.push(`summary score host ${H2.m.summary.score} guest ${G2.m.summary.score}`);
     if (G2.m.summary.team !== 1) fails.push('guest summary is not from team 1 perspective');
     console.log(`  summary: host ${H2.m.summary.role} ${H2.m.summary.result} · guest ${G2.m.summary.role} ${G2.m.summary.result} · score ${H2.m.summary.score.join(':')}`);
   }
+  // rematch from the host: the guest gets a new cfg, its result screen closes, both share the new match id
+  await host.page.evaluate('document.getElementById("oAgain").click()');
+  await guest.page.waitForFunction('getComputedStyle(document.getElementById("overscr")).display==="none"', null, { timeout: 5000 })
+    .catch(() => fails.push('guest: result screen still open after the host started a rematch'));
+  const H3 = await snap(host), G3 = await snap(guest);
+  if (H3.m.id === H2.m.id || G3.m.id !== H3.m.id) fails.push(`rematch ids: host ${H2.m.id} → ${H3.m.id}, guest ${G3.m.id}`);
+  else console.log(`  rematch: ok, new match id on both sides`);
   for (const [who, g] of sides) {
     for (const e of g.logs.filter(isError)) fails.push(`${who} [${e.type}] ${e.text}`);
     for (const e of await g.page.evaluate('__hk.errors()')) fails.push(`${who} [window] ${e}`);

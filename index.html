@@ -1565,6 +1565,8 @@ function showResult(){
   setText('oWinner', w);
   setText('oAgain', T('again'));
   setText('oMenu', T('mainMenu'));
+  /* гость реванш не начинает — его запускает хост */
+  var ag=document.getElementById('oAgain'); if(ag) ag.style.display=(NET.on && NET.role==='guest')?'none':'';
   var e=document.getElementById('overscr'); if(e) e.style.display='flex';
 }
 function hideResult(){
@@ -4368,6 +4370,7 @@ function netConnect(url, code, cb){
       reset(true);
       document.getElementById('start').style.display='none';
       state='face'; stateT=0.9;
+      hideResult(); setPaused(false);
       NET.evSeen=0;
       audioInit();
       matchStart(m.id||newMatchId(), m.a, m.b);
@@ -4900,6 +4903,13 @@ document.getElementById('go').addEventListener('click',function(){
 
 /* ---------- кнопки паузы и результата ---------- */
 function startMatchAgain(){
+  /* в сетевом матче реванш начинает только хост, и гостю уходит новый cfg */
+  if(NET.on && NET.role==='guest') return;
+  var mid=newMatchId();
+  if(NET.on && NET.role==='host'){
+    if(!NET.peer) return;
+    netSend({t:'cfg',a:MATCH.clubs[0],b:MATCH.clubs[1],min:MATCH_MIN,id:mid});
+  }
   hideResult(); setPaused(false);
   score[0]=0; score[1]=0; clock=MATCH_MIN*60; pen.length=0;
   document.getElementById('s1').textContent='0';
@@ -4909,7 +4919,7 @@ function startMatchAgain(){
   TACTIC[0]=0; TACTIC[1]=0; gkRush[0]=false; gkRush[1]=false;
   paintTacBadge();
   state='face'; stateT=0.9;
-  matchStart(newMatchId(), MATCH.clubs[0], MATCH.clubs[1]);
+  matchStart(mid, MATCH.clubs[0], MATCH.clubs[1]);
 }
 document.getElementById('pResume').addEventListener('click',function(){ setPaused(false); });
 document.getElementById('pMenu').addEventListener('click',backToMenu);
@@ -4941,7 +4951,9 @@ EV.on('goal',    function(e){ SFX.whistle(); SFX.horn(); buzz([60,50,120],'goal'
                               flash(T('goal'), e.t===HUMAN?T('ourGoal'):T('theirGoal'), 1.4); });
 EV.on('stoppage',function(e){ SFX.whistle(); buzz(25); flash(T(e.reason),'',1.3); });
 EV.on('match:start', function(){ SFX.whistle(); });
-EV.on('match:end',   function(){
+EV.on('match:end',   function(e){
+  /* у хоста экран результата показывает симуляция, у гостя — пришедшее событие */
+  if(e.remote){ state='over'; showResult(); }
   SFX.whistle();
   setTimeout(function(){ SFX.whistle(); },220);
   setTimeout(function(){ SFX.horn(); buzz([80,60,80,60,140],'goal'); },520);
