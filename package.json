@@ -1,0 +1,19 @@
+{
+  "name": "bvr-hockey-26",
+  "private": true,
+  "version": "0.0.0",
+  "description": "BVR Hockey 26 — arcade 5v5 hockey for Telegram Mini Apps (single-file WebGL2).",
+  "type": "module",
+  "scripts": {
+    "serve": "node tools/serve.mjs 8490",
+    "check": "node tools/check.mjs",
+    "smoke": "node tools/smoke.mjs",
+    "smoke:chromium": "node tools/smoke.mjs --browser chromium",
+    "smoke:webkit": "node tools/smoke.mjs --browser webkit",
+    "play": "node tools/play.mjs",
+    "browsers": "playwright install chromium webkit"
+  },
+  "devDependencies": {
+    "playwright": "^1.55.0"
+  }
+}

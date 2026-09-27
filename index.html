@@ -321,6 +321,28 @@
    собственный софт-рендер, геймпад + экранные кнопки
    ============================================================ */
 
+/* ---------- режим автотестов (tools/smoke.mjs, tools/play.mjs) ----------
+   Всё включается только параметрами ссылки, обычной игре не мешает:
+     ?autostart[=сек]  сразу начать матч (без меню); число — длина матча в секундах
+     ?autopilot        команду игрока ведёт тот же ИИ, что и соперника
+     ?seed=N           предсказуемый Math.random (одинаковые решения ИИ от прогона к прогону)
+   Идея и формат прогонов взяты из INKWAVE (Jayden Davis, MIT) — см. THIRD_PARTY.md. */
+var TEST=(function(){
+  var q=new URLSearchParams(location.search);
+  var t={autostart:q.has('autostart'), autoLen:+q.get('autostart')||0,
+         autopilot:q.has('autopilot'), seed:q.has('seed')?(+q.get('seed')||1):0,
+         frozen:false, errors:[], n:{shot:0, pass:0}};
+  if(t.seed){
+    /* mulberry32 */
+    var a=t.seed>>>0;
+    Math.random=function(){ a|=0; a=(a+0x6d2b79f5)|0; var r=Math.imul(a^(a>>>15),1|a);
+      r=(r+Math.imul(r^(r>>>7),61|r))^r; return ((r^(r>>>14))>>>0)/4294967296; };
+  }
+  window.addEventListener('error',function(e){ t.errors.push(String(e.message||e)); });
+  window.addEventListener('unhandledrejection',function(e){ t.errors.push('rejection: '+String(e.reason)); });
+  return t;
+})();
+
 var cv=document.getElementById('c');
 var stickCv=document.getElementById('stick'), sctx=stickCv.getContext('2d');
 var W=900,H=460,DPR=1,PORTRAIT=false;
@@ -443,7 +465,9 @@ function requestFullscreenOnLandscape(){
   if(window.screen && window.screen.orientation && window.screen.orientation.type){
     if(window.screen.orientation.type.startsWith('landscape')){
       try{ if(TG && TG.requestFullscreen) TG.requestFullscreen(); }catch(e){}
-      try{ document.documentElement.requestFullscreen(); }catch(e){}
+      /* requestFullscreen возвращает промис: вне жеста пользователя он
+         отклоняется, и без catch это необработанная ошибка страницы */
+      try{ var fp=document.documentElement.requestFullscreen(); if(fp && fp.catch) fp.catch(function(){}); }catch(e){}
     }
   }
 }
@@ -1557,6 +1581,7 @@ function bestMate(p, mode){
 var _passN=0;
 var _edgeA=0;   /* сколько раз кнопка A дала фронт — для тестов ввода */
 function doPass(p,power,lift,lead){
+  TEST.n.pass++;
   playAction(p,'pass_forehand',0.45);
   var m=bestMate(p, lead?'thru':'norm');
   var tx,tz;
@@ -1574,6 +1599,7 @@ function doPass(p,power,lift,lead){
   SFX.stick();
 }
 function doShot(p,power){
+  TEST.n.shot++;
   var gz=0, gx=p.dir*GOAL_X;
   var d=aimDir(p);
   var aimZ = clamp(d.z*0.9, -0.85, 0.85);
@@ -1646,6 +1672,9 @@ function switchPlayer(team){
 }
 
 /* ---------- управление живым игроком ---------- */
+/* автопилот только в одиночной игре: в сетевом матче за игроком живой человек */
+function autoPilot(){ return TEST.autopilot && !NET.on; }
+var NOIN={mx:0,mz:0}, NOEDGE={};
 function humanTick(team, inp, edge, dt){
   var hs=HS[team];
   if(!hs.ctrl || hs.ctrl.boxed){ var f0=onIce(team)[0]; if(f0) hs.ctrl=f0; }
@@ -1954,7 +1983,8 @@ function sim(dt){
   if(HS[1].pokeT>0) HS[1].pokeT-=dt;
 
   /* --- игроки-люди (локальный и сетевой) --- */
-  humanTick(HUMAN, IN, EDGE, dt);
+  /* автопилот: ввод игрока не читаем, его команду ведёт ИИ ниже */
+  humanTick(HUMAN, autoPilot()?NOIN:IN, autoPilot()?NOEDGE:EDGE, dt);
   if(NET.on && NET.role==='host') humanTick(1-HUMAN, NIN, NEDGE, dt);
   controlled = HS[HUMAN].ctrl;
   chargeT    = HS[HUMAN].charge;
@@ -2061,7 +2091,7 @@ function sim(dt){
     if(p.boxed) continue;
     if(p.goalie){
       var hsg=HS[p.team];
-      var gHuman = (p===hsg.ctrl && hsg.goalieCtl) && (p.team===HUMAN || (NET.on && NET.role==='host'));
+      var gHuman = (p===hsg.ctrl && hsg.goalieCtl) && ((p.team===HUMAN && !autoPilot()) || (NET.on && NET.role==='host' && p.team!==HUMAN));
       if(gHuman && state==='play'){
         var gin=(p.team===HUMAN)?IN:NIN;
         var gw=toWorld(gin.mx,gin.mz,[0,0]);
@@ -2087,7 +2117,7 @@ function sim(dt){
       continue;
     }
     var ax=0,az=0,maxs=PLAYER_CFG.maxSpeed,accel=PLAYER_CFG.accel;
-    var hsp = HS[p.team], humanP = (p===hsp.ctrl) && (p.team===HUMAN || (NET.on && NET.role==='host'));
+    var hsp = HS[p.team], humanP = (p===hsp.ctrl) && ((p.team===HUMAN && !autoPilot()) || (NET.on && NET.role==='host' && p.team!==HUMAN));
     if(humanP && state==='play'){
       var inp2 = (p.team===HUMAN)?IN:NIN;
       var mi=humanMoveIntent(p, hsp, inp2);
@@ -4450,8 +4480,16 @@ var last=performance.now(), fT=0,fN=0, lastOwnsUI=null, lastLangUI=null;
 var powEl=document.getElementById('power'), powI=powEl.firstElementChild;
 var legEl=document.getElementById('legend');
 
+/* Кадр разделён на две части: frame — привязка к requestAnimationFrame и
+   реальному времени, frameStep(dt) — всё остальное. Так отладка может
+   заморозить игру (__hk.freeze) и прогнать ровно N кадров по 1/60 с
+   (__hk.step) синхронно, без ожидания браузера. */
 function frame(now){
   var dt=Math.min(0.042,(now-last)/1000); last=now;
+  if(!TEST.frozen) frameStep(dt);
+  requestAnimationFrame(frame);
+}
+function frameStep(dt){
   fT+=dt; fN++;
   if(fT>0.5){
     var f=Math.round(fN/fT);
@@ -4496,7 +4534,6 @@ function frame(now){
 
   if(PAUSED || state==='over'){
     render();
-    requestAnimationFrame(frame);
     return;
   }
 
@@ -4561,8 +4598,6 @@ function frame(now){
 
   /* скорость активного игрока */
   if(controlled) document.getElementById('spd').textContent=Math.round(controlled.spd*3.6)+' '+T('kmh');
-
-  requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
 
@@ -4803,6 +4838,13 @@ document.getElementById('bPause').addEventListener('click',function(e){
   e.preventDefault(); togglePause();
 });
 paintLang();
+
+/* ?autostart: матч сразу, без меню (только одиночная игра) */
+if(TEST.autostart && !ONLINE){
+  document.getElementById('go').click();
+  if(TEST.autoLen>0){ MATCH_MIN=TEST.autoLen/60; clock=TEST.autoLen; }
+}
+
 window.__hk={hs:function(){return HS;},net:function(){return NET;},setCam:function(i){CAM_TYPE=i;},st:function(){return state;},p:players,puck:puck,ctrl:function(){return controlled;},score:score,
   faces:function(){return buf.length;},cam:cam,
   press:function(k){IN[k]=true;setTimeout(function(){IN[k]=false;},60);},
@@ -4871,7 +4913,20 @@ window.__hk={hs:function(){return HS;},net:function(){return NET;},setCam:functi
   passes:function(){return _passN;},
   edgeA:function(){return _edgeA;},
   /* объединённое состояние действий: экран + клавиатура + геймпад */
-  act:function(){return {A:!!IN._A,B:!!IN._B,X:!!IN._X,Y:!!IN._Y,RT:!!IN.RT};}};
+  act:function(){return {A:!!IN._A,B:!!IN._B,X:!!IN._X,Y:!!IN._Y,RT:!!IN.RT};},
+  /* ---- автотесты ---- */
+  test:TEST,
+  errors:function(){return TEST.errors.slice();},
+  freeze:function(){TEST.frozen=true;},
+  unfreeze:function(){TEST.frozen=false; last=performance.now();},
+  /* прогнать ровно round(ms/16.7) кадров по 1/60 с синхронно (работает и без freeze) */
+  step:function(ms){ var n=Math.max(1,Math.round((ms===undefined?1000/60:ms)/(1000/60)));
+    for(var i=0;i<n;i++) frameStep(1/60); return n; },
+  /* сводка для smoke-теста */
+  snap:function(){ return {state:state, clock:+clock.toFixed(2), score:score.slice(), q:QLEVEL,
+    fps:Math.round(fpsAvg), gl:GLOK, initErr:INITERR, skin:!!HD.ok,
+    puck:{x:+puck.x.toFixed(2), z:+puck.z.toFixed(2), v:+Math.hypot(puck.vx,puck.vz).toFixed(2)},
+    shots:TEST.n.shot, passes:TEST.n.pass, autopilot:autoPilot(), errors:TEST.errors.length}; }};
 })();
 </script>
 

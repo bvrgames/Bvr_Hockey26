@@ -1,0 +1,10 @@
+# локальные заметки и сырые данные — не в репозиторий
+PHASE1_CHANGELOG.md
+PHASE1_PLAN.md
+PROJECT_ANALYSIS.md
+assets/hd_data_raw.txt
+test_skate_slide.js
+
+# инструменты тестирования
+node_modules/
+shots/
