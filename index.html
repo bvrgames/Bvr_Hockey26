@@ -331,7 +331,7 @@ var TEST=(function(){
   var q=new URLSearchParams(location.search);
   var t={autostart:q.has('autostart'), autoLen:+q.get('autostart')||0,
          autopilot:q.has('autopilot'), seed:q.has('seed')?(+q.get('seed')||1):0,
-         frozen:false, errors:[], n:{shot:0, pass:0}};
+         frozen:false, errors:[]};
   if(t.seed){
     /* mulberry32 */
     var a=t.seed>>>0;
@@ -341,6 +341,34 @@ var TEST=(function(){
   window.addEventListener('error',function(e){ t.errors.push(String(e.message||e)); });
   window.addEventListener('unhandledrejection',function(e){ t.errors.push('rejection: '+String(e.reason)); });
   return t;
+})();
+
+/* ---------- шина игровых событий (docs/EVENTS.md) ----------
+   Симуляция только сообщает, что случилось: EV.emit('shot', {...}).
+   Звук, вибро, камера, надписи и статистика подписываются: EV.on('shot', fn).
+   Payload — только простые данные (номера игроков в players[], команды, числа),
+   без ссылок на объекты: те же события уходят гостю по сети, а итог матча —
+   на сервер. Схема из INKWAVE (Jayden Davis, MIT) — см. THIRD_PARTY.md. */
+var EV=(function(){
+  var L={}, seq=0;
+  /* события, которые хост пересылает гостю (остальные каждая сторона шлёт себе сама) */
+  var NETWORKED={faceoff:1, pass:1, 'pass:recv':1, shot:1, save:1, post:1, goal:1,
+                 hit:1, penalty:1, stoppage:1, poke:1, pickup:1, 'match:end':1};
+  return {
+    NETWORKED:NETWORKED,
+    on:function(name,fn){ (L[name]||(L[name]=[])).push(fn);
+      return function(){ var a=L[name], i=a?a.indexOf(fn):-1; if(i>=0) a.splice(i,1); }; },
+    emit:function(name,e){
+      e=e||{};
+      /* номер нужен только пересылаемым событиям: по нему гость отбрасывает повторы */
+      if(NETWORKED[name] && e.seq===undefined) e.seq=++seq;
+      var a=L[name], b=L['*'];
+      /* ошибка в одном подписчике не должна ронять симуляцию и остальных */
+      if(a) for(var i=0;i<a.length;i++){ try{ a[i](e,name); }catch(x){ TEST.errors.push('EV '+name+': '+x); console.error('EV '+name, x); } }
+      if(b) for(var j=0;j<b.length;j++){ try{ b[j](e,name); }catch(x){ TEST.errors.push('EV *: '+x); console.error('EV *', x); } }
+      return e;
+    }
+  };
 })();
 
 var cv=document.getElementById('c');
@@ -1491,16 +1519,18 @@ function placeFaceoff(dx,dz){
      и на каждом атакующем вбрасывании зажигался отложенный офсайд. */
   prevZone=[zoneOf(dx,attackDir(0)), zoneOf(dx,attackDir(1))];
 }
-function whistle(title,dx,dz){
+/* reason: 'offside' | 'icing' | 'penalty' — по нему подписчик выбирает надпись */
+function whistle(reason,dx,dz,team){
   state='face'; stateT=1.4;
-  SFX.whistle(); buzz(25); flash(title,'',1.3);
+  EV.emit('stoppage',{reason:reason, t:team===undefined?-1:team});
   placeFaceoff(dx,dz);
 }
-function penalize(p,title){
+function penalize(p,reason){
   p.boxed=1; pen.push({team:p.team,t:120,p:p});
   if(HS[p.team].ctrl===p){ var alt=onIce(p.team)[0]; if(alt) HS[p.team].ctrl=alt; }
+  EV.emit('penalty',{p:pIdx(p), t:p.team, reason:reason});
   var dir=attackDir(p.team);
-  whistle(title, -dir*20, puck.z>0?7:-7);
+  whistle('penalty', -dir*20, puck.z>0?7:-7, p.team);
 }
 function penaltyLeft(t){
   var m=0;
@@ -1542,6 +1572,7 @@ function hideResult(){
 }
 function backToMenu(){
   hideResult(); setPaused(false);
+  if(state!=='menu' && state!=='over') EV.emit('match:abort',{score:score.slice()});
   state='menu';
   var st=document.getElementById('start');
   st.style.display='block'; st.scrollTop=0;
@@ -1578,10 +1609,39 @@ function bestMate(p, mode){
   }
   return best;
 }
+/* ---------- что нужно событиям: время симуляции, последний пас и бросок ---------- */
+var SIMT=0;                 /* секунды симуляции с загрузки (только у хоста / в одиночной игре) */
+var LASTPASS=null;          /* {from, to, t} — для «пас дошёл» */
+var LASTRECV=null;          /* {from, to, t} — последний дошедший пас: для передачи при голе */
+var LASTSHOT=null;          /* {p, t} — чтобы отличить сейв после броска от простого подбора */
+function pIdx(p){ return p ? players.indexOf(p) : -1; }
+/* подбор шайбы полевым: владение, перехват или дошедший пас */
+function pickupEvent(p, prev){
+  var e={p:pIdx(p), t:p.team, prev:pIdx(prev)};
+  if(LASTPASS && LASTPASS.from!==p && SIMT-LASTPASS.t<3){
+    if(LASTPASS.from.team===p.team){
+      LASTRECV={from:LASTPASS.from, to:p, t:SIMT};
+      EV.emit('pass:recv',{p:pIdx(p), t:p.team, from:pIdx(LASTPASS.from), aimed:LASTPASS.to===p?1:0, lead:LASTPASS.lead?1:0});
+    } else e.intercept=1;
+  }
+  LASTPASS=null;
+  if(prev && prev.team!==p.team) e.turnover=1;
+  EV.emit('pickup',e);
+}
+/* гол: автор — последний коснувшийся из забившей команды, передача — кто отдал ему пас */
+function goalEvent(team, z){
+  var sc = (lastTouch && lastTouch.team===team) ? lastTouch : null;
+  var as = (sc && LASTRECV && LASTRECV.to===sc && LASTRECV.from.team===team && SIMT-LASTRECV.t<10) ? LASTRECV.from : null;
+  /* гол всегда считается броском: добивание или рикошет без doShot помечаем noShot */
+  var shot = !!(LASTSHOT && LASTSHOT.p.team===team && SIMT-LASTSHOT.t<3);
+  EV.emit('goal',{t:team, p:pIdx(sc), assist:pIdx(as), own:(lastTouch && lastTouch.team!==team)?1:0, noShot:shot?0:1,
+                  z:r2(z), score:score.slice(), clock:Math.round(clock)});
+  LASTSHOT=null; LASTPASS=null; LASTRECV=null;
+}
+
 var _passN=0;
 var _edgeA=0;   /* сколько раз кнопка A дала фронт — для тестов ввода */
 function doPass(p,power,lift,lead){
-  TEST.n.pass++;
   playAction(p,'pass_forehand',0.45);
   var m=bestMate(p, lead?'thru':'norm');
   var tx,tz;
@@ -1596,10 +1656,10 @@ function doPass(p,power,lift,lead){
   puck.vy = lift?3.2:0;
   puck.owner=null; puck.free=0.16; lastTouch=p;
   if(p.x*p.dir < -1) { icing.armed=true; icing.team=p.team; } else icing.armed=false;
-  SFX.stick();
+  LASTPASS={from:p, to:m||null, t:SIMT, lead:!!lead};
+  EV.emit('pass',{p:pIdx(p), t:p.team, to:m?pIdx(m):-1, x:r2(p.x), z:r2(p.z), power:r2(power), lift:!!lift, lead:!!lead});
 }
 function doShot(p,power){
-  TEST.n.shot++;
   var gz=0, gx=p.dir*GOAL_X;
   var d=aimDir(p);
   var aimZ = clamp(d.z*0.9, -0.85, 0.85);
@@ -1614,7 +1674,8 @@ function doShot(p,power){
   if(p.x*p.dir < -1) { icing.armed=true; icing.team=p.team; } else icing.armed=false;
   /* сильный бросок отыгрывается размашистым клипом, обычный — кистевым */
   playAction(p, power>0.55?'slap_shot':'wrist_shot', power>0.55?0.9:0.65);
-  SFX.shot(power); buzz(18,'soft');
+  LASTSHOT={p:p, t:SIMT};
+  EV.emit('shot',{p:pIdx(p), t:p.team, x:r2(p.x), z:r2(p.z), power:r2(power), dist:r2(Math.hypot(gx-p.x,p.z))});
 }
 function doPoke(p){
   playAction(p,'poke_check',0.45);
@@ -1626,7 +1687,7 @@ function doPoke(p){
       puck.owner=null; puck.free=0.35;
       var a=Math.atan2(puck.z-p.z,puck.x-p.x);
       puck.vx=Math.cos(a)*7; puck.vz=Math.sin(a)*7;
-      SFX.stick(); if(p.team===HUMAN) buzz(14,'soft');
+      EV.emit('poke',{p:pIdx(p), t:p.team, from:pIdx(o), btn:1});
     }
   } else if(!puck.owner){
     if(Math.hypot(puck.x-p.x,puck.z-p.z)<PLAYER_CFG.pokeRangeLoose){ puck.owner=p; puck.vx=0;puck.vz=0; }
@@ -1649,13 +1710,9 @@ function doCheck(p){
       o.vx=Math.cos(a)*9; o.vz=Math.sin(a)*9;
       if(puck.owner===o){ puck.owner=null; puck.free=0.4;
         puck.vx=Math.cos(a)*5.5; puck.vz=Math.sin(a)*5.5; }
-      SFX.hit(); buzz(45,'hard'); cam.shake=Math.min(16,cam.shake+11);
-      if(wasCarrier || (lastTouch===o && Math.hypot(puck.x-o.x,puck.z-o.z)<2.2)){
-        flash(T('hit'),'',0.8);
-      } else {
-        flash(T('penalty'),T('penaltySub'),1.6);
-        penalize(p,T('penalty'));
-      }
+      var clean = wasCarrier || (lastTouch===o && Math.hypot(puck.x-o.x,puck.z-o.z)<2.2);
+      EV.emit('hit',{p:pIdx(p), t:p.team, v:pIdx(o), vt:o.team, clean:clean, x:r2(o.x), z:r2(o.z), hard:1});
+      if(!clean) penalize(p,'interference');
       return;
     }
   }
@@ -1885,12 +1942,13 @@ function humanMoveIntegrate(st, ax, az, maxs, accel, dt){
 }
 function sim(dt){
   if(state==='menu') return;
+  SIMT+=dt;
   if(state==='over'){ stateT-=dt; return; }
   if(state==='goal'||state==='face'){
     stateT-=dt;
     if(stateT<=0){
       if(state==='goal'){ state='face'; stateT=1.0; placeFaceoff(0,0); }
-      else state='play';
+      else { state='play'; EV.emit('faceoff',{x:r2(puck.x), z:r2(puck.z)}); }
     }
     if(state==='goal') return;
   }
@@ -1900,9 +1958,7 @@ function sim(dt){
     clock=0;
     state='over'; stateT=99;
     puck.vx=0; puck.vz=0; puck.vy=0; puck.owner=null;
-    SFX.whistle();
-    setTimeout(function(){ SFX.whistle(); },220);
-    setTimeout(function(){ SFX.horn(); buzz([80,60,80,60,140],'goal'); },520);
+    EV.emit('match:end',{score:score.slice(), reason:'time'});
     showResult();
     return;
   }
@@ -1962,7 +2018,7 @@ function sim(dt){
           if(viol){
             offWarn=-1;
             for(q2=0;q2<arr2.length;q2++) arr2[q2].os=0;
-            whistle(T('offside'), dir2*4.5, puck.z>0?7:-7);
+            whistle('offside', dir2*4.5, puck.z>0?7:-7, t2);
             break;
           }
         }
@@ -1973,7 +2029,7 @@ function sim(dt){
       var dI=attackDir(icing.team);
       if(puck.x*dI > GOAL_X+0.2){
         icing.armed=false;
-        whistle(T('icing'), -dI*20, puck.z>0?7:-7);
+        whistle('icing', -dI*20, puck.z>0?7:-7, icing.team);
       }
     }
   }
@@ -2025,7 +2081,7 @@ function sim(dt){
         if(hitPost||hitBar){
           /* ставим шайбу в точку удара, иначе она уже «внутри» и отскок мимо */
           puck.x=pgx-pdir*0.05; puck.z=cz0; puck.y=Math.max(0.05,cy0);
-          SFX.post(); buzz(30,'hard'); cam.shake=Math.min(12,cam.shake+7);
+          EV.emit('post',{t:lastTouch?lastTouch.team:-1, p:lastTouch?pIdx(lastTouch):-1, bar:!!hitBar});
           if(hitBar){ puck.vy=-Math.abs(puck.vy)-1.5; puck.vx=-puck.vx*0.55; }
           else { puck.vz=-puck.vz*0.9 + (cz0>0?3.5:-3.5); puck.vx=-puck.vx*0.45; }
           puck.free=0.25;
@@ -2044,17 +2100,20 @@ function sim(dt){
         var saveDist=gk?Math.hypot(gk.x-(gx-dir*0.1),gk.z-czg):99;
         if(saveDist<1.15 && Math.random()<0.55){
           puck.x=gx-dir*0.35; puck.z=czg; puck.y=Math.max(0.05,cyg);
-          puck.vx=-puck.vx*0.5; puck.vz+=rnd(-4,4); SFX.save(); flash(T('save'),'',0.7);
+          puck.vx=-puck.vx*0.5; puck.vz+=rnd(-4,4);
+          /* шайба шла в створ — это бросок в створ, даже если её не бросали, а отдавали пасом */
+          var lineShot = !!(LASTSHOT && LASTSHOT.p.team!==gk.team && SIMT-LASTSHOT.t<2.5);
+          LASTSHOT=null;             /* один бросок — не больше одного сейва */
+          EV.emit('save',{g:pIdx(gk), t:gk.team, by:lastTouch?pIdx(lastTouch):-1, kind:'line', shot:1, noShot:lineShot?0:1});
         } else {
           var scorer = (g===0)?0:1;
           score[scorer]++;
+          goalEvent(scorer, czg);
           document.getElementById('s1').textContent=score[0];
           document.getElementById('s2').textContent=score[1];
           clearOnePenalty(scorer===0?1:0);
           puck.vx=0;puck.vz=0;puck.vy=0;
           state='goal'; stateT=1.5;
-          SFX.whistle(); SFX.horn(); buzz([60,50,120],'goal');
-          flash(T('goal'), scorer===HUMAN?T('ourGoal'):T('theirGoal'), 1.4);
           return;
         }
       }
@@ -2068,7 +2127,11 @@ function sim(dt){
           /* вратарь: подбор по телу (как раньше) */
           var d=Math.hypot(p.x-puck.x,p.z-puck.z);
           if(d<PLAYER_CFG.pickupReachGoalie && puck.y<PLAYER_CFG.pickupHeight && Math.hypot(puck.vx,puck.vz)<PLAYER_CFG.pickupMaxSpeed){
-            puck.vx=rnd(-6,6); puck.vz=rnd(-6,6); puck.free=0.3; icing.armed=false; SFX.save();
+            /* сейвом считаем, только если это чужой бросок, а не любая шайба у вратаря */
+            var fromShot = !!(LASTSHOT && LASTSHOT.p.team!==p.team && SIMT-LASTSHOT.t<2.5);
+            puck.vx=rnd(-6,6); puck.vz=rnd(-6,6); puck.free=0.3; icing.armed=false;
+            if(fromShot) LASTSHOT=null;
+            EV.emit('save',{g:pIdx(p), t:p.team, by:lastTouch?pIdx(lastTouch):-1, kind:'body', shot:fromShot?1:0});
             break;
           }
         } else {
@@ -2077,7 +2140,9 @@ function sim(dt){
           var stickZ=p.z+Math.sin(p.yaw)*0.95;
           var d=Math.hypot(stickX-puck.x,stickZ-puck.z);
           if(d<PLAYER_CFG.pickupReachSkater && puck.y<PLAYER_CFG.pickupHeight && Math.hypot(puck.vx,puck.vz)<PLAYER_CFG.pickupMaxSpeed){
-            puck.owner=p; lastTouch=p; icing.armed=false; SFX.stick();
+            var prevT=lastTouch;
+            puck.owner=p; lastTouch=p; icing.armed=false;
+            pickupEvent(p, prevT);
             break;
           }
         }
@@ -2291,7 +2356,8 @@ function sim(dt){
             puck.owner=null; puck.free=0.3;
             var aa=Math.atan2(puck.z-p.z,puck.x-p.x);
             puck.vx=Math.cos(aa)*6.5; puck.vz=Math.sin(aa)*6.5;
-            lastTouch=p; SFX.stick();
+            lastTouch=p;
+            EV.emit('poke',{p:pIdx(p), t:p.team, from:pIdx(carrier)});
           }
         } else if(dc<1.9 && p.spd>5.0 && Math.random()<0.30){
           p._cd=1.2;
@@ -2300,8 +2366,8 @@ function sim(dt){
           carrier.vx=Math.cos(ab)*8; carrier.vz=Math.sin(ab)*8;
           puck.owner=null; puck.free=0.4;
           puck.vx=Math.cos(ab)*5; puck.vz=Math.sin(ab)*5;
-          lastTouch=p; SFX.hit(); cam.shake=Math.min(14,cam.shake+8);
-          if(carrier.team===HUMAN) buzz(45,'hard');
+          lastTouch=p;
+          EV.emit('hit',{p:pIdx(p), t:p.team, v:pIdx(carrier), vt:carrier.team, clean:true, x:r2(carrier.x), z:r2(carrier.z), hard:0});
         }
       }
     }
@@ -4302,7 +4368,9 @@ function netConnect(url, code, cb){
       reset(true);
       document.getElementById('start').style.display='none';
       state='face'; stateT=0.9;
-      audioInit(); SFX.whistle();
+      NET.evSeen=0;
+      audioInit();
+      matchStart(m.id||newMatchId(), m.a, m.b);
     }
     else if(m.t==='s' && NET.role==='guest'){ NETDBG.sRecv++; netRecvSnap(m); }
     else if(m.t==='i' && NET.role==='host'){ NETDBG.iRecv++; netRecvInput(m); }
@@ -4327,7 +4395,9 @@ function netSnap(){
     var p=players[i];
     d.push(r2(p.x),r2(p.z),r2(p.yaw),(p.down>0?1:0)+(p.boxed?2:0),r1(p.stride),r1(p.spd||0));
   }
-  netSend({t:'s',d:d,k:Date.now()});
+  var o={t:'s',d:d,k:Date.now()};
+  var ev=netTakeEvents(); if(ev) o.e=ev;
+  netSend(o);
   NETDBG.sSent++; /* TEMP debug: see AskUserQuestion/report — remove after diagnosing guest lag */
 }
 function r2(v){ return Math.round(v*100)/100; }
@@ -4346,8 +4416,9 @@ function netRecvSnap(m){
   var d=m.d;
   score[0]=d[3]; score[1]=d[4]; clock=d[5];
   var ns=STN[d[6]]||'play';
-  if(ns!==state){ if(ns==='goal'){ SFX.whistle(); SFX.horn(); } if(ns==='face') SFX.whistle(); }
   state=ns;
+  /* события хоста (гол, бросок, свисток...) — звук, надписи и статистика у гостя */
+  if(m.e) netRecvEvents(m.e);
   HS[0].ctrl=players[d[7]]||HS[0].ctrl;
   HS[1].ctrl=players[d[8]]||HS[1].ctrl;
   gkRush[0]=!!d[9]; gkRush[1]=!!d[10];
@@ -4490,6 +4561,7 @@ function frame(now){
   requestAnimationFrame(frame);
 }
 function frameStep(dt){
+  if(state!=='menu' && state!=='over' && !PAUSED) MATCH.played+=dt;
   fT+=dt; fN++;
   if(fT>0.5){
     var f=Math.round(fN/fT);
@@ -4533,6 +4605,12 @@ function frameStep(dt){
   }
 
   if(PAUSED || state==='over'){
+    /* хост продолжает слать снимки и после конца матча: иначе гость не видит
+       финальное состояние и событие match:end (пауза в сети невозможна) */
+    if(NET.on && NET.role==='host' && state==='over'){
+      NET.sendT-=dt;
+      if(NET.sendT<=0){ NET.sendT=1/6; netSnap(); }
+    }
     render();
     return;
   }
@@ -4798,9 +4876,10 @@ document.getElementById('bJoin').addEventListener('click',function(){
 
 document.getElementById('go').addEventListener('click',function(){
   audioInit();
+  var mid=newMatchId();
   if(ONLINE){
     if(!NET.on || NET.role!=='host' || !NET.peer) return;
-    netSend({t:'cfg',a:selMy,b:selOp,min:MODES[selMode].m});
+    netSend({t:'cfg',a:selMy,b:selOp,min:MODES[selMode].m,id:mid});
   } else { NET.on=false; HUMAN=0; }
   TEAM[0]=CLUBS[selMy]; TEAM[1]=CLUBS[selOp];
   buildTeamMeshes();
@@ -4815,7 +4894,8 @@ document.getElementById('go').addEventListener('click',function(){
   setPaused(false); hideResult();
   paintTacBadge();
   document.getElementById('start').style.display='none';
-  state='face'; stateT=0.9; SFX.whistle();
+  state='face'; stateT=0.9;
+  matchStart(mid, selMy, selOp);
 });
 
 /* ---------- кнопки паузы и результата ---------- */
@@ -4828,7 +4908,8 @@ function startMatchAgain(){
   if(GLOK) marksClear();
   TACTIC[0]=0; TACTIC[1]=0; gkRush[0]=false; gkRush[1]=false;
   paintTacBadge();
-  state='face'; stateT=0.9; SFX.whistle();
+  state='face'; stateT=0.9;
+  matchStart(newMatchId(), MATCH.clubs[0], MATCH.clubs[1]);
 }
 document.getElementById('pResume').addEventListener('click',function(){ setPaused(false); });
 document.getElementById('pMenu').addEventListener('click',backToMenu);
@@ -4838,6 +4919,170 @@ document.getElementById('bPause').addEventListener('click',function(e){
   e.preventDefault(); togglePause();
 });
 paintLang();
+
+/* ============================================================
+   ПОДПИСЧИКИ СОБЫТИЙ: звук, вибро, камера, надписи
+   (раньше эти вызовы сидели прямо в симуляции; поведение то же)
+   ============================================================ */
+EV.on('shot',    function(e){ SFX.shot(e.power); buzz(18,'soft'); });
+EV.on('pass',    function(){ SFX.stick(); });
+EV.on('pickup',  function(){ SFX.stick(); });
+EV.on('poke',    function(e){ SFX.stick(); if(e.btn && e.t===HUMAN) buzz(14,'soft'); });
+EV.on('hit',     function(e){
+  SFX.hit();
+  if(e.hard){ buzz(45,'hard'); cam.shake=Math.min(16,cam.shake+11); }
+  else { cam.shake=Math.min(14,cam.shake+8); if(e.vt===HUMAN) buzz(45,'hard'); }
+  if(!e.clean) flash(T('penalty'),T('penaltySub'),1.6);
+  else if(e.hard) flash(T('hit'),'',0.8);
+});
+EV.on('post',    function(){ SFX.post(); buzz(30,'hard'); cam.shake=Math.min(12,cam.shake+7); });
+EV.on('save',    function(e){ SFX.save(); if(e.kind==='line') flash(T('save'),'',0.7); });
+EV.on('goal',    function(e){ SFX.whistle(); SFX.horn(); buzz([60,50,120],'goal');
+                              flash(T('goal'), e.t===HUMAN?T('ourGoal'):T('theirGoal'), 1.4); });
+EV.on('stoppage',function(e){ SFX.whistle(); buzz(25); flash(T(e.reason),'',1.3); });
+EV.on('match:start', function(){ SFX.whistle(); });
+EV.on('match:end',   function(){
+  SFX.whistle();
+  setTimeout(function(){ SFX.whistle(); },220);
+  setTimeout(function(){ SFX.horn(); buzz([80,60,80,60,140],'goal'); },520);
+});
+
+/* ============================================================
+   СТАТИСТИКА МАТЧА — считается только по событиям, одинаково у хоста
+   и у гостя (гость получает те же события по сети)
+   ============================================================ */
+function statsTeam(){ return {shots:0, sog:0, goals:0, passes:0, passesDone:0, saves:0,
+                              hits:0, penalties:0, pokes:0, takeaways:0, posts:0}; }
+var STATS=null;
+function statsReset(){ STATS={teams:[statsTeam(),statsTeam()], players:{}, faceoffs:0, events:0}; }
+statsReset();
+function statsP(i){
+  if(i<0 || !players[i]) return null;
+  return STATS.players[i] || (STATS.players[i]={t:players[i].team, num:players[i].num, g:0, a:0, s:0, h:0});
+}
+EV.on('*', function(e,n){
+  if(!STATS) return;
+  STATS.events++;
+  var T0=STATS.teams, tm=(e.t===0||e.t===1)?T0[e.t]:null, ps;
+  switch(n){
+    case 'faceoff': STATS.faceoffs++; break;
+    case 'shot': tm.shots++; if((ps=statsP(e.p))) ps.s++; break;
+    case 'pass': tm.passes++; break;
+    case 'pass:recv': tm.passesDone++; break;
+    case 'save': if(e.shot){ tm.saves++; T0[1-e.t].sog++;
+                   if(e.noShot){ T0[1-e.t].shots++; if((ps=statsP(e.by))) ps.s++; } } break;
+    case 'goal': tm.goals++; if(!e.own){ tm.sog++; if(e.noShot){ tm.shots++; if((ps=statsP(e.p))) ps.s++; } }
+                 if((ps=statsP(e.p))) ps.g++; if((ps=statsP(e.assist))) ps.a++; break;
+    case 'hit': tm.hits++; if((ps=statsP(e.p))) ps.h++; break;
+    case 'penalty': tm.penalties++; break;
+    case 'poke': tm.pokes++; break;
+    case 'pickup': if(e.turnover) tm.takeaways++; break;
+    case 'post': if(tm) tm.posts++; break;
+  }
+});
+/* короткая сводка для __hk.snap() и smoke: [команда 0, команда 1] */
+function statsBrief(){
+  var o={}, a=STATS.teams[0], b=STATS.teams[1];
+  for(var k in a) o[k]=[a[k],b[k]];
+  o.faceoffs=STATS.faceoffs; o.events=STATS.events;
+  return o;
+}
+
+/* ============================================================
+   ИТОГ МАТЧА (match:summary) → Worker + D1 (docs/EVENTS.md)
+   Клиент монеты не начисляет: он только сообщает, как прошёл матч.
+   Worker проверяет подпись Telegram initData и лимиты и сам решает,
+   сколько начислить.
+   ============================================================ */
+var CLIENT_VER=1;
+/* адрес Worker'а статистики; пусто — итоги никуда не отправляются.
+   Бэкенд делается отдельной фазой. */
+var STATS_API='';
+var MATCH={id:'', mode:'ai', role:'solo', team:0, clubs:[0,0], len:0, played:0,
+           startedAt:0, summary:null, sent:false};
+function newMatchId(){
+  var b=new Uint8Array(12), s='';
+  try{ crypto.getRandomValues(b); }catch(e){ for(var i=0;i<12;i++) b[i]=(Math.random()*256)|0; }
+  for(var j=0;j<12;j++) s+=(b[j]<16?'0':'')+b[j].toString(16);
+  return s;
+}
+function matchStart(id, clubA, clubB){
+  MATCH.id=id; MATCH.mode=NET.on?'online':'ai'; MATCH.role=NET.on?NET.role:'solo';
+  MATCH.team=HUMAN; MATCH.clubs=[clubA,clubB]; MATCH.len=Math.round(clock);
+  MATCH.played=0; MATCH.startedAt=Date.now(); MATCH.summary=null; MATCH.sent=false;
+  statsReset();
+  EV.emit('match:start',{id:id, mode:MATCH.mode, role:MATCH.role, team:HUMAN, len:MATCH.len, clubs:MATCH.clubs.slice()});
+}
+function buildSummary(sc){
+  var me=MATCH.team, res = sc[me]>sc[1-me]?'win':(sc[me]<sc[1-me]?'loss':'draw');
+  var pl=[];
+  for(var k in STATS.players){ var q=STATS.players[k]; pl.push({t:q.t, num:q.num, g:q.g, a:q.a, s:q.s, h:q.h}); }
+  return {v:1, id:MATCH.id, client:CLIENT_VER, mode:MATCH.mode, role:MATCH.role, team:me,
+          clubs:MATCH.clubs.slice(), len:MATCH.len, played:Math.round(MATCH.played),
+          startedAt:MATCH.startedAt, endedAt:Date.now(), score:sc.slice(), result:res,
+          teams:[STATS.teams[0], STATS.teams[1]], players:pl, faceoffs:STATS.faceoffs, events:STATS.events,
+          test:!!(TEST.autostart||TEST.autopilot||TEST.seed)};
+}
+EV.on('match:end', function(e){
+  if(MATCH.summary) return;          /* гость может получить match:end повторно */
+  MATCH.summary=buildSummary(e.score||score);
+  EV.emit('match:summary', MATCH.summary);
+});
+
+/* отправка итога: очередь в localStorage переживает обрыв сети и закрытие
+   приложения; отправляем при конце матча и при старте следующего */
+var SUMQ_KEY='bvr_pending_matches';
+function sumQueue(){ try{ return JSON.parse(localStorage.getItem(SUMQ_KEY))||[]; }catch(e){ return []; } }
+function sumQueueSave(q){ try{ localStorage.setItem(SUMQ_KEY, JSON.stringify(q.slice(-10))); }catch(e){} }
+function sumFlush(){
+  if(!STATS_API || !TG || !TG.initData) return;
+  var q=sumQueue();
+  q.forEach(function(sum){
+    fetch(STATS_API+'/v1/match', {method:'POST', keepalive:true,
+      headers:{'Content-Type':'application/json', 'X-Telegram-Init-Data':TG.initData},
+      body:JSON.stringify(sum)})
+    .then(function(r){
+      /* 2xx — принят, 4xx — отвергнут навсегда (подпись, лимиты, дубль): в обоих случаях убираем */
+      if(r.status<500) sumQueueSave(sumQueue().filter(function(x){ return x.id!==sum.id; }));
+      return r.ok ? r.json() : null;
+    })
+    .then(function(res){ if(res) EV.emit('match:reward', res); })
+    .catch(function(){ /* сеть: попробуем в следующий раз */ });
+  });
+}
+EV.on('match:summary', function(sum){
+  if(sum.test || !STATS_API) return;  /* автотесты и сборки без бэкенда ничего не шлют */
+  var q=sumQueue(); if(!q.some(function(x){ return x.id===sum.id; })) q.push(sum);
+  sumQueueSave(q); MATCH.sent=true; sumFlush();
+});
+EV.on('match:start', function(){ sumFlush(); });
+
+/* ============================================================
+   СОБЫТИЯ ПО СЕТИ: хост кладёт события в снимки, гость их проигрывает.
+   Каждое событие едет в трёх снимках подряд (на случай потери), гость
+   отбрасывает повторы по номеру seq.
+   ============================================================ */
+var NET_EVQ=[];
+EV.on('*', function(e,n){
+  if(!NET.on || NET.role!=='host' || !EV.NETWORKED[n] || e.remote) return;
+  NET_EVQ.push({n:n, e:e, left:3});
+  if(NET_EVQ.length>60) NET_EVQ.splice(0, NET_EVQ.length-60);
+});
+function netTakeEvents(){
+  if(!NET_EVQ.length) return null;
+  var out=[];
+  for(var i=0;i<NET_EVQ.length;i++){ var q=NET_EVQ[i]; out.push([q.n, q.e]); q.left--; }
+  NET_EVQ=NET_EVQ.filter(function(q){ return q.left>0; });
+  return out;
+}
+function netRecvEvents(list){
+  for(var i=0;i<list.length;i++){
+    var n=list[i][0], e=list[i][1];
+    if(!e || !(e.seq>(NET.evSeen||0))) continue;
+    NET.evSeen=e.seq; e.remote=1;
+    EV.emit(n, e);
+  }
+}
 
 /* ?autostart: матч сразу, без меню (только одиночная игра) */
 if(TEST.autostart && !ONLINE){
@@ -4926,7 +5171,9 @@ window.__hk={hs:function(){return HS;},net:function(){return NET;},setCam:functi
   snap:function(){ return {state:state, clock:+clock.toFixed(2), score:score.slice(), q:QLEVEL,
     fps:Math.round(fpsAvg), gl:GLOK, initErr:INITERR, skin:!!HD.ok,
     puck:{x:+puck.x.toFixed(2), z:+puck.z.toFixed(2), v:+Math.hypot(puck.vx,puck.vz).toFixed(2)},
-    shots:TEST.n.shot, passes:TEST.n.pass, autopilot:autoPilot(), errors:TEST.errors.length}; }};
+    shots:STATS.teams[0].shots+STATS.teams[1].shots, passes:STATS.teams[0].passes+STATS.teams[1].passes,
+    stats:statsBrief(), autopilot:autoPilot(), errors:TEST.errors.length}; },
+  stats:function(){return STATS;}, match:function(){return MATCH;}, ev:EV}; 
 })();
 </script>
 

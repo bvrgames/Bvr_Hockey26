@@ -11,9 +11,12 @@
     "smoke:chromium": "node tools/smoke.mjs --browser chromium",
     "smoke:webkit": "node tools/smoke.mjs --browser webkit",
     "play": "node tools/play.mjs",
-    "browsers": "playwright install chromium webkit"
+    "browsers": "playwright install chromium webkit",
+    "smoke:online": "node tools/smoke-online.mjs",
+    "relay": "node tools/relay-mock.mjs 8787"
   },
   "devDependencies": {
-    "playwright": "^1.55.0"
+    "playwright": "^1.55.0",
+    "ws": "^8.22.0"
   }
 }

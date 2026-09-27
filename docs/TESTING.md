@@ -7,6 +7,8 @@
 | `npm run check` | синтаксис: inline-скрипты `index.html` компилируются V8 (без запуска) + `node --check` для `tools/`, `server/` |
 | `npm run smoke` | Chromium и WebKit headless: матч на автопилоте, 12 с в реальном времени + 10 с через freeze/step. Падает при любой ошибке консоли, исключении страницы, упавшем запросе, если матч не начался, часы/шайба стоят или ИИ не сделал ни паса, ни броска. Скриншоты: `shots/smoke-<браузер>.png` |
 | `npm run smoke:chromium` / `smoke:webkit` | то же в одном браузере |
+| `npm run smoke:online [-- --browser webkit]` | хост и гость в двух браузерах через `tools/relay-mock.mjs` (тот же протокол, что `server/worker.js`), оба «играют» случайным вводом 15 с. Падает, если события не дошли до гостя, статистика гостя ≠ хоста, нет `match:summary` у обоих или есть ошибки |
+| `npm run relay` | локальный релей на :8787 — открыть два окна `?room=TEST&srv=http://127.0.0.1:8787` |
 | `npm run play -- "<query>" '<steps json>' [--browser webkit]` | скриптовый прогон для отладки (шаги описаны в шапке `tools/play.mjs`) |
 | `npm run serve` | локальный сервер на :8490 без кеша |
 
@@ -30,3 +32,4 @@ WebKit — ближайшая локальная замена iPhone/Telegram, �
 - `__hk.freeze()` / `__hk.unfreeze()` — остановить/продолжить игровой цикл
 - `__hk.step(ms)` — синхронно прогнать `round(ms/16.7)` кадров по 1/60 с (работает и в заморозке)
 - `__hk.errors()` — ошибки, пойманные `window.onerror` / `unhandledrejection`
+- `__hk.stats()` / `__hk.match()` — статистика матча и мета + `summary` (docs/EVENTS.md); `__hk.ev` — шина событий

@@ -65,6 +65,15 @@ for (const name of browsers) {
     await page.waitForTimeout(500);
     const end = await page.evaluate('__hk.snap()');
     if (end.shots + end.passes === 0) fails.push('no shot or pass in the whole run — AI is stuck?');
+    // match statistics are built only from bus events, so they must agree with the game state
+    const st = end.stats || {};
+    const sum = (k) => (st[k] ? st[k][0] + st[k][1] : 0);
+    if (!st.events) fails.push('no game events on the bus');
+    if (!(st.faceoffs >= 1)) fails.push('no faceoff event');
+    if (st.goals && (st.goals[0] !== end.score[0] || st.goals[1] !== end.score[1])) fails.push(`goal events ${st.goals} ≠ score ${end.score}`);
+    if (sum('passesDone') > sum('passes')) fails.push('more completed passes than passes');
+    for (const t of [0, 1]) if (st.sog && (st.sog[t] > st.shots[t] || st.sog[t] < st.saves[1 - t]))
+      fails.push(`team ${t}: shots ${st.shots[t]} / on goal ${st.sog[t]} / opponent saves ${st.saves[1 - t]} don't add up`);
 
     const errs = g.logs.filter(isError);
     for (const e of errs) fails.push(`[${e.type}] ${e.text}`);
@@ -74,6 +83,9 @@ for (const name of browsers) {
     console.log(`\n[${name}] ${((Date.now() - t0) / 1000).toFixed(1)} s · state ${end.state} · clock ${end.clock} · score ${end.score.join(':')}` +
       ` · q${end.q} · min fps ${minFps === 999 ? '?' : minFps} · puck path ${path.toFixed(0)} m · shots ${end.shots} · passes ${end.passes}` +
       ` · step ${frames} frames = ${dClock.toFixed(2)} s`);
+    const row = (k) => `${k} ${st[k] ? st[k].join(':') : '-'}`;
+    console.log('  stats: ' + ['shots', 'sog', 'goals', 'passes', 'passesDone', 'saves', 'hits', 'pokes', 'takeaways', 'penalties', 'posts'].map(row).join(' · ') +
+      ` · faceoffs ${st.faceoffs} · events ${st.events}`);
     if (warns.length) console.log(`  warnings (${warns.length}):\n    ` + warns.join('\n    '));
   } catch (e) {
     fails.push('runner error: ' + e.message.split('\n')[0]);
