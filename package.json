@@ -13,7 +13,8 @@
     "play": "node tools/play.mjs",
     "browsers": "playwright install chromium webkit",
     "smoke:online": "node tools/smoke-online.mjs",
-    "relay": "node tools/relay-mock.mjs 8787"
+    "relay": "node tools/relay-mock.mjs 8787",
+    "balance": "node tools/balance.mjs"
   },
   "devDependencies": {
     "playwright": "^1.55.0",
