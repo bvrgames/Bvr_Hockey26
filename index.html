@@ -270,6 +270,9 @@
         <div class="tsel"><b id="lbPlay">ИГРА</b><div class="chips" id="playT"></div></div>
         <div class="tsel"><b id="lbQual">ГРАФИКА</b><div class="chips" id="qT"></div></div>
       </div>
+      <div class="teams" id="diffbox">
+        <div class="tsel"><b id="lbDiff">СЛОЖНОСТЬ</b><div class="chips" id="diffT"></div></div>
+      </div>
       <div class="teams" id="netbox" style="display:none">
         <div class="tsel">
           <b id="lbNet">ОНЛАЙН-МАТЧ</b>
@@ -335,7 +338,7 @@ var TEST=(function(){
   var t={autostart:q.has('autostart'), autoLen:+q.get('autostart')||0,
          autopilot:q.has('autopilot'), seed:q.has('seed')?(+q.get('seed')||1):0,
          frozen:q.has('frozen'), skipRender:false, errors:[],
-         ai:({easy:1,normal:1,hard:1})[q.get('ai')]?q.get('ai'):'normal',
+         ai:({easy:1,normal:1,hard:1})[q.get('ai')]?q.get('ai'):null,
          side:q.get('side')==='1'?1:0};
   if(t.seed){
     /* mulberry32 */
@@ -570,6 +573,7 @@ ru:{
   hY2:'держать — вратарь идёт на соперника', hD2:'крестовина — тактика команды',
   hint:'телефон: левая половина экрана — джойстик · клавиатура: стрелки — движение, S пас/смена, D бросок/силовой, A навес/силовой, W в разрез/вратарь, Q ускорение, E прессинг · тактика: 1 2 3',
   dev:'разработчик · @bvr_games_bot — ещё игры',
+  diff:'СЛОЖНОСТЬ', dEasy:'ЛЁГКИЙ', dNormal:'НОРМАЛЬНЫЙ', dHard:'СЛОЖНЫЙ',
   start:'НАЧАТЬ МАТЧ', quick:'БЫСТРЫЙ', normal:'ОБЫЧНЫЙ', min1:'1 мин', min3:'3 мин',
   solo:'ОДИН', duo:'С ДРУГОМ', auto:'АВТО', qlow:'НИЗК.', qmid:'СРЕД.', qhigh:'ВЫС.',
   byFps:'по FPS', maxFps:'макс. FPS', balance:'баланс', pretty:'красиво',
@@ -602,6 +606,7 @@ en:{
   hY2:'hold — goalie charges the carrier', hD2:'D-pad — team tactics',
   hint:'phone: left half of the screen is the stick · keyboard: arrows move, S pass/switch, D shot/check, A lob/check, W through pass/goalie, Q sprint, E press · tactics: 1 2 3',
   dev:'made by @bvr_games_bot — more games',
+  diff:'DIFFICULTY', dEasy:'EASY', dNormal:'NORMAL', dHard:'HARD',
   start:'START MATCH', quick:'QUICK', normal:'NORMAL', min1:'1 min', min3:'3 min',
   solo:'SOLO', duo:'WITH A FRIEND', auto:'AUTO', qlow:'LOW', qmid:'MED.', qhigh:'HIGH',
   byFps:'by FPS', maxFps:'max FPS', balance:'balanced', pretty:'best look',
@@ -635,6 +640,7 @@ id:{
   hY2:'tahan — kiper maju ke pembawa keping', hD2:'D-pad — taktik tim',
   hint:'HP: separuh kiri layar adalah stik · keyboard: panah untuk gerak, S umpan/ganti, D tembak/body check, A lob/body check, W umpan terobosan/kiper, Q sprint, E press · taktik: 1 2 3',
   dev:'dibuat oleh @bvr_games_bot — game lainnya',
+  diff:'KESULITAN', dEasy:'MUDAH', dNormal:'NORMAL', dHard:'SULIT',
   start:'MULAI PERTANDINGAN', quick:'CEPAT', normal:'NORMAL', min1:'1 mnt', min3:'3 mnt',
   solo:'SENDIRI', duo:'DENGAN TEMAN', auto:'OTOMATIS', qlow:'RENDAH', qmid:'SEDANG', qhigh:'TINGGI',
   byFps:'ikut FPS', maxFps:'FPS maks.', balance:'seimbang', pretty:'terbaik',
@@ -736,6 +742,38 @@ var SFX={
 /* Отдача. iOS Safari игнорирует navigator.vibrate, поэтому внутри Telegram
    идём через HapticFeedback — он работает и на айфоне, и на андроиде. */
 var TG=(window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp : null;
+
+/* ---------- настройки игрока в Telegram CloudStorage ----------
+   CloudStorage (Bot API 6.9+) синхронизирует настройку между устройствами.
+   Копия в localStorage — чтобы значение было сразу при запуске (облако
+   отвечает асинхронно) и работало вне Telegram / в старых клиентах. */
+function cloudOK(){ try{ return !!(TG && TG.CloudStorage && TG.isVersionAtLeast && TG.isVersionAtLeast('6.9')); }catch(e){ return false; } }
+function prefGet(key, cb){
+  var local=null; try{ local=localStorage.getItem('bvr_'+key); }catch(e){}
+  cb(local, 'local');
+  if(cloudOK()){
+    try{ TG.CloudStorage.getItem(key, function(err, v){ if(!err && v) cb(v, 'cloud'); }); }catch(e){}
+  }
+}
+function prefSet(key, v){
+  try{ localStorage.setItem('bvr_'+key, v); }catch(e){}
+  if(cloudOK()){ try{ TG.CloudStorage.setItem(key, v, function(){}); }catch(e){} }
+}
+
+/* сложность ИИ соперника: easy | normal | hard. ?ai= для тестов перекрывает и не сохраняется */
+var DIFFS={easy:1, normal:1, hard:1};
+var DIFF=TEST.ai||'normal';
+function setDifficulty(d, noSave){
+  if(!DIFFS[d]) return;
+  DIFF=d;
+  if(!noSave && !TEST.ai) prefSet('difficulty', d);
+}
+if(!TEST.ai) prefGet('difficulty', function(v, src){
+  if(!DIFFS[v] || v===DIFF) return;
+  DIFF=v;
+  /* локальное значение приходит сразу, до построения меню; облачное — позже, тогда перерисовываем */
+  if(src==='cloud') paintOpts();
+});
 var HAPTIC = !!(TG && TG.HapticFeedback && TG.HapticFeedback.impactOccurred);
 var VIBRO=true;
 try{ var _sv=localStorage.getItem('bvr_vibro'); if(_sv==='0') VIBRO=false; }catch(e){}
@@ -1773,13 +1811,14 @@ var AI_LV={
      бросков в дальний от вратаря угол; lane — штраф за перекрытую линию;
      react — задержка реакции на давление, с; meet — адресат идёт к шайбе;
      crash — нападающие идут на добивание; smart — выбор паса по открытости;
-     passErr — промах паса, м */
-  easy:   {think:[0.6,1.2],  thr:0.50, aimErr:0.50, read:0.2, lane:0.15, react:[0.35,0.60], meet:0.5, crash:0, smart:0, passErr:3.2},
+     passErr — промах паса, м; pow — сила броска (по умолчанию 1);
+     noise — ошибка в оценке момента: слабый ИИ бьёт из плохих позиций и пропускает хорошие */
+  easy:   {think:[0.8,1.5],  thr:0.45, aimErr:0.90, read:0.0, lane:0.15, react:[0.45,0.80], meet:0.4, crash:0, smart:0, passErr:3.6, pow:0.70, noise:0.25},
   normal: {think:[0.35,0.8], thr:0.38, aimErr:0.36, read:0.6, lane:0.25, react:[0.20,0.40], meet:0.9, crash:1, smart:1, passErr:2.8},
   hard:   {think:[0.25,0.55],thr:0.40, aimErr:0.22, read:1.0, lane:0.30, react:[0.10,0.25], meet:1.0, crash:1, smart:1, passErr:1.7}
 };
 /* соперник-компьютер получает уровень ?ai=, партнёры живого игрока — normal */
-function aiLevel(team){ return AI_LV[(!NET.on && team!==HUMAN) ? TEST.ai : 'normal']; }
+function aiLevel(team){ return AI_LV[(!NET.on && team!==HUMAN) ? DIFF : 'normal']; }
 
 /* clamp, которому всё равно, в каком порядке границы (для «от своих ворот до синей» с любой стороны) */
 function clampR(v,a,b){ return a<b ? clamp(v,a,b) : clamp(v,b,a); }
@@ -1825,6 +1864,11 @@ function aiCarrier(p, dt, foes){
   if(offWarn===p.team){ p._t=0.05; return; }     /* сначала снять офсайд */
   var pd=nearestFoe(p), pressed=pd<2.3;
   var q=shotQuality(p.team, p.x, p.z, LV);
+  if(LV.noise){
+    /* оценка «плавает» медленно (раз в решение), а не дрожит каждый кадр */
+    if(p._qn===undefined || p._t<=0) p._qn=(Math.random()*2-1)*LV.noise;
+    q+=p._qn;
+  }
   /* свежий пас в разрез — бросок в одно касание */
   var fresh = p._recvT!==undefined && SIMT-p._recvT<0.9;
   if(fresh && p._recvLead) q+=0.28;
@@ -1864,7 +1908,7 @@ function aiShoot(p, LV, q){
   /* угол: дальний от вратаря (читает вратаря) или случайный */
   var side = (Math.random()<LV.read && gk) ? (gk.z>0?-1:1) : (Math.random()<0.5?-1:1);
   var z = side*0.68 + (Math.random()*2-1)*LV.aimErr;
-  var power = clamp(0.45+q*0.5+rnd(-0.1,0.15), 0.35, 1);
+  var power = clamp((0.45+q*0.5+rnd(-0.1,0.15))*(LV.pow||1), 0.25, 1);
   p._zoneT=0; p._recvT=undefined;
   doShot(p, power, clamp(z,-1.4,1.4));
 }
@@ -4896,6 +4940,16 @@ function paintOpts(){
     el.addEventListener('click',function(){ selMode=i; paintOpts(); });
     mh.appendChild(el);
   });
+  /* сложность — только в игре против компьютера */
+  var dh=document.getElementById('diffT'); dh.innerHTML='';
+  document.getElementById('diffbox').style.display=ONLINE?'none':'';
+  [['dEasy','easy'],['dNormal','normal'],['dHard','hard']].forEach(function(o){
+    var el=document.createElement('div');
+    el.className='chip opt'+(DIFF===o[1]?' on':'');
+    el.textContent=T(o[0]);
+    el.addEventListener('click',function(){ setDifficulty(o[1]); paintOpts(); });
+    dh.appendChild(el);
+  });
   var qh=document.getElementById('qT'); qh.innerHTML='';
   [['auto',-1,'byFps'],['qlow',0,'maxFps'],['qmid',1,'balance'],['qhigh',2,'pretty']]
   .forEach(function(o){
@@ -4915,6 +4969,7 @@ function paintLang(){
   setText('mTitle',T('title'));   setText('mSub',T('sub'));
   setText('lbLang',T('lang'));    setText('lbMode',T('mode'));
   setText('lbPlay',T('play'));    setText('lbQual',T('qual'));
+  setText('lbDiff',T('diff'));
   setText('lbNet',T('net'));      setText('lbMy',T('myTeam'));
   setText('lbOp',T('opTeam'));    setText('lbAtt',T('withPuck'));
   setText('lbDef',T('onDef'));
@@ -5183,7 +5238,7 @@ var CLIENT_VER=1;
 /* адрес Worker'а статистики; пусто — итоги никуда не отправляются.
    Бэкенд делается отдельной фазой. */
 var STATS_API='';
-var MATCH={id:'', mode:'ai', role:'solo', team:0, clubs:[0,0], len:0, played:0,
+var MATCH={id:'', mode:'ai', role:'solo', team:0, difficulty:'normal', clubs:[0,0], len:0, played:0,
            startedAt:0, summary:null, sent:false};
 function newMatchId(){
   var b=new Uint8Array(12), s='';
@@ -5195,14 +5250,15 @@ function matchStart(id, clubA, clubB){
   MATCH.id=id; MATCH.mode=NET.on?'online':'ai'; MATCH.role=NET.on?NET.role:'solo';
   MATCH.team=HUMAN; MATCH.clubs=[clubA,clubB]; MATCH.len=Math.round(clock);
   MATCH.played=0; MATCH.startedAt=Date.now(); MATCH.summary=null; MATCH.sent=false;
+  MATCH.difficulty = NET.on ? null : DIFF;   /* в сетевом матче соперник — человек */
   statsReset();
-  EV.emit('match:start',{id:id, mode:MATCH.mode, role:MATCH.role, team:HUMAN, len:MATCH.len, clubs:MATCH.clubs.slice()});
+  EV.emit('match:start',{id:id, mode:MATCH.mode, role:MATCH.role, team:HUMAN, len:MATCH.len, clubs:MATCH.clubs.slice(), difficulty:MATCH.difficulty});
 }
 function buildSummary(sc){
   var me=MATCH.team, res = sc[me]>sc[1-me]?'win':(sc[me]<sc[1-me]?'loss':'draw');
   var pl=[];
   for(var k in STATS.players){ var q=STATS.players[k]; pl.push({t:q.t, num:q.num, g:q.g, a:q.a, s:q.s, h:q.h}); }
-  return {v:1, id:MATCH.id, client:CLIENT_VER, mode:MATCH.mode, role:MATCH.role, team:me,
+  return {v:1, id:MATCH.id, client:CLIENT_VER, mode:MATCH.mode, role:MATCH.role, team:me, difficulty:MATCH.difficulty,
           clubs:MATCH.clubs.slice(), len:MATCH.len, played:Math.round(MATCH.played),
           startedAt:MATCH.startedAt, endedAt:Date.now(), score:sc.slice(), result:res,
           teams:[STATS.teams[0], STATS.teams[1]], players:pl, faceoffs:STATS.faceoffs, events:STATS.events,

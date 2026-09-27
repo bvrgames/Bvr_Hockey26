@@ -25,7 +25,7 @@ EV.emit('shot', { p: 3, t: 0, ... });                 // возвращает pa
 
 | событие | payload | где | сеть |
 |---|---|---|---|
-| `match:start` | `{ id, mode: 'ai'\|'online', role: 'solo'\|'host'\|'guest', team, len, clubs: [a, b] }` | кнопка «Играть», реванш, у гостя — приход `cfg` | нет |
+| `match:start` | `{ id, mode: 'ai'\|'online', role: 'solo'\|'host'\|'guest', team, len, clubs: [a, b], difficulty }` | кнопка «Играть», реванш, у гостя — приход `cfg` | нет |
 | `faceoff` | `{ x, z }` — шайба вброшена (переход `face → play`) | `sim` | да |
 | `pass` | `{ p, t, to, x, z, power, lift, lead }` — `to` — кому адресован (`-1` — в сторону), `lead` — пас в разрез | `doPass` | да |
 | `pass:recv` | `{ p, t, from, aimed, lead }` — пас дошёл до своего (≤ 3 с после паса); `aimed` — принял именно адресат | подбор шайбы | да |
@@ -104,6 +104,7 @@ EV.emit('shot', { p: 3, t: 0, ... });                 // возвращает pa
   client: 1,                     // CLIENT_VER
   mode: 'ai' | 'online', role: 'solo' | 'host' | 'guest',
   team: 0 | 1,                   // за кого играл отправитель
+  difficulty: 'easy' | 'normal' | 'hard' | null,   // уровень ИИ соперника; null — матч на двоих
   clubs: [3, 5],                 // индексы CLUBS
   len: 180,                      // заявленная длина, с
   played: 186,                   // реально прошло в матче (без меню и паузы), с
@@ -271,6 +272,7 @@ CREATE TABLE inventory (                         -- фаза магазина
 
 | ключ | что |
 |---|---|
+| `difficulty` | **уже используется**: `easy` / `normal` / `hard`, копия в `localStorage['bvr_difficulty']` (сразу при запуске и вне Telegram / Bot API < 6.9) |
 | `settings` | язык, вибро, качество графики, сервер релея (сейчас это `localStorage`: `bvr_lang`, `bvr_vibro`, `bvr_srv`) |
 | `skin` | выбранный `item_id` (надето). Что куплено — только в D1 |
 | `profile` | кэш ответа `GET /v1/profile` + время, чтобы меню показывало монеты до ответа сервера. Источник правды — D1 |
