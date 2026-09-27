@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#05070c">
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
-<title>Лига 5 на 5</title>
+<title>BVR Hockey</title>
 </head>
 <body>
 <style>
@@ -98,7 +98,8 @@
   body.portrait #hud>div{padding:0 7px;font-size:11px}
   body.portrait #chip{top:46px}
   body.portrait #hud2{top:42px;left:8px}
-  #legend{position:absolute;right:10px;top:10px;z-index:6;font-size:10px;line-height:1.5;
+  #legend{position:absolute;right:10px;top:48px;z-index:6;   /* под кнопкой паузы */
+    font-size:10px;line-height:1.5;
     color:rgba(255,255,255,.5);text-align:right;pointer-events:none}
   #fps{position:absolute;left:10px;bottom:8px;z-index:9;pointer-events:none;font-size:11px;font-weight:700;
     letter-spacing:.03em;color:#8fe3a0;background:rgba(6,10,18,.72);
@@ -189,6 +190,8 @@
   #start .dev a{color:#8fd8ff;text-decoration:none;font-weight:700;border-bottom:1px solid rgba(143,216,255,.35)}
   /* отладочные индикаторы (скорость, FPS, сетевые счётчики) видны только с ?debug */
   body:not(.debug) .dbg{display:none!important}
+  /* подсказки геймпада на экране матча — только когда геймпад подключён */
+  body:not(.pad) .padhint{display:none!important}
 </style>
 
 <div id="stage">
@@ -210,7 +213,7 @@
   </div>
   <div id="toast"></div>
   <div id="tacbadge"></div>
-  <div id="legend"></div>
+  <div id="legend" class="padhint"></div>
   <div id="power"><i></i></div>
 
   <div id="pad">
@@ -543,8 +546,21 @@ function checkFsHint(){
     var fh=document.getElementById('fsHint'); if(!fh) return;
     var land=window.screen && window.screen.orientation && window.screen.orientation.type &&
               window.screen.orientation.type.startsWith('landscape');
-    fh.style.display=(land && !isFullscreenNow())?'block':'none';
+    fh.style.display=(land && fsHintAllowed())?'block':'none';
   },600); /* даём автоматической попытке время отработать/провалиться */
+}
+/* Кнопка «на весь экран» — только в обычном браузере и только в главном меню.
+   Внутри Telegram полный экран даёт Telegram API (TG.requestFullscreen), кнопка
+   не нужна; во время матча она закрывала табло. */
+function inTelegram(){ return !!(TG && TG.initData); }
+function fsHintAllowed(){
+  return !inTelegram() && !isFullscreenNow() && (typeof state==='undefined' || state==='menu');
+}
+/* вызывается при входе в меню и выходе из него */
+function fsHintSync(){
+  var fh=document.getElementById('fsHint'); if(!fh) return;
+  if(!fsHintAllowed() || PORTRAIT){ fh.style.display='none'; return; }
+  checkFsHint();
 }
 window.addEventListener('orientationchange',checkFsHint);
 if(window.screen && window.screen.orientation){
@@ -569,6 +585,13 @@ checkFsHint(); /* и safety-net кнопка, если попытка не пр�
    ============================================================ */
 var STRINGS={
 ru:{
+  fsHint:'Нажми — на весь экран', srvHint:'https://имя.workers.dev', docTitle:'BVR Hockey — Лига 5 на 5',
+  ad1:'ЗДЕСЬ МОГЛА БЫТЬ', ad2:'ВАША РЕКЛАМА',
+  badAddr:'адрес сервера неверный', noConnect:'не удалось подключиться к серверу',
+  inRoom:'в комнате', room:'комната', youHost:'ты хост', youGuest:'ты гость', lost:'связь потеряна',
+  linkFriend:'ссылка другу:', shareText:'Го катать в BVR Hockey — комната',
+  needSrv:'впиши адрес сервера', needCode:'впиши код комнаты',
+  noWebgl:'WebGL недоступен.<br>Обнови браузер или включи аппаратное ускорение.',
   title:'ЛИГА 5 НА 5', sub:'аркадный хоккей · геймпад и экран',
   lang:'ЯЗЫК', mode:'РЕЖИМ МАТЧА', play:'ИГРА', qual:'ГРАФИКА',
   net:'ОНЛАЙН-МАТЧ', myTeam:'ТВОЯ КОМАНДА', opTeam:'СОПЕРНИК',
@@ -602,6 +625,13 @@ ru:{
   rotate:'Поверни телефон горизонтально 🔄', noPauseOnline:'в онлайне паузы нет'
 },
 en:{
+  fsHint:'Tap for full screen', srvHint:'https://name.workers.dev', docTitle:'BVR Hockey — League 5 on 5',
+  ad1:'YOUR BRAND', ad2:'COULD BE HERE',
+  badAddr:'invalid server address', noConnect:'could not connect to the server',
+  inRoom:'in room', room:'room', youHost:'you are the host', youGuest:'you are the guest', lost:'connection lost',
+  linkFriend:'link for a friend:', shareText:"Let's play BVR Hockey — room",
+  needSrv:'enter the server address', needCode:'enter the room code',
+  noWebgl:'WebGL is not available.<br>Update your browser or turn on hardware acceleration.',
   title:'LEAGUE 5 ON 5', sub:'arcade hockey · gamepad & touch',
   lang:'LANGUAGE', mode:'MATCH LENGTH', play:'MODE', qual:'GRAPHICS',
   net:'ONLINE MATCH', myTeam:'YOUR TEAM', opTeam:'OPPONENT',
@@ -635,6 +665,13 @@ en:{
   rotate:'Turn your phone sideways 🔄', noPauseOnline:'no pause in online matches'
 },
 id:{
+  fsHint:'Ketuk untuk layar penuh', srvHint:'https://nama.workers.dev', docTitle:'BVR Hockey — Liga 5 lawan 5',
+  ad1:'MEREK ANDA', ad2:'BISA DI SINI',
+  badAddr:'alamat server tidak valid', noConnect:'tidak bisa terhubung ke server',
+  inRoom:'di ruang', room:'ruang', youHost:'kamu host', youGuest:'kamu tamu', lost:'koneksi terputus',
+  linkFriend:'tautan untuk teman:', shareText:'Ayo main BVR Hockey — ruang',
+  needSrv:'masukkan alamat server', needCode:'masukkan kode ruang',
+  noWebgl:'WebGL tidak tersedia.<br>Perbarui browser atau aktifkan akselerasi perangkat keras.',
   title:'LIGA 5 LAWAN 5', sub:'hoki arkade · gamepad & layar sentuh',
   lang:'BAHASA', mode:'DURASI PERTANDINGAN', play:'MODE', qual:'GRAFIK',
   net:'PERTANDINGAN ONLINE', myTeam:'TIM KAMU', opTeam:'LAWAN',
@@ -961,8 +998,8 @@ function texBoard(kind){
     g.fillStyle='#7c3aed'; g.fillRect(0,0,10,H);
     g.textAlign='center'; g.fillStyle='#2a3245';
     g.font='700 36px system-ui,sans-serif';
-    g.fillText('ЗДЕСЬ МОГЛА БЫТЬ', W/2, 46);
-    g.fillText('ВАША РЕКЛАМА', W/2, 88);
+    g.fillText(T('ad1'), W/2, 46);
+    g.fillText(T('ad2'), W/2, 88);
   } else if(kind===2){
     g.fillStyle='#101827'; g.fillRect(0,0,W,H);
     g.fillStyle='#f0b429'; g.fillRect(W-10,0,10,H);
@@ -3230,7 +3267,9 @@ function buildIceTex(){
 }
 
 var ADS_PER_TEX=8;
+var _adLang=null;   /* на каком языке нарисована реклама на борту */
 function buildBoardTex(){
+  _adLang=LANG;
   var nAds=ADS_PER_TEX, TW=QC().board, TH=160, c=mkCanvas(TW,TH), g=c.getContext('2d');
   var slot=TW/nAds;
   if(TEX.adsReady){
@@ -4556,24 +4595,24 @@ function netConnect(url, code, cb){
   netStatus(T('connecting'));
   var ws;
   try{ ws=new WebSocket(base+'/room/'+code); }
-  catch(e){ netStatus('адрес сервера неверный'); return; }
+  catch(e){ netStatus(T('badAddr')); return; }
   NET.ws=ws;
   var opened=false;
   setTimeout(function(){
     if(!opened && NET.ws===ws){
-      netStatus('не подключились. онлайн работает только на твоём сайте, в предпросмотре Claude соединения заблокированы');
+      netStatus(T('noConnect'));
     }
   },5000);
-  ws.onopen=function(){ opened=true; netStatus('в комнате '+code); };
+  ws.onopen=function(){ opened=true; netStatus(T('inRoom')+' '+code); };
   ws.onerror=function(){ netStatus(T('netErr')); };
-  ws.onclose=function(){ if(NET.on) netStatus('связь потеряна'); };
+  ws.onclose=function(){ if(NET.on) netStatus(T('lost')); };
   ws.onmessage=function(ev){
     var m; try{ m=JSON.parse(ev.data); }catch(e){ return; }
     if(m.t==='hello'){
       NET.role=m.role; NET.on=true;
       HUMAN = (m.role==='host')?0:1;
       NET.peer = m.n>1;
-      netStatus(m.role==='host' ? 'комната '+code+' · ты хост' : 'комната '+code+' · ты гость');
+      netStatus(T('room')+' '+code+' · '+(m.role==='host' ? T('youHost') : T('youGuest')));
       if(cb) cb();
     }
     else if(m.t==='full'){ NET.on=false; netStatus(T('roomFull')); }
@@ -4770,7 +4809,7 @@ function updateFxOnly(dt){
 if(!glInit()){
   document.getElementById('stage').innerHTML=
     '<div style="padding:40px;text-align:center;font-size:15px;line-height:1.6">'+
-    'WebGL недоступен.<br>Обнови браузер или включи аппаратное ускорение.</div>';
+    T('noWebgl')+'</div>';
 }
 var last=performance.now(), fT=0,fN=0, lastOwnsUI=null, lastLangUI=null;
 var powEl=document.getElementById('power'), powI=powEl.firstElementChild;
@@ -4785,8 +4824,12 @@ function frame(now){
   if(!TEST.frozen) frameStep(dt);
   requestAnimationFrame(frame);
 }
+var _uiMenu=null, _uiPad=null;
 function frameStep(dt){
   if(state!=='menu' && state!=='over' && !PAUSED) MATCH.played+=dt;
+  /* вход/выход из меню — кнопка «на весь экран»; геймпад — его подсказки */
+  if((state==='menu')!==_uiMenu){ _uiMenu=(state==='menu'); fsHintSync(); }
+  if(padConnected!==_uiPad){ _uiPad=padConnected; document.body.classList.toggle('pad', padConnected); }
   fT+=dt; fN++;
   if(fT>0.5){
     var f=Math.round(fN/fT);
@@ -4933,7 +4976,7 @@ function paintOpts(){
       ONLINE=o[1];
       document.getElementById('netbox').style.display=ONLINE?'flex':'none';
       if(!ONLINE){ NET.on=false; HUMAN=TEST.side; try{if(NET.ws)NET.ws.close();}catch(e){} }
-      paintOpts(); netStatus(NET.status||'не подключено');
+      paintOpts(); netStatus(NET.status||T('notConnected'));
     });
     ph.appendChild(el);
   });
@@ -4989,6 +5032,13 @@ function paintLang(){
   setText('oAgain',T('again'));
   setText('oMenu',T('mainMenu'));
   setText('per',T('match'));
+  setText('go',T('start'));
+  setText('fsHint',T('fsHint'));
+  var brt=document.querySelector('#bRT i'); if(brt) brt.textContent=T('hRT');
+  var bpz=document.getElementById('bPause'); if(bpz) bpz.title=T('pause');
+  var sv=document.getElementById('srv'); if(sv) sv.placeholder=T('srvHint');
+  document.title=T('docTitle');
+  if(typeof GLOK!=='undefined' && GLOK && typeof TEX!=='undefined' && TEX.board && _adLang!==LANG){ _adLang=LANG; glTexUpdate(TEX.board, buildBoardTex()); }   /* реклама на борту — пересобираем только при смене языка */
   var dv=document.getElementById('mDev');
   if(dv){
     dv.innerHTML='';
@@ -5047,23 +5097,23 @@ function shareLink(code){
   var deepLink='https://t.me/bvr_games_bot/hockeytg?startapp='+code;
   var webLink=location.origin+location.pathname+'?room='+code+'&srv='+encodeURIComponent(srvEl.value.trim());
   var shown=TG?deepLink:webLink;
-  document.getElementById('netlink').textContent='ссылка другу: '+shown;
+  document.getElementById('netlink').textContent=T('linkFriend')+' '+shown;
   if(TG && TG.openTelegramLink){
     var shareUrl='https://t.me/share/url?url='+encodeURIComponent(deepLink)+
-                  '&text='+encodeURIComponent('Го катать в BVR Hockey — комната '+code);
+                  '&text='+encodeURIComponent(T('shareText')+' '+code);
     try{ TG.openTelegramLink(shareUrl); return; }catch(e){}
   }
   try{ if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(shown).catch(function(){}); }catch(e){}
 }
 document.getElementById('bHost').addEventListener('click',function(){
-  var u=srvEl.value.trim(); if(!u){ netStatus('впиши адрес сервера'); return; }
+  var u=srvEl.value.trim(); if(!u){ netStatus(T('needSrv')); return; }
   var code=randCode(); codeEl.value=code;
   netConnect(u,code,function(){ shareLink(code); });
 });
 document.getElementById('bJoin').addEventListener('click',function(){
   var u=srvEl.value.trim(), c=(codeEl.value||'').trim().toUpperCase();
-  if(!u){ netStatus('впиши адрес сервера'); return; }
-  if(c.length<2){ netStatus('впиши код комнаты'); return; }
+  if(!u){ netStatus(T('needSrv')); return; }
+  if(c.length<2){ netStatus(T('needCode')); return; }
   netConnect(u,c,null);
 });
 
