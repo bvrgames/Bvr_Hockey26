@@ -5362,7 +5362,9 @@ window.__hk={hs:function(){return HS;},net:function(){return NET;},setCam:functi
     puck:{x:+puck.x.toFixed(2), z:+puck.z.toFixed(2), v:+Math.hypot(puck.vx,puck.vz).toFixed(2)},
     shots:STATS.teams[0].shots+STATS.teams[1].shots, passes:STATS.teams[0].passes+STATS.teams[1].passes,
     stats:statsBrief(), autopilot:autoPilot(), errors:TEST.errors.length}; },
-  stats:function(){return STATS;}, match:function(){return MATCH;}, ev:EV}; 
+  stats:function(){return STATS;}, match:function(){return MATCH;}, ev:EV,
+  /* хост: отправить снимок сейчас (с ожидающими событиями) — для тестов после freeze */
+  netSnap:function(){ if(NET.on && NET.role==='host') netSnap(); }}; 
 })();
 </script>
 

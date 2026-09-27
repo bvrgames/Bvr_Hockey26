@@ -39,7 +39,9 @@ try {
   await host.page.waitForTimeout(REAL * 1000);
 
   // stop the host (no more snapshots), let the last ones arrive, compare the event-built statistics
-  await host.page.evaluate('clearInterval(window.__smk); __hk.freeze()');
+  // freeze, then push one last snapshot: an event from the very last host frame would otherwise wait for the next
+  // (throttled) snapshot that never comes, and the guest's statistics would be one event short
+  await host.page.evaluate('clearInterval(window.__smk); __hk.freeze(); __hk.netSnap()');
   await guest.page.evaluate('clearInterval(window.__smk)');
   await guest.page.waitForTimeout(1200);
   const H = await snap(host), Gs = await snap(guest);
