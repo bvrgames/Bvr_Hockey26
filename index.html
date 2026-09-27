@@ -187,6 +187,8 @@
   /* Модели экипировки под CC-BY 4.0: указание авторов обязательно. */
   #start .credits{margin:8px 0 0;font-size:9px;line-height:1.5;color:rgba(255,255,255,.28)}
   #start .dev a{color:#8fd8ff;text-decoration:none;font-weight:700;border-bottom:1px solid rgba(143,216,255,.35)}
+  /* отладочные индикаторы (скорость, FPS, сетевые счётчики) видны только с ?debug */
+  body:not(.debug) .dbg{display:none!important}
 </style>
 
 <div id="stage">
@@ -198,7 +200,7 @@
     <div class="sc" id="s2">0</div>
     <div><span id="t2n">ЗЕЛ</span><span class="sw" id="t2c" style="background:#1f7a52"></span></div>
     <div class="clk"><span id="per">МАТЧ</span> · <span id="clk">5:00</span></div>
-    <div style="color:rgba(255,255,255,.55)"><span id="spd">0 км/ч</span></div>
+    <div id="spdw" class="dbg" style="color:rgba(255,255,255,.55)"><span id="spd">0 км/ч</span></div>
   </div>
 
   <div id="hud2"><span id="ppl"></span></div>
@@ -223,7 +225,7 @@
   <div id="pausescr">
     <div class="pbox">
       <h2 id="pauseTitle">ПАУЗА</h2>
-      <div id="pfps">—</div>
+      <div id="pfps" class="dbg">—</div>
       <button class="pbtn prim" id="pResume">ПРОДОЛЖИТЬ</button>
       <button class="pbtn" id="pMenu">ГЛАВНОЕ МЕНЮ</button>
     </div>
@@ -240,8 +242,8 @@
   </div>
 
   <canvas id="stick"></canvas>
-  <div id="fps"></div>
-  <div id="netdbg" style="display:none;position:fixed;left:10px;top:10px;z-index:99;pointer-events:none;
+  <div id="fps" class="dbg"></div>
+  <div id="netdbg" class="dbg" style="display:none;position:fixed;left:10px;top:10px;z-index:99;pointer-events:none;
        font:11px/1.4 monospace;font-weight:700;color:#0f0;background:rgba(0,0,0,.65);padding:4px 8px;
        border-radius:4px;white-space:pre"></div>
   <!-- Отдельно от #rotate: не полноэкранный, не блокирует меню/игру под собой,
@@ -332,6 +334,7 @@
      ?frozen           старт в заморозке: игра идёт только через __hk.step — полностью воспроизводимо
      ?ai=easy|hard     уровень ИИ соперника (по умолчанию normal)
      ?side=1           в одиночной игре играть за команду 1 (проверка симметрии)
+     ?debug            показать отладочные индикаторы: скорость, FPS, сетевые счётчики
    Идея и формат прогонов взяты из INKWAVE (Jayden Davis, MIT) — см. THIRD_PARTY.md. */
 var TEST=(function(){
   var q=new URLSearchParams(location.search);
@@ -339,7 +342,9 @@ var TEST=(function(){
          autopilot:q.has('autopilot'), seed:q.has('seed')?(+q.get('seed')||1):0,
          frozen:q.has('frozen'), skipRender:false, errors:[],
          ai:({easy:1,normal:1,hard:1})[q.get('ai')]?q.get('ai'):null,
-         side:q.get('side')==='1'?1:0};
+         side:q.get('side')==='1'?1:0, debug:q.has('debug')};
+  /* ?debug — показать отладочные индикаторы (класс .dbg): скорость, FPS, сеть */
+  if(t.debug) document.body.classList.add('debug');
   if(t.seed){
     /* mulberry32 */
     var a=t.seed>>>0;
@@ -4908,7 +4913,7 @@ var MODES=[{n:'quick',s:'min1',m:1},{n:'normal',s:'min3',m:3}];
 var selMode=1;
 function paintOpts(){
   var lh=document.getElementById('langT'); lh.innerHTML='';
-  [['ru','Рус'],['en','Eng'],['id','Indo']].forEach(function(o){
+  [['ru','RU'],['en','EN'],['id','ID']].forEach(function(o){
     var el=document.createElement('div');
     el.className='chip opt'+(LANG===o[0]?' on':'');
     el.textContent=o[1];
