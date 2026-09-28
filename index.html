@@ -1445,6 +1445,9 @@ function netTimeReset(){
   if(NET.on){
     NET.at=NET.bt=performance.now();
     if(NET.b) NET.a=NET.b;
+    /* после паузы вкладки буфер снимков устарел — оставляем последний */
+    if(NETV.buf.length) NETV.buf=NETV.buf.slice(-1);
+    NETV.offWin.length=0; NETV.jit.length=0; NETV.off=null;
   }
 }
 
@@ -1627,10 +1630,21 @@ setInterval(function(){
    Действия (пас/бросок/чек/поук) НЕ предсказываются — только движение:
    спекулятивно выполнять их локально означало бы дублировать игровые
    эффекты (шайба и т.п.), которые авторитетны только на хосте. */
-var PRED=null, PRED_ERR={x:0,z:0}, PRED_LOG=[];
+var PRED=null, PRED_ERR={x:0,z:0,yaw:0}, PRED_LOG=[];
+/* Сеть v2 (замеры: tools/smoke-lag.mjs).
+   Ввод гостя: номер пакета q и счётчики нажатий c[A,B,X,Y,LB] — нажатие не теряется при
+   склейке пакетов и не срабатывает дважды. Снимок хоста: подтверждение a (последний
+   полученный q) и точные скорости управляемых игроков v — предсказание гостя доигрывает
+   ровно те вводы, которых хост ещё не видел. Чужие игроки и шайба у гостя — из буфера
+   снимков по времени хоста с задержкой D (интерполяция вместо «лесенки»). */
+var SNAP_HZ=30, INPUT_HZ=30;
+var NETV={q:0, cnt:[0,0,0,0,0], ack:0, sentT:{}, rtt:0,
+          inQ:0, lastCnt:[0,0,0,0,0], tapB:false,
+          buf:[], offWin:[], off:null, D:0.08, jit:[]};
+var BTN_KEYS=['A','B','X','Y','LB'];
 function predResetTo(p){
   PRED={p:p, x:p.x, z:p.z, vx:p.vx||0, vz:p.vz||0, yaw:p.yaw, spd:p.spd||0, stride:p.stride||0, _back:false};
-  PRED_ERR.x=0; PRED_ERR.z=0;
+  PRED_ERR.x=0; PRED_ERR.z=0; PRED_ERR.yaw=0;
 }
 function netPredictGuest(dt){
   if(!NET.b) return;
@@ -1643,10 +1657,10 @@ function netPredictGuest(dt){
   }
   /* визуальная ошибка после последней коррекции гасится за ~120мс —
      это и есть требование "плавно, без рывка" */
-  var decay=Math.min(1, dt/0.12);
-  PRED_ERR.x-=PRED_ERR.x*decay; PRED_ERR.z-=PRED_ERR.z*decay;
+  var decay=Math.min(1, dt/0.15);
+  PRED_ERR.x-=PRED_ERR.x*decay; PRED_ERR.z-=PRED_ERR.z*decay; PRED_ERR.yaw-=PRED_ERR.yaw*decay;
   myP.x=PRED.x+PRED_ERR.x; myP.z=PRED.z+PRED_ERR.z;
-  myP.yaw=PRED.yaw; myP.vx=PRED.vx; myP.vz=PRED.vz; myP.spd=PRED.spd; myP.stride=PRED.stride;
+  myP.yaw=PRED.yaw+PRED_ERR.yaw; myP.vx=PRED.vx; myP.vz=PRED.vz; myP.spd=PRED.spd; myP.stride=PRED.stride;
   myP._back=PRED._back;
 }
 var NEDGE={A:false,B:false,X:false,Y:false,LB:false};
@@ -1934,8 +1948,8 @@ function goalEvent(team, z){
 var _passN=0;
 var _edgeA=0;   /* сколько раз кнопка A дала фронт — для тестов ввода */
 /* target / pt — адресат и точка паса, выбранные ИИ; у человека не передаются */
-function doPass(p,power,lift,lead,target,pt){
-  playAction(p,'pass_forehand',0.45);
+/* куда пасовать (без побочных эффектов) — общее для симуляции и предсказания гостя */
+function passAim(p,lead,target,pt){
   var m=target||bestMate(p, lead?'thru':'norm');
   var tx,tz;
   if(pt){ tx=pt.x; tz=pt.z; }
@@ -1945,6 +1959,24 @@ function doPass(p,power,lift,lead,target,pt){
   } else {
     var d=aimDir(p); tx=p.x+d.x*12; tz=p.z+d.z*12;
   }
+  return {tx:tx, tz:tz, m:m};
+}
+/* куда бросать (без побочных эффектов) */
+function shotAim(p,aiZ){
+  var gx=p.dir*GOAL_X, aimZ;
+  if(aiZ!==undefined) aimZ=aiZ;
+  else {
+    var d=aimDir(p);
+    aimZ = clamp(d.z*0.9, -0.85, 0.85);
+    var gk=goalieOf(p.team===0?1:0);
+    var open = gk ? (gk.z>0 ? -0.72 : 0.72) : 0;
+    aimZ = clamp(aimZ*0.45 + open*0.55, -0.85, 0.85);
+  }
+  return {tx:gx, tz:aimZ};
+}
+function doPass(p,power,lift,lead,target,pt){
+  playAction(p,'pass_forehand',0.45);
+  var pa=passAim(p,lead,target,pt), m=pa.m, tx=pa.tx, tz=pa.tz;
   var dx=tx-puck.x, dz=tz-puck.z, L=Math.hypot(dx,dz)||1;
   puck.vx=dx/L*power; puck.vz=dz/L*power;
   puck.vy = lift?3.2:0;
@@ -1955,17 +1987,7 @@ function doPass(p,power,lift,lead,target,pt){
 }
 /* aiZ — точка по ширине ворот, выбранная ИИ (может быть мимо створа); у человека не передаётся */
 function doShot(p,power,aiZ){
-  var gz=0, gx=p.dir*GOAL_X;
-  var aimZ;
-  if(aiZ!==undefined) aimZ=aiZ;
-  else {
-    var d=aimDir(p);
-    aimZ = clamp(d.z*0.9, -0.85, 0.85);
-    var gk=goalieOf(p.team===0?1:0);
-    var open = gk ? (gk.z>0 ? -0.72 : 0.72) : 0;
-    aimZ = clamp(aimZ*0.45 + open*0.55, -0.85, 0.85);
-  }
-  var tx=gx, tz=aimZ;
+  var gx=p.dir*GOAL_X, sa=shotAim(p,aiZ), tx=sa.tx, tz=sa.tz;
   var dx=tx-puck.x, dz=tz-puck.z, L=Math.hypot(dx,dz)||1;
   var sp=17+power*17;
   puck.vx=dx/L*sp; puck.vz=dz/L*sp; puck.vy=0;
@@ -2484,7 +2506,29 @@ function sim(dt){
   /* --- игроки-люди (локальный и сетевой) --- */
   /* автопилот: ввод игрока не читаем, его команду ведёт ИИ ниже */
   humanTick(HUMAN, autoPilot()?NOIN:IN, autoPilot()?NOEDGE:EDGE, dt);
-  if(NET.on && NET.role==='host') humanTick(1-HUMAN, NIN, NEDGE, dt);
+  if(NET.on && NET.role==='host'){
+    var hsg=HS[1-HUMAN];
+    /* гость нажал пас/бросок, а у хоста его игрок ещё не подобрал шайбу (она у него почти
+       на клюшке) — придерживаем нажатие до 0.3 с: у гостя подбор уже случился, иначе нажатие
+       превратилось бы в смену игрока */
+    var gp=hsg.ctrl, PD=NETV.pend||(NETV.pend={A:0,B:0,X:0,Y:0,t:0,tapB:0});
+    if(gp && !puck.owner && (NEDGE.A||NEDGE.B||NEDGE.X||NEDGE.Y)){
+      var gse=stickEnd(gp);
+      if(Math.hypot(gse[0]-puck.x,gse[1]-puck.z)<2.2){
+        PD.A|=NEDGE.A; PD.B|=NEDGE.B; PD.X|=NEDGE.X; PD.Y|=NEDGE.Y; PD.tapB|=NETV.tapB; PD.t=0.3;
+        NEDGE.A=NEDGE.B=NEDGE.X=NEDGE.Y=false; NETV.tapB=false;
+      }
+    }
+    if(PD.t>0){
+      PD.t-=dt;
+      if(gp && puck.owner===gp){ NEDGE.A|=PD.A; NEDGE.B|=PD.B; NEDGE.X|=PD.X; NEDGE.Y|=PD.Y; NETV.tapB|=PD.tapB; PD.t=0; }
+      if(PD.t<=0){ PD.A=PD.B=PD.X=PD.Y=PD.tapB=0; PD.t=0; }
+    }
+    NEDGE.A=!!NEDGE.A; NEDGE.B=!!NEDGE.B; NEDGE.X=!!NEDGE.X; NEDGE.Y=!!NEDGE.Y;
+    if(NETV.tapB){ if(hsg.ctrl && puck.owner===hsg.ctrl) hsg.charge=Math.max(hsg.charge,1/60); NETV.tapB=false; }
+    humanTick(1-HUMAN, NIN, NEDGE, dt);
+    NEDGE.A=NEDGE.B=NEDGE.X=NEDGE.Y=NEDGE.LB=false;      /* фронт использован */
+  }
   controlled = HS[HUMAN].ctrl;
   chargeT    = HS[HUMAN].charge;
   PRESS      = HS[HUMAN].press;
@@ -5086,7 +5130,9 @@ function netSnap(){
     var p=players[i];
     d.push(r2(p.x),r2(p.z),r2(p.yaw),(p.down>0?1:0)+(p.boxed?2:0),r1(p.stride),r1(p.spd||0));
   }
-  var o={t:'s',d:d,k:Date.now()};
+  var c0=HS[0].ctrl, c1=HS[1].ctrl;
+  var o={t:'s',d:d,k:Date.now(), a:NETV.inQ,
+         v:[r2(c0?c0.vx:0),r2(c0?c0.vz:0),r2(c1?c1.vx:0),r2(c1?c1.vz:0)]};
   var ev=netTakeEvents(); if(ev) o.e=ev;
   netSend(o);
   NETDBG.sSent++; /* TEMP debug: see AskUserQuestion/report — remove after diagnosing guest lag */
@@ -5099,6 +5145,7 @@ function netRecvSnap(m){
   NET.a=NET.b; NET.at=NET.bt;
   NET.b=m.d;   NET.bt=performance.now();
   if(!NET.a){ NET.a=m.d; NET.at=NET.bt-60; }
+  netBufPush(m);
   var replayFrom=Math.max(NET.at, NET.bt-300); /* client-side prediction:
     снэпшот, скорее всего, ещё не учитывает ввод, отправленный после
     ПРЕДЫДУЩЕГО снэпшота — от этой отметки и доигрываем накопленное (см.
@@ -5140,79 +5187,243 @@ function netRecvSnap(m){
      игрока по свежему авторитетному снэпшоту. Индекс своего игрока уже
      известен из d[7]/d[8] (HS[0]/HS[1].ctrl) — не нужно искать заново. */
   var myIdx=(HUMAN===0)?d[7]:d[8];
-  if(myIdx>=0 && players[myIdx]){
+  if(myIdx>=0 && players[myIdx] && m.a!==undefined){
     var mo=20+myIdx*6;
     if(mo+5<d.length){
-      var authX=d[mo], authZ=d[mo+1], authYaw=d[mo+2], authSpd=d[mo+5];
-      if(!PRED || PRED.p!==players[myIdx]) predResetTo(players[myIdx]);
-      /* визуальная ошибка = насколько предсказание разошлось с правдой;
-         копится (не перезаписывается), чтобы вторая коррекция не рвала
-         ещё не догашенную первую — и потом плавно гасится в netPredictGuest */
-      PRED_ERR.x+=PRED.x-authX;
-      PRED_ERR.z+=PRED.z-authZ;
-      PRED.x=authX; PRED.z=authZ; PRED.yaw=authYaw; PRED.spd=authSpd;
-      PRED.vx=Math.cos(authYaw)*authSpd; PRED.vz=Math.sin(authYaw)*authSpd;
-      /* доигрываем свой ввод, отправленный после предыдущего снэпшота —
-         этот снэпшот его ещё не мог учесть */
-      var prevT=replayFrom;
+      var myP=players[myIdx];
+      if(!PRED || PRED.p!==myP) predResetTo(myP);
+      /* что сейчас видно на экране — от этого считаем ошибку ПОСЛЕ доигрывания */
+      var visX=PRED.x+PRED_ERR.x, visZ=PRED.z+PRED_ERR.z, visYaw=PRED.yaw+PRED_ERR.yaw;
+      PRED.x=d[mo]; PRED.z=d[mo+1]; PRED.yaw=d[mo+2]; PRED.spd=d[mo+5];
+      var vv=m.v, vi=(HUMAN===0)?0:2;
+      if(vv){ PRED.vx=vv[vi]; PRED.vz=vv[vi+1]; }
+      else { PRED.vx=Math.cos(PRED.yaw)*PRED.spd; PRED.vz=Math.sin(PRED.yaw)*PRED.spd; }
+      /* доигрываем все вводы, которых хост ещё не видел (q > a), шагами как у хоста */
+      var nowT=performance.now();
+      while(PRED_LOG.length && PRED_LOG[0].q<=m.a) PRED_LOG.shift();
       for(var ri=0; ri<PRED_LOG.length; ri++){
-        var e=PRED_LOG[ri];
-        if(e.t<=replayFrom) continue;
-        var edt=Math.min(0.05,(e.t-prevT)/1000); prevT=e.t;
-        if(edt<=0) continue;
-        var mi2=humanMoveIntent(players[myIdx], HS[HUMAN], e);
-        humanMoveIntegrate(PRED, mi2[0], mi2[1], mi2[2], mi2[3], edt);
+        var e=PRED_LOG[ri], tEnd=(ri+1<PRED_LOG.length)?PRED_LOG[ri+1].t:nowT;
+        var rem=Math.min(0.25,(tEnd-e.t)/1000);
+        while(rem>1e-4){
+          var h=Math.min(1/60,rem); rem-=h;
+          var mi2=humanMoveIntent(myP, HS[HUMAN], e);
+          humanMoveIntegrate(PRED, mi2[0], mi2[1], mi2[2], mi2[3], h);
+        }
       }
-      while(PRED_LOG.length && PRED_LOG[0].t<=replayFrom) PRED_LOG.shift();
+      /* экран остаётся на месте, разница гасится плавно в netPredictGuest;
+         большая разница — это телепорт (вбрасывание, штраф): принимаем сразу */
+      PRED_ERR.x=visX-PRED.x; PRED_ERR.z=visZ-PRED.z;
+      /* и поворот: иначе конец клюшки (и шайба на нём) дёргается на каждом снимке */
+      var dyw=visYaw-PRED.yaw; while(dyw>Math.PI) dyw-=Math.PI*2; while(dyw<-Math.PI) dyw+=Math.PI*2;
+      PRED_ERR.yaw=dyw;
+      if(Math.hypot(PRED_ERR.x,PRED_ERR.z)>3){ PRED_ERR.x=0; PRED_ERR.z=0; PRED_ERR.yaw=0; }
     }
   }
 }
+/* буфер снимков у гостя: время хоста k, оценка сдвига часов (минимальная задержка за 3 с),
+   адаптивная задержка отрисовки D = интервал снимков + p90 джиттера */
+function netBufPush(m){
+  var now=Date.now(), k=m.k||now;
+  var B=NETV.buf;
+  if(B.length && k<=B[B.length-1].t) return;           /* повтор / старьё */
+  B.push({t:k, d:m.d});
+  while(B.length>2 && B[1].t < k-1500) B.shift();
+  var o=now-k;                                          /* задержка + разница часов */
+  NETV.offWin.push(o); if(NETV.offWin.length>90) NETV.offWin.shift();
+  var mn=Infinity; for(var i=0;i<NETV.offWin.length;i++) if(NETV.offWin[i]<mn) mn=NETV.offWin[i];
+  NETV.off=mn;
+  NETV.jit.push(o-mn); if(NETV.jit.length>90) NETV.jit.shift();
+  var js=NETV.jit.slice().sort(function(a,b){return a-b;});
+  var p90=js[Math.floor(js.length*0.9)]||0;
+  var target=clamp(1000/SNAP_HZ*1.2 + p90, 45, 250)/1000;
+  NETV.D += (target-NETV.D)*(target>NETV.D?0.3:0.05);  /* растёт быстро, уменьшается плавно */
+  if(m.a!==undefined){ NETV.ack=m.a; var st=NETV.sentT[m.a];
+    if(st){ var r=performance.now()-st; NETV.rtt = NETV.rtt ? NETV.rtt*0.9+r*0.1 : r; }
+    for(var q in NETV.sentT) if(+q<=m.a) delete NETV.sentT[q]; }
+}
+function _lerpAng(a,b,k){ var d=b-a; while(d>Math.PI) d-=Math.PI*2; while(d<-Math.PI) d+=Math.PI*2; return a+d*k; }
 function netApply(){
-  if(!NET.b) return;
-  var t=performance.now();
-  var span=Math.max(16,NET.bt-NET.at);
-  var k=clamp((t-NET.bt)/span+1,0,1.1);
-  var A=NET.a,B=NET.b, base=20;
+  var Bf=NETV.buf; if(!Bf.length) return;
+  /* момент на часах хоста, который показываем */
+  var rt = (NETV.off!==null) ? Date.now()-NETV.off-NETV.D*1000 : Bf[Bf.length-1].t;
+  var i1=Bf.length-1;
+  while(i1>0 && Bf[i1-1].t>=rt) i1--;
+  var S1=Bf[i1], S0=Bf[Math.max(0,i1-1)], k;
+  if(S1.t<=rt){                                         /* новее нет: чуть экстраполируем, не больше 100 мс */
+    S0=Bf[Math.max(0,Bf.length-2)]; S1=Bf[Bf.length-1];
+    var span=Math.max(1,S1.t-S0.t);
+    k=1+Math.min(rt-S1.t,100)/span;
+  } else {
+    var sp=Math.max(1,S1.t-S0.t); k=clamp((rt-S0.t)/sp,0,1);
+  }
+  var A=S0.d, B=S1.d, base=20;
   for(var i=0;i<players.length;i++){
     var o=base+i*6;
     if(o+5>=B.length) break;
     var p=players[i];
     var ax=A[o]!==undefined?A[o]:B[o], az=A[o+1]!==undefined?A[o+1]:B[o+1];
-    p.x=ax+(B[o]-ax)*k;
-    p.z=az+(B[o+1]-az)*k;
-    var ya=A[o+2], yb=B[o+2], dy=yb-ya;
-    while(dy>Math.PI) dy-=Math.PI*2; while(dy<-Math.PI) dy+=Math.PI*2;
-    p.yaw=ya+dy*k;
+    if(Math.hypot(B[o]-ax,B[o+1]-az)>3){ p.x=B[o]; p.z=B[o+1]; }      /* телепорт — без «проезда» через поле */
+    else { p.x=ax+(B[o]-ax)*k; p.z=az+(B[o+1]-az)*k; }
+    p.yaw=_lerpAng(A[o+2]!==undefined?A[o+2]:B[o+2], B[o+2], Math.min(k,1));
     var fl=B[o+3];
     p.down=(fl&1)?1:0; p.boxed=(fl&2)?1:0;
     p.stride=B[o+4];
     p.spd=B[o+5];
   }
-  var pa0=A[0],pa2=A[2];
-  puck.x=pa0+(B[0]-pa0)*k;
-  puck.y=B[1];
-  puck.z=pa2+(B[2]-pa2)*k;
+  if(Math.hypot(B[0]-A[0],B[2]-A[2])>4){ AUTHPK.x=B[0]; AUTHPK.z=B[2]; }
+  else { AUTHPK.x=A[0]+(B[0]-A[0])*k; AUTHPK.z=A[2]+(B[2]-A[2])*k; }
+  AUTHPK.y=A[1]+(B[1]-A[1])*Math.min(k,1);
+  var sdt=Math.max(1,S1.t-S0.t)/1000; AUTHPK.vx=(B[0]-A[0])/sdt; AUTHPK.vz=(B[2]-A[2])/sdt;
+  if(!(PUCKP && PUCKP.on)){ puck.x=AUTHPK.x; puck.z=AUTHPK.z; puck.y=AUTHPK.y; }
+}
+var AUTHPK={x:0,y:0.05,z:0,vx:0,vz:0};   /* шайба по снимкам хоста (интерполированная) */
+
+/* ============================================================
+   ГОСТЬ: ПРЕДСКАЗАНИЕ ДЕЙСТВИЙ И ШАЙБЫ
+   Пас/бросок/подбор гостя видны у него сразу: анимация, звук, вылет шайбы по той же
+   физике. Хост остаётся судьёй: когда шайба у хоста кем-то поймана, отскочила или
+   прошло время — картинка плавно переходит на его данные; если хост действие не
+   принял (шайба у него всё ещё у гостя), шайба плавно возвращается.
+   ============================================================ */
+var PUCKP=null;                    /* {on, mode:'held'|'fly'|'blend', t0, x,y,z, vx,vy,vz, w} */
+var GACT={chg:0, pred:null, pickT:0, looseT:0};
+function stickEnd(p){ return [p.x+Math.cos(p.yaw)*0.95, p.z+Math.sin(p.yaw)*0.95]; }
+function puckStep(P,dt){           /* та же физика шайбы, что в sim (без штанг и ворот) */
+  P.x+=P.vx*dt; P.z+=P.vz*dt; P.y+=P.vy*dt; P.vy-=13*dt;
+  if(P.y<0.05){ P.y=0.05; P.vy=(Math.abs(P.vy)>1.4)? -P.vy*0.32:0; }
+  var fr=Math.pow(0.996, dt*60); P.vx*=fr; P.vz*=fr;
+  if(P.z<-RW+0.35){P.z=-RW+0.35;P.vz=-P.vz*0.72;} if(P.z>RW-0.35){P.z=RW-0.35;P.vz=-P.vz*0.72;}
+  if(P.x<-RL+0.35){P.x=-RL+0.35;P.vx=-P.vx*0.72;} if(P.x>RL-0.35){P.x=RL-0.35;P.vx=-P.vx*0.72;}
+  var hw=halfWidthAt(P.x)-0.35; if(Math.abs(P.z)>hw && hw>0){ P.z=Math.sign(P.z)*hw; P.vz=-P.vz*0.72; }
+}
+function launchPred(kind, arg, me){
+  var from=stickEnd(me), vx, vz, vy=0, now=performance.now();
+  if(kind==='pass'){
+    var cfg={A:[19,false,false], Y:[21,false,true], X:[15,true,false]}[arg];
+    var pa=passAim(me,cfg[2],null,null), dx=pa.tx-from[0], dz=pa.tz-from[1], L=Math.hypot(dx,dz)||1;
+    vx=dx/L*cfg[0]; vz=dz/L*cfg[0]; vy=cfg[1]?3.2:0;
+    playAction(me,'pass_forehand',0.45); SFX.stick();
+  } else {
+    var sa=shotAim(me), dx2=sa.tx-from[0], dz2=sa.tz-from[1], L2=Math.hypot(dx2,dz2)||1, sp=17+arg*17;
+    vx=dx2/L2*sp; vz=dz2/L2*sp;
+    playAction(me, arg>0.55?'slap_shot':'wrist_shot', arg>0.55?0.9:0.65); SFX.shot(arg); buzz(18,'soft');
+  }
+  PUCKP={on:true, mode:'fly', t0:now, x:from[0], y:0.05, z:from[1], vx:vx, vy:vy, vz:vz, w:0};
+  GACT.pred={kind:kind, t:now};
+}
+function puckBlend(){ if(PUCKP){ PUCKP.mode='blend'; PUCKP.w=0; } }
+function netGuestActions(dt){
+  var me=HS[HUMAN].ctrl, now=performance.now();
+  if(!me || state!=='play'){ GACT.chg=0; chargeT=0; if(PUCKP) PUCKP.on=false; return; }
+  var lagMs=(NETV.rtt||120)+NETV.D*1000+300;
+  var auth=puck.owner;                                   /* владелец по последнему снимку */
+  if(auth) GACT.looseT=0; else if(!GACT.looseT) GACT.looseT=now;
+  var held = auth===me || (PUCKP && PUCKP.on && PUCKP.mode==='held');
+  /* подбор: клюшка своего (предсказанного) игрока дотянулась до ничьей шайбы */
+  /* шайба на экране отстаёт от снимков на D: пока она ничья меньше D+50 мс, нарисованная
+     позиция ещё старая (например, на своей же клюшке после отбора) — такой «подбор» ложный */
+  if(!held && !auth && !(PUCKP && PUCKP.on) && !(me.down>0) && now-GACT.looseT>NETV.D*1000+50){
+    var se=stickEnd(me);
+    if(Math.hypot(se[0]-AUTHPK.x, se[1]-AUTHPK.z)<0.85 && AUTHPK.y<0.85){
+      PUCKP={on:true, mode:'held', t0:now, w:0}; held=true; GACT.pickT=now; SFX.stick();
+    }
+  }
+  /* действия с шайбой (своей или предсказанно подобранной) */
+  if(held && !(PUCKP && PUCKP.on && PUCKP.mode!=='held')){
+    var pk = EDGE.A?'A':(EDGE.Y?'Y':(EDGE.X?'X':null));
+    if(pk){ launchPred('pass', pk, me); GACT.chg=0; }
+    else if(IN._B) GACT.chg=Math.min(0.85, GACT.chg+dt);
+    else if(GACT.chg>0 || EDGE.B){ launchPred('shot', clamp(Math.max(GACT.chg,1/60)/0.85,0.18,1), me); GACT.chg=0; }
+  } else if(!IN._B) GACT.chg=0;
+  chargeT=GACT.chg;
+  /* шайба на экране */
+  if(PUCKP && PUCKP.on){
+    var age=now-PUCKP.t0;
+    if(PUCKP.mode==='held'){
+      if(auth===me) PUCKP.on=false;                                  /* хост подтвердил */
+      else if((auth && auth!==me) || age>lagMs){ var s0=stickEnd(me); PUCKP.x=s0[0]; PUCKP.z=s0[1]; PUCKP.y=0.05; PUCKP.vx=PUCKP.vz=PUCKP.vy=0; puckBlend(); }
+      else { var s1=stickEnd(me); puck.x=s1[0]; puck.z=s1[1]; puck.y=0.05; }
+    }
+    if(PUCKP.on && PUCKP.mode==='fly'){
+      puckStep(PUCKP, dt);
+      var hostReleased = auth!==me;
+      var pv=Math.hypot(PUCKP.vx,PUCKP.vz), av=Math.hypot(AUTHPK.vx,AUTHPK.vz);
+      var diverged = hostReleased && !auth && av>3 && pv>3 &&
+                     (PUCKP.vx*AUTHPK.vx+PUCKP.vz*AUTHPK.vz)/(pv*av) < 0.8;       /* отскок, сейв */
+      if((!hostReleased && age>lagMs) || (auth && auth!==me && age>(NETV.rtt||120)*0.5) || diverged || age>1400) puckBlend();
+      else { puck.x=PUCKP.x; puck.z=PUCKP.z; puck.y=PUCKP.y; }
+    }
+    if(PUCKP.on && PUCKP.mode==='blend'){
+      PUCKP.w=Math.min(1, PUCKP.w+dt/0.15);
+      var w=PUCKP.w*PUCKP.w*(3-2*PUCKP.w);
+      var tx=AUTHPK.x, tz=AUTHPK.z;
+      if(auth===me){ var s2=stickEnd(me); tx=s2[0]; tz=s2[1]; }
+      puck.x=PUCKP.x+(tx-PUCKP.x)*w; puck.z=PUCKP.z+(tz-PUCKP.z)*w; puck.y=PUCKP.y+(AUTHPK.y-PUCKP.y)*w;
+      if(PUCKP.w>=1) PUCKP.on=false;
+    }
+  }
+  /* шайба своего игрока — на его (предсказанной) клюшке, а не позади на длину пинга */
+  if(!(PUCKP && PUCKP.on) && auth===me){ var s3=stickEnd(me); puck.x=s3[0]; puck.z=s3[1]; puck.y=0.05; }
+  puckSourceBlend(dt, (PUCKP && PUCKP.on) ? 'pred' : (auth===me ? 'stick' : 'auth'));
+}
+/* Шайба у гостя рисуется из разных источников: своя (предсказанная) клюшка, снимки хоста,
+   предсказание. Переход «моя клюшка ↔ снимки хоста» (у меня отобрали / мне отдали пас)
+   давал скачок на длину пинга — сводим его за ~140 мс. Вылет при своём пасе/броске
+   (предсказание) не трогаем: он должен быть мгновенным. */
+var PDS={mode:null, bl:0, fx:0, fz:0, lx:0, lz:0};
+function puckSourceBlend(dt, mode){
+  var tx=puck.x, tz=puck.z;
+  if(PDS.mode && mode!==PDS.mode && mode!=='pred' && PDS.mode!=='pred'){
+    var j=Math.hypot(tx-PDS.lx, tz-PDS.lz);
+    if(j>0.2 && j<4){ PDS.bl=1; PDS.fx=PDS.lx; PDS.fz=PDS.lz; }
+  }
+  if(PDS.bl>0){
+    PDS.bl=Math.max(0, PDS.bl-dt/0.14);
+    var w=PDS.bl*PDS.bl*(3-2*PDS.bl);             /* вес старой точки */
+    puck.x=tx+(PDS.fx-tx)*w; puck.z=tz+(PDS.fz-tz)*w;
+  }
+  PDS.mode=mode; PDS.lx=puck.x; PDS.lz=puck.z;
+}
+/* звук/анимация от события хоста: своё предсказанное действие уже озвучено и сыграно */
+function predictedOwn(e, kind){
+  if(!e.remote || !GACT.pred || GACT.pred.kind!==kind) return false;
+  var me=HS[HUMAN].ctrl; if(!me || players.indexOf(me)!==e.p) return false;
+  if(performance.now()-GACT.pred.t>2500) return false;
+  GACT.pred=null; return true;
 }
 
 /* --- гость: отправка ввода --- */
 function netSendInput(){
   var b=(IN._A?1:0)|(IN._B?2:0)|(IN._X?4:0)|(IN._Y?8:0)|(IN.RT?16:0)|(IN._LB?32:0);
-  netSend({t:'i',m:[r2(IN.mx),r2(IN.mz)],b:b,tc:TACTIC[HUMAN]});
+  var q=++NETV.q;
+  netSend({t:'i',m:[r2(IN.mx),r2(IN.mz)],b:b,tc:TACTIC[HUMAN],q:q,c:NETV.cnt.slice()});
+  NETV.sentT[q]=performance.now();
   NETDBG.iSent++; /* TEMP debug — see netSnap() comment */
   /* client-side prediction: история своего ввода для доигрывания после
      коррекции по снэпшоту (см. PRED_LOG выше и netRecvSnap ниже) */
   var nowT=performance.now();
-  PRED_LOG.push({t:nowT, mx:IN.mx, mz:IN.mz, RT:IN.RT});
-  while(PRED_LOG.length && PRED_LOG[0].t<nowT-2000) PRED_LOG.shift();
+  PRED_LOG.push({q:q, t:nowT, mx:IN.mx, mz:IN.mz, RT:IN.RT});
+  while(PRED_LOG.length && PRED_LOG[0].t<nowT-3000) PRED_LOG.shift();
 }
 function netRecvInput(m){
   NIN.mx=m.m[0]; NIN.mz=m.m[1];
   var b=m.b;
   NIN._A=!!(b&1); NIN._B=!!(b&2); NIN._X=!!(b&4);
   NIN._Y=!!(b&8); NIN.RT=!!(b&16); NIN._LB=!!(b&32);
-  NEDGE.A=NIN._A&&!_npv.A; NEDGE.B=NIN._B&&!_npv.B;
-  NEDGE.X=NIN._X&&!_npv.X; NEDGE.Y=NIN._Y&&!_npv.Y;
-  NEDGE.LB=NIN._LB&&!_npv.LB;
+  if(m.c){
+    /* счётчики нажатий: фронт = счётчик вырос. Фронт копится (OR) до кадра хоста и
+       сбрасывается после того, как humanTick его использовал — склейка пакетов его не
+       затрёт, а один фронт не сработает в двух кадрах */
+    for(var i=0;i<BTN_KEYS.length;i++){
+      if((m.c[i]|0)>NETV.lastCnt[i]){ NEDGE[BTN_KEYS[i]]=true; NETV.lastCnt[i]=m.c[i]|0;
+        if(i===1 && !NIN._B) NETV.tapB=true; }            /* B нажат и отпущен между пакетами — короткий бросок */
+    }
+    if(m.q) NETV.inQ=m.q;
+  } else {
+    NEDGE.A=NIN._A&&!_npv.A; NEDGE.B=NIN._B&&!_npv.B;
+    NEDGE.X=NIN._X&&!_npv.X; NEDGE.Y=NIN._Y&&!_npv.Y;
+    NEDGE.LB=NIN._LB&&!_npv.LB;
+  }
   _npv.A=NIN._A; _npv.B=NIN._B; _npv.X=NIN._X; _npv.Y=NIN._Y; _npv.LB=NIN._LB;
   if(m.tc!==undefined) TACTIC[1-HUMAN]=m.tc|0;
 }
@@ -5304,18 +5515,22 @@ function frameStep(dt){
 
   if(NET.on && NET.role==='guest'){
     netApply();
-    netPredictGuest(dt); /* client-side prediction: перекрывает x/z/yaw
+    netPredictGuest(dt);
+    netGuestActions(dt); /* пас/бросок/подбор гостя — сразу, шайба своего — на своей клюшке */
+    /* client-side prediction: перекрывает x/z/yaw
       СВОЕГО игрока (netApply выше уже посчитал сетевую интерполяцию для
       всех, включая его — тут же сразу перезаписываем предсказанием) */
     camUpdate(dt);
     updateFxOnly(dt);
+    /* счётчики нажатий гостя (EDGE — фронты этого кадра, включая тап по экрану) */
+    for(var bk=0;bk<BTN_KEYS.length;bk++) if(EDGE[BTN_KEYS[bk]]) NETV.cnt[bk]++;
     NET.sendT-=dt;
-    if(NET.sendT<=0){ NET.sendT=1/30; netSendInput(); }
+    if(NET.sendT<=0){ NET.sendT+=1/INPUT_HZ; if(NET.sendT<0) NET.sendT=0; netSendInput(); }
   } else {
     sim(dt);
     if(NET.on && NET.role==='host'){
       NET.sendT-=dt;
-      if(NET.sendT<=0){ NET.sendT=1/18; netSnap(); }
+      if(NET.sendT<=0){ NET.sendT+=1/SNAP_HZ; if(NET.sendT<0) NET.sendT=0; netSnap(); }
     }
   }
   render();
@@ -5654,11 +5869,15 @@ paintLang();
    ПОДПИСЧИКИ СОБЫТИЙ: звук, вибро, камера, надписи
    (раньше эти вызовы сидели прямо в симуляции; поведение то же)
    ============================================================ */
-EV.on('shot',    function(e){ SFX.shot(e.power); buzz(18,'soft'); });
-EV.on('pass',    function(){ SFX.stick(); });
-EV.on('pickup',  function(){ SFX.stick(); });
+EV.on('shot',    function(e){ if(predictedOwn(e,'shot')) return; SFX.shot(e.power); buzz(18,'soft');
+                              var p=players[e.p]; if(e.remote && p) playAction(p, e.power>0.55?'slap_shot':'wrist_shot', e.power>0.55?0.9:0.65); });
+EV.on('pass',    function(e){ if(predictedOwn(e,'pass')) return; SFX.stick(); var p=players[e.p]; if(e.remote && p) playAction(p,'pass_forehand',0.45); });
+EV.on('pickup',  function(e){ if(e.remote && GACT.pickT && performance.now()-GACT.pickT<2000 && HS[HUMAN].ctrl && players.indexOf(HS[HUMAN].ctrl)===e.p){ GACT.pickT=0; return; } SFX.stick(); });
+/* у гостя симуляция не идёт — клипы действий других игроков запускаем по событиям хоста */
+EV.on('poke',    function(e){ var p=players[e.p]; if(e.remote && p) playAction(p,'poke_check',0.45); });
 EV.on('poke',    function(e){ SFX.stick(); if(e.btn && e.t===HUMAN) buzz(14,'soft'); });
 EV.on('hit',     function(e){
+  if(e.remote && e.hard && players[e.p]) playAction(players[e.p],'body_check',0.7);
   SFX.hit();
   if(e.hard){ buzz(45,'hard'); cam.shake=Math.min(16,cam.shake+11); }
   else { cam.shake=Math.min(14,cam.shake+8); if(e.vt===HUMAN) buzz(45,'hard'); }
@@ -5922,6 +6141,8 @@ window.__hk={hs:function(){return HS;},net:function(){return NET;},setCam:functi
     springs:{level:QC().springs|0, maxLean:+players.reduce(function(m,p){ return p._spr?Math.max(m,Math.abs(p._spr[0])+Math.abs(p._spr[2])):m; },0).toFixed(3)},
     glErr:GLOK?gl.getError():0}; },
   stats:function(){return STATS;}, match:function(){return MATCH;}, ev:EV,
+  /* сеть: источник картинки шайбы у гостя, задержка интерполяции, RTT — для tools/smoke-lag.mjs */
+  netInfo:function(){ return {src:PDS.mode, pmode:PUCKP&&PUCKP.on?PUCKP.mode:null, D:Math.round(NETV.D*1000), rtt:Math.round(NETV.rtt||0), buf:NETV.buf.length}; },
   /* раскладка / подписи — для tools/smoke-tg.mjs */
   showFps:function(on){ setShowFps(on); }, fitPad:function(){ fitPadLabels(); }, T:function(k){ return T(k); },
   layoutTop:function(){ layoutTop(); },
