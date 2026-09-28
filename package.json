@@ -15,7 +15,8 @@
     "smoke:online": "node tools/smoke-online.mjs",
     "relay": "node tools/relay-mock.mjs 8787",
     "balance": "node tools/balance.mjs",
-    "smoke:tg": "node tools/smoke-tg.mjs && node tools/smoke-tg.mjs --browser webkit"
+    "smoke:tg": "node tools/smoke-tg.mjs && node tools/smoke-tg.mjs --browser webkit",
+    "smoke:quality": "node tools/smoke-quality.mjs && node tools/smoke-quality.mjs --browser webkit"
   },
   "devDependencies": {
     "playwright": "^1.55.0",

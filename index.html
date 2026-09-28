@@ -400,10 +400,63 @@ var W=900,H=460,DPR=1,PORTRAIT=false;
 
 /* ---------- уровни качества: 0 низкое, 1 среднее, 2 высокое ---------- */
 var QLEVEL=2, QAUTO=true;
-/* принудительный уровень качества ссылкой: ...game.html#q0 — удобно и для
-   слабых устройств, и для прогонов тестов */
-(function(){ var m=/[#?&]q([012])\b/.exec(location.hash+location.search);
-  if(m){ QLEVEL=+m[1]; QAUTO=false; } })();
+/* Откуда уровень: 'url' (#q0…#q2 в ссылке — тесты, не сохраняется), 'saved' (игрок выбрал
+   вручную — localStorage сразу, CloudStorage позже), 'device' (автовыбор по устройству). */
+var QSRC='device', QGUESS=null, QINFO=null;
+/* Динамическое разрешение — первая ступень автоподстройки: доля от dpr пресета, 0.75…1 */
+var DYN=1, DYN_MIN=0.75, DYN_STEP=0.0625;
+
+/* Сведения об устройстве для стартового выбора качества */
+function deviceInfo(){
+  var tg=(window.Telegram && window.Telegram.WebApp) || null, ua=navigator.userAgent||'';
+  var sw=(window.screen && screen.width)||innerWidth, sh=(window.screen && screen.height)||innerHeight;
+  var gpu='';
+  try{
+    var c=document.createElement('canvas'), g=c.getContext('webgl2')||c.getContext('webgl');
+    if(g){ var ext=g.getExtension('WEBGL_debug_renderer_info');
+      gpu=String(ext ? g.getParameter(ext.UNMASKED_RENDERER_WEBGL) : g.getParameter(g.RENDERER));
+      var lc=g.getExtension('WEBGL_lose_context'); if(lc) lc.loseContext(); }
+  }catch(e){}
+  return {platform:(tg && tg.platform)||'', ua:ua, touch:(navigator.maxTouchPoints||0)>0,
+          dpr:window.devicePixelRatio||1, sw:sw, sh:sh, cores:navigator.hardwareConcurrency||0,
+          mem:navigator.deviceMemory||0, gpu:gpu};
+}
+/* Стартовый уровень по устройству (чистая функция — её же гоняет отчёт по типичным устройствам).
+   Начинаем скромно: подняться автоподстройка успеет за пару секунд, а тормоза в первые
+   секунды на слабом телефоне заметны сразу. */
+function qualityGuess(d){
+  var gpu=(d.gpu||'').toLowerCase(), ua=d.ua||'', plat=d.platform||'';
+  var L=Math.max(d.sw,d.sh), S=Math.min(d.sw,d.sh);
+  if(/swiftshader|llvmpipe|software|basic render/.test(gpu)) return {level:0, reason:'программная отрисовка ('+d.gpu+')'};
+  var ios = plat==='ios' || /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && d.touch);
+  var android = plat==='android' || plat==='android_x' || /Android/.test(ua);
+  if(ios){
+    if(S>=744) return {level:2, reason:'iPad'};
+    if(L<=568) return {level:0, reason:'маленький iPhone (5s / SE 1-го поколения, A7–A9)'};
+    if(L<=667) return {level:1, reason:'iPhone 6–8 / SE 2–3 (A8–A15, по экрану не различить)'};
+    return {level:1, reason:'iPhone X и новее (A11+): старт со среднего, дальше автоподстройка'};
+  }
+  if(android){
+    var weakGpu=/mali-4|mali-t|mali-g(31|51|52|57)\b|adreno \(tm\) ([2-4]\d\d|50\d|51\d)|powervr (sgx|rogue ge)/.test(gpu);
+    var strongGpu=/adreno \(tm\) (6[4-9]\d|7\d\d|8\d\d)|mali-g(6[89]|7[1-9]|[89]\d|6[1-9]\d|7[1-9]\d)|xclipse|immortalis/.test(gpu);
+    if(weakGpu || (d.cores && d.cores<=4) || (d.mem && d.mem<=3)) return {level:0, reason:'слабый Android ('+(d.gpu||'GPU ?')+', ядер '+(d.cores||'?')+', ОЗУ '+(d.mem||'?')+' ГБ)'};
+    if(strongGpu && d.cores>=8) return {level:1, reason:'сильный Android ('+d.gpu+'): старт со среднего'};
+    return {level:0, reason:'Android без явных признаков силы: старт с низкого'};
+  }
+  var desktop = /tdesktop|macos|weba|webk|web$/.test(plat) || (!d.touch && !/Mobi/.test(ua));
+  if(desktop){
+    if(/intel.*(hd|uhd) graphics [2-6]\d\d\b|intel.*hd graphics$/.test(gpu)) return {level:1, reason:'компьютер со старой встроенной графикой'};
+    return {level:2, reason:'компьютер'};
+  }
+  return {level:1, reason:'неизвестное мобильное устройство'};
+}
+(function(){
+  var m=/[#?&]q([012])\b/.exec(location.hash+location.search);
+  if(m){ QLEVEL=+m[1]; QAUTO=false; QSRC='url'; return; }
+  var saved=null; try{ saved=localStorage.getItem('bvr_quality'); }catch(e){}
+  if(saved==='0'||saved==='1'||saved==='2'){ QLEVEL=+saved; QAUTO=false; QSRC='saved'; return; }
+  QINFO=deviceInfo(); QGUESS=qualityGuess(QINFO); QLEVEL=QGUESS.level; QAUTO=true; QSRC='device';
+})();
 /* skin — живые модели хоккеистов вместо простых фигур: ~10 тыс. треугольников
    на игрока, поэтому на слабых устройствах отключаем и держим кадр */
 /* Модели хоккеистов из уровней качества убраны намеренно: раньше на нижнем
@@ -476,7 +529,7 @@ function layout(){
   }catch(e){
     PORTRAIT = (W < H*0.95);
   }
-  DPR=Math.min(QC().dpr, window.devicePixelRatio||1);
+  DPR=Math.min(QC().dpr, window.devicePixelRatio||1)*(QAUTO?DYN:1);   /* динамическое разрешение только в «авто» */
   cv.width=Math.round(W*DPR); cv.height=Math.round(H*DPR);
   stickCv.style.cssText='position:absolute;left:0;top:0;width:'+W+'px;height:'+H+'px;pointer-events:none;z-index:5';
   stickCv.width=Math.round(W*DPR); stickCv.height=Math.round(H*DPR);
@@ -926,6 +979,13 @@ function setDifficulty(d, noSave){
   DIFF=d;
   if(!noSave && !TEST.ai) prefSet('difficulty', d);
 }
+/* качество графики из облака (выбор на другом устройстве); ссылка #q важнее */
+if(QSRC!=='url') prefGet('quality', function(v, src){
+  if(src!=='cloud') return;
+  if(v==='auto' && !QAUTO){ QSRC='device'; if(typeof setQuality==='function' && typeof GLOK!=='undefined') setQuality(QLEVEL,true); }
+  else if((v==='0'||v==='1'||v==='2') && (QAUTO || +v!==QLEVEL)){ QSRC='saved'; setQuality(+v,false); }
+  if(typeof paintOpts==='function') paintOpts();
+});
 /* индикатор FPS для игроков: по умолчанию выключен */
 var SHOWFPS=false;
 function setShowFps(on, noSave){
@@ -3984,8 +4044,36 @@ function glRebuildTextures(){
   glTexUpdate(TEX.board, buildBoardTex());
   glTexUpdate(TEX.crowd, buildCrowdTex());
 }
+/* Автоподстройка раз в 0.5 с по реальному fps (RT.ms — сглаженное время кадра по часам браузера).
+   1-я ступень — динамическое разрешение 0.75…1 (раз в секунду, вниз при fps<50, вверх после
+   3 с подряд при fps>57.5); 2-я — пресет, только когда разрешение упёрлось в край, с выдержкой
+   после каждой смены (иначе качество мигало на границе порога). Ручной выбор — не трогаем. */
+var RT={ms:0, last:0}, QA={t:0, pt:0, hold:0, up:0, warm:3};
+function qualityTick(fps){
+  if(!QAUTO){ if(DYN!==1){ DYN=1; layout(); } return; }
+  QA.hold=Math.max(0,QA.hold-0.5);
+  if(QA.warm>0){ QA.warm-=0.5; return; }          /* компиляция шейдеров и прочие рывки старта */
+  QA.t+=0.5;
+  if(QA.t>=1){
+    QA.t=0;
+    if(fps<50){
+      QA.up=0;
+      if(DYN>DYN_MIN+1e-3){ DYN=Math.max(DYN_MIN, DYN-DYN_STEP); layout(); return; }
+    } else if(fps>57.5 && DYN<1){
+      if(++QA.up>=3){ QA.up=0; DYN=Math.min(1, DYN+DYN_STEP); layout(); }
+      return;
+    } else QA.up=0;
+  }
+  QA.pt+=0.5;
+  if(QA.pt>=2.5 && QA.hold<=0){
+    QA.pt=0;
+    if(fps<34 && QLEVEL>0 && DYN<=DYN_MIN+1e-3){ setQuality(QLEVEL-1,true); QA.hold=6; }
+    else if(fps>58 && QLEVEL<2 && DYN>=1){ setQuality(QLEVEL+1,true); QA.hold=12; }
+  }
+}
 function setQuality(q,auto){
   if(q===QLEVEL && auto===QAUTO) return;
+  QA.warm=2;                                       /* пересборка текстур — рывок, его не считаем */
   var texChange=(q!==QLEVEL);
   QLEVEL=q; if(auto!==undefined) QAUTO=auto;
   if(texChange){
@@ -5159,6 +5247,8 @@ var legEl=document.getElementById('legend');
    заморозить игру (__hk.freeze) и прогнать ровно N кадров по 1/60 с
    (__hk.step) синхронно, без ожидания браузера. */
 function frame(now){
+  var raw=now-last;
+  if(raw>0 && raw<250) RT.ms = RT.ms>0 ? RT.ms*0.9+raw*0.1 : raw;    /* реальное время кадра (вкладка в фоне — пропуск) */
   var dt=Math.min(0.042,(now-last)/1000); last=now;
   if(!TEST.frozen) frameStep(dt);
   requestAnimationFrame(frame);
@@ -5176,18 +5266,7 @@ function frameStep(dt){
     layoutTop();
     document.getElementById('fps').textContent=f+' fps'+(padConnected?' · '+T('gamepad').toLowerCase():'')+' · '+T(['qLow','qMid','qHigh'][QLEVEL]);
     fT=0;fN=0;
-    qTimer+=0.5;
-    qHold=Math.max(0,qHold-0.5);
-    if(qTimer>2.5){
-      qTimer=0;
-      /* Пороги разведены, плюс выдержка после каждой смены: раньше кадр
-         колебался около одной границы и качество переключалось каждые
-         пару секунд — это и мигало на экране. */
-      if(QAUTO && qHold<=0){
-        if(fpsAvg<34 && QLEVEL>0){ setQuality(QLEVEL-1,true); qHold=6; }
-        else if(fpsAvg>58 && QLEVEL<2){ setQuality(QLEVEL+1,true); qHold=12; }
-      }
-    }
+    qualityTick(RT.ms>0 ? 1000/RT.ms : fpsAvg);
   }
 
   /* Сторож ориентации: если размер окна разошёлся с тем, под который считана
@@ -5355,9 +5434,10 @@ function paintOpts(){
     el.className='chip opt'+(on?' on':'');
     el.innerHTML=T(o[0])+'<br><small>'+T(o[2])+'</small>';
     el.addEventListener('click',function(){
-      if(o[1]===-1) setQuality(QLEVEL,true);
-      else setQuality(o[1],false);
-      paintOpts();
+      /* выбор игрока запоминается: «авто» — снова автоподстройка, уровень — фиксирован */
+      if(o[1]===-1){ setQuality(QLEVEL,true); DYN=1; QSRC='device'; prefSet('quality','auto'); }
+      else { setQuality(o[1],false); QSRC='saved'; prefSet('quality',String(o[1])); }
+      layout(); paintOpts();
     });
     qh.appendChild(el);
   });
@@ -5752,7 +5832,12 @@ window.__hk={hs:function(){return HS;},net:function(){return NET;},setCam:functi
   tex:function(n){return ({ice:buildIceTex,board:buildBoardTex,crowd:buildCrowdTex})[n]();},
   cam2:function(o){for(var k in o)cam[k]=o[k];},
   face:function(x,z){ state='face'; stateT=1.4; placeFaceoff(x,z); },
-  q:function(l,a){setQuality(l,a);}, cams:function(){return CAM_PRESETS;}, ql:function(){return [QLEVEL,QAUTO];}, gl:function(){return gl;}, dpr:function(){return DPR;},
+  q:function(l,a){setQuality(l,a);},
+  /* качество: уровень, авто, источник, стартовая оценка, динамическое разрешение */
+  qInfo:function(){ return {level:QLEVEL, auto:QAUTO, src:QSRC, guess:QGUESS, dyn:DYN, dpr:+DPR.toFixed(3), fps:RT.ms?+(1000/RT.ms).toFixed(1):0, info:QINFO}; },
+  qGuessFor:function(d){ return qualityGuess(d); },
+  /* прогнать автоподстройку n раз по 0.5 с при заданном fps (тест логики без настоящих тормозов) */
+  qTickSim:function(fps,n){ QA.warm=0; for(var i=0;i<(n||1);i++) qualityTick(fps); return {level:QLEVEL, dyn:DYN}; }, cams:function(){return CAM_PRESETS;}, ql:function(){return [QLEVEL,QAUTO];}, gl:function(){return gl;}, dpr:function(){return DPR;},
   lt:function(p){lastTouch=p;}, pz:function(){return prevZone;},
   lang:function(c){ LANG=c; try{localStorage.setItem('bvr_lang',c);}catch(e){}
                     paintLang(); paintOpts(); paintChips(); },
@@ -5828,7 +5913,7 @@ window.__hk={hs:function(){return HS;},net:function(){return NET;},setCam:functi
     finally{ TEST.skipRender=false; }
     return n; },
   /* сводка для smoke-теста */
-  snap:function(){ return {state:state, clock:+clock.toFixed(2), score:score.slice(), q:QLEVEL,
+  snap:function(){ return {state:state, clock:+clock.toFixed(2), score:score.slice(), q:QLEVEL, qsrc:QSRC, dyn:DYN,
     fps:Math.round(fpsAvg), gl:GLOK, initErr:INITERR, skin:!!HD.ok,
     puck:{x:+puck.x.toFixed(2), z:+puck.z.toFixed(2), v:+Math.hypot(puck.vx,puck.vz).toFixed(2)},
     shots:STATS.teams[0].shots+STATS.teams[1].shots, passes:STATS.teams[0].passes+STATS.teams[1].passes,

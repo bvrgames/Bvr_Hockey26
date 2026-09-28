@@ -40,11 +40,12 @@ for (const name of browsers) {
     if (opt('inject')) await page.evaluate(opt('inject'));
 
     // ---- real-time play: rendering, fps, puck actually moves
-    let path = 0, prev = boot.puck, minFps = 999;
+    let path = 0, prev = boot.puck, minFps = 999, leanMax = 0;
     for (let i = 0; i < REAL; i++) {
       await page.waitForTimeout(1000);
       const s = await page.evaluate('__hk.snap()');
       path += Math.hypot(s.puck.x - prev.x, s.puck.z - prev.z); prev = s.puck;
+      if (s.springs) leanMax = Math.max(leanMax, s.springs.maxLean);   // springs relax during goals / faceoffs: track the peak
       if (i >= 2) minFps = Math.min(minFps, s.fps);   // the first seconds include shader warm-up
     }
     const real = await page.evaluate('__hk.snap()');
@@ -70,8 +71,8 @@ for (const name of browsers) {
     if (!(end.ice && end.ice.wear > 0 && end.ice.wear <= 1)) fails.push(`ice wear out of range: ${end.ice && end.ice.wear}`);
     if (end.glErr) fails.push(`WebGL error 0x${end.glErr.toString(16)}`);
     // secondary animation (phase D): springs move when the quality level has them, and stay moderate
-    if (end.springs && end.springs.level > 0 && !(end.springs.maxLean > 0.005)) fails.push('springs enabled but no player leans');
-    if (end.springs && end.springs.maxLean > 0.6) fails.push(`springs too strong: ${end.springs.maxLean} rad`);
+    if (end.springs && end.springs.level > 0 && !(leanMax > 0.005)) fails.push('springs enabled but no player leaned during the whole real-time run');
+    if (leanMax > 0.6) fails.push(`springs too strong: ${leanMax} rad`);
     // match statistics are built only from bus events, so they must agree with the game state
     const st = end.stats || {};
     const sum = (k) => (st[k] ? st[k][0] + st[k][1] : 0);
