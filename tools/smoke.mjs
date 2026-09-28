@@ -65,6 +65,10 @@ for (const name of browsers) {
     await page.waitForTimeout(500);
     const end = await page.evaluate('__hk.snap()');
     if (end.shots + end.passes === 0) fails.push('no shot or pass in the whole run — AI is stuck?');
+    // ice (phase C): marks are painted on the GPU, the ice wears as the match goes on, and WebGL stays error-free
+    if (!(end.ice && end.ice.strokes > 0)) fails.push('no skate marks painted on the ice');
+    if (!(end.ice && end.ice.wear > 0 && end.ice.wear <= 1)) fails.push(`ice wear out of range: ${end.ice && end.ice.wear}`);
+    if (end.glErr) fails.push(`WebGL error 0x${end.glErr.toString(16)}`);
     // match statistics are built only from bus events, so they must agree with the game state
     const st = end.stats || {};
     const sum = (k) => (st[k] ? st[k][0] + st[k][1] : 0);
@@ -82,7 +86,7 @@ for (const name of browsers) {
 
     console.log(`\n[${name}] ${((Date.now() - t0) / 1000).toFixed(1)} s · state ${end.state} · clock ${end.clock} · score ${end.score.join(':')}` +
       ` · q${end.q} · min fps ${minFps === 999 ? '?' : minFps} · puck path ${path.toFixed(0)} m · shots ${end.shots} · passes ${end.passes}` +
-      ` · step ${frames} frames = ${dClock.toFixed(2)} s`);
+      ` · step ${frames} frames = ${dClock.toFixed(2)} s · ice wear ${end.ice && end.ice.wear} strokes ${end.ice && end.ice.strokes}`);
     const row = (k) => `${k} ${st[k] ? st[k].join(':') : '-'}`;
     console.log('  stats: ' + ['shots', 'sog', 'goals', 'passes', 'passesDone', 'saves', 'hits', 'pokes', 'takeaways', 'penalties', 'posts'].map(row).join(' · ') +
       ` · faceoffs ${st.faceoffs} · events ${st.events}`);

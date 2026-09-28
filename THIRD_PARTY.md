@@ -10,6 +10,7 @@ Used in BVR Hockey 26:
 |---|---|
 | `tools/play.mjs`, `tools/smoke.mjs`, `tools/browser.mjs` | structure of the scripted headless play-through (`until` / `wait` / `eval` / `shot` steps), the smoke-test idea of booting with `?autostart&autopilot` and failing on console / page errors. Rewritten for Playwright (Chromium + WebKit) |
 | `index.html` — `EV` event bus, `docs/EVENTS.md` | the pattern of a tiny `on` / `emit` bus (`on` returns an unsubscribe function) that gameplay emits into and FX / HUD / audio subscribe to, and documenting every event as a name · payload · emitter table (INKWAVE `src/core/ctx.js`, `docs/EVENTS.md`). Payloads, event set, network relay and statistics are our own |
+| `index.html` — ice marks (`MARKS`, `markStroke`, `marksFlush`) | texture-space painting from INKWAVE `src/world/paint.js`: strokes are drawn as quads straight into a render-target texture in one draw call per frame, with the stroke shape evaluated as an SDF in the fragment shader (no CPU readback). Written anew for raw WebGL2; capsule shape, snow grain, wear model are our own |
 | `index.html` — `TEST` block, `__hk.freeze / unfreeze / step` | URL flags `?autostart` / `?autopilot` and deterministic freeze + fixed-60 Hz stepping for audits; the seeded RNG is mulberry32 as in INKWAVE's `src/core/ctx.js` |
 
 MIT License text:

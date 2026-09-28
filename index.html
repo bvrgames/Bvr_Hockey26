@@ -403,7 +403,8 @@ var QLEVEL=2, QAUTO=true;
    уровне они подменялись простыми фигурами, и при автоподстройке качества
    персонажи прыгали туда-обратно прямо посреди матча. Теперь модели всегда
    одни и те же, а качеством крутим только свет, тени и разрешение. */
-var QCFG=[{dpr:1.00, crowd:512,  ice:1024, board:2048, shadow:false, ssize:512,  spray:0.0, refl:false, marks:false},
+/* следы на льду теперь на GPU и дёшевы — включены на всех уровнях */
+var QCFG=[{dpr:1.00, crowd:512,  ice:1024, board:2048, shadow:false, ssize:512,  spray:0.0, refl:false, marks:true },
           {dpr:1.50, crowd:768,  ice:1536, board:3072, shadow:true,  ssize:768,  spray:0.5, refl:true,  marks:true },
           {dpr:2.00, crowd:1024, ice:2048, board:4096, shadow:true,  ssize:1280, spray:1.0, refl:true,  marks:true }];
 function QC(){ return QCFG[QLEVEL]; }
@@ -2634,13 +2635,6 @@ function sim(dt){
     humanMoveIntegrate(p, ax, az, maxs, accel, dt);
     var sp=p.spd;
     if(sp>5.6&&Math.random()<0.32*QC().spray) addSpray(p);
-    if(GLOK && QC().marks && sp>2.2 && state==='play'){
-      var px0=p._mx, pz0=p._mz;
-      if(px0!==undefined && (Math.abs(p.x-px0)+Math.abs(p.z-pz0))>0.16){
-        addMark(px0,pz0,p.x,p.z, clamp(1.3+sp*0.12,1.3,3.0), clamp(0.10+sp*0.016,0.10,0.26));
-        p._mx=p.x; p._mz=p.z;
-      } else if(px0===undefined){ p._mx=p.x; p._mz=p.z; }
-    }
     for(var q=0;q<players.length;q++){
       if(q===k) continue;
       var o2=players[q];
@@ -3447,68 +3441,162 @@ function glTexUpdate(t,canvas){
 /* ============================================================
    СЛЕДЫ ОТ КОНЬКОВ
    ============================================================ */
-var MARKS={cv:null, g:null, tex:null, dirty:false, t:0,
-           x0:0,y0:0,x1:0,y1:0, W:1024, H:512};
+/* Следы рисуются на GPU прямо в текстуру (render target): каждый штрих —
+   прямоугольник с мягкой «капсулой» в фрагментном шейдере, все штрихи кадра —
+   одним draw call. Раньше — Canvas2D + getImageData + texSubImage2D раз в
+   1/6 с: чтение из видеопамяти на WebKit/iPhone одна из самых дорогих
+   операций («GPU stall due to ReadPixels»). Техника — texture-space painting
+   из INKWAVE (src/world/paint.js, Jayden Davis, MIT) — см. THIRD_PARTY.md.
+   Текстура покрывает площадку: x ∈ [−RL, RL] → u, z ∈ [−RW, RW] → v.
+   kind 0 — след лезвия, 1 — снег/царапина (торможение, бросок, падение). */
+var MARKS={fbo:null, tex:null, prog:null, vao:null, buf:null, U:{},
+           W:1536, H:768, MAXQ:768, q:null, n:0, strokes:0, cleared:true};
+var MARK_COL=[0.72,0.80,0.90];
+var MARK_VS=['#version 300 es',
+'layout(location=0) in vec2 aPos;',   /* клип-пространство текстуры */
+'layout(location=1) in vec2 aL;',     /* координаты внутри штриха, м */
+'layout(location=2) in vec4 aP;',     /* полудлина, полуширина, альфа, вид */
+'out vec2 vL; out vec4 vP;',
+'void main(){ vL=aL; vP=aP; gl_Position=vec4(aPos,0.0,1.0); }'].join('\n');
+var MARK_FS=['#version 300 es','precision highp float;',
+'in vec2 vL; in vec4 vP; out vec4 frag;',
+'uniform vec3 uCol;',
+'float hsh(vec2 p){ return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453); }',
+'void main(){',
+'  vec2 q=vec2(max(abs(vL.x)-vP.x,0.0), vL.y);',
+'  float d=length(q), hw=vP.y;',
+'  float a=vP.z*(1.0-smoothstep(hw*0.45,hw,d));',
+'  vec3 c=uCol;',
+'  if(vP.w>0.5){ a*=0.45+0.55*hsh(floor(gl_FragCoord.xy*0.7)); c=mix(uCol,vec3(0.93,0.96,1.0),0.6); }',
+'  if(a<0.004) discard;',
+'  frag=vec4(c,a);',
+'}'].join('\n');
 function marksInit(){
-  MARKS.cv=mkCanvas(MARKS.W,MARKS.H);
-  MARKS.g=MARKS.cv.getContext('2d');
-  MARKS.g.clearRect(0,0,MARKS.W,MARKS.H);
   MARKS.tex=gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D,MARKS.tex);
-  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);
-  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,MARKS.cv);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,MARKS.W,MARKS.H,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
-  MARKS.dirty=false;
+  MARKS.fbo=gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER,MARKS.fbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,MARKS.tex,0);
+  var ok=gl.checkFramebufferStatus(gl.FRAMEBUFFER)===gl.FRAMEBUFFER_COMPLETE;
+  gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+  if(!ok){ MARKS.tex=null; MARKS.fbo=null; return; }
+  var p=gl.createProgram();
+  gl.attachShader(p,glCompile(MARK_VS,gl.VERTEX_SHADER));
+  gl.attachShader(p,glCompile(MARK_FS,gl.FRAGMENT_SHADER));
+  gl.linkProgram(p);
+  if(!gl.getProgramParameter(p,gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  MARKS.prog=p; MARKS.U.uCol=gl.getUniformLocation(p,'uCol');
+  MARKS.q=new Float32Array(MARKS.MAXQ*6*8);
+  MARKS.vao=gl.createVertexArray(); gl.bindVertexArray(MARKS.vao);
+  MARKS.buf=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,MARKS.buf);
+  gl.bufferData(gl.ARRAY_BUFFER,MARKS.q.byteLength,gl.DYNAMIC_DRAW);
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0,2,gl.FLOAT,false,32,0);
+  gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1,2,gl.FLOAT,false,32,8);
+  gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2,4,gl.FLOAT,false,32,16);
+  gl.bindVertexArray(null);
+  marksClear();
 }
+/* заливка льда: чистая текстура (старт матча) */
 function marksClear(){
-  if(!MARKS.g) return;
-  MARKS.g.clearRect(0,0,MARKS.W,MARKS.H);
-  MARKS.dirty=true; MARKS.x0=0; MARKS.y0=0; MARKS.x1=MARKS.W; MARKS.y1=MARKS.H;
+  MARKS.n=0; MARKS.strokes=0; MARKS.cleared=true;
+  if(!MARKS.fbo) return;
+  gl.bindFramebuffer(gl.FRAMEBUFFER,MARKS.fbo);
+  gl.viewport(0,0,MARKS.W,MARKS.H);
+  /* цвет следа с нулевой альфой: неперемноженная альфа в шейдере льда не темнит бледные следы */
+  gl.clearColor(MARK_COL[0],MARK_COL[1],MARK_COL[2],0); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+  gl.viewport(0,0,cv.width,cv.height);
 }
-function markPos(x,z){
-  return [ (x+RL)/(2*RL)*MARKS.W, (z+RW)/(2*RW)*MARKS.H ];
-}
-/* один штрих конька */
-function addMark(x0,z0,x1,z1,w,a){
-  if(!MARKS.g) return;
-  var A=markPos(x0,z0), B=markPos(x1,z1);
-  var g=MARKS.g;
-  g.strokeStyle='rgba(176,196,222,'+a+')';
-  g.lineWidth=w; g.lineCap='round';
-  g.beginPath(); g.moveTo(A[0],A[1]); g.lineTo(B[0],B[1]); g.stroke();
-  var pad=w+3;
-  var lx0=Math.min(A[0],B[0])-pad, ly0=Math.min(A[1],B[1])-pad;
-  var lx1=Math.max(A[0],B[0])+pad, ly1=Math.max(A[1],B[1])+pad;
-  if(!MARKS.dirty){ MARKS.x0=lx0; MARKS.y0=ly0; MARKS.x1=lx1; MARKS.y1=ly1; MARKS.dirty=true; }
-  else {
-    MARKS.x0=Math.min(MARKS.x0,lx0); MARKS.y0=Math.min(MARKS.y0,ly0);
-    MARKS.x1=Math.max(MARKS.x1,lx1); MARKS.y1=Math.max(MARKS.y1,ly1);
+/* штрих-капсула от (x0,z0) до (x1,z1): ширина в метрах, альфа, вид */
+function markStroke(x0,z0,x1,z1,wm,a,kind){
+  if(!MARKS.q || MARKS.n>=MARKS.MAXQ) return;
+  var dx=x1-x0, dz=z1-z0, L=Math.hypot(dx,dz);
+  var ux=L>1e-4?dx/L:1, uz=L>1e-4?dz/L:0, vx=-uz, vz=ux;
+  var hl=L*0.5, hw=Math.max(0.02,wm*0.5), ex=hl+hw, ey=hw;
+  var cx=(x0+x1)*0.5, cz=(z0+z1)*0.5, Q=MARKS.q, o=MARKS.n*48;
+  var cs=[[-1,-1],[1,-1],[1,1],[-1,-1],[1,1],[-1,1]];
+  for(var i=0;i<6;i++){
+    var sx=cs[i][0], sy=cs[i][1];
+    var wx=cx+ux*ex*sx+vx*ey*sy, wz=cz+uz*ex*sx+vz*ey*sy;
+    Q[o++]=wx/RL; Q[o++]=wz/RW; Q[o++]=ex*sx; Q[o++]=ey*sy;
+    Q[o++]=hl; Q[o++]=hw; Q[o++]=a; Q[o++]=kind||0;
   }
+  MARKS.n++; MARKS.strokes++;
 }
-/* заливаем в видеопамять пачкой */
-function marksFlush(dt){
-  if(!MARKS.tex) return;
-  MARKS.t-=dt;
-  if(!MARKS.dirty || MARKS.t>0) return;
-  MARKS.t=1/6;
-  var x0=Math.max(0,Math.floor(MARKS.x0)), y0=Math.max(0,Math.floor(MARKS.y0));
-  var x1=Math.min(MARKS.W,Math.ceil(MARKS.x1)), y1=Math.min(MARKS.H,Math.ceil(MARKS.y1));
-  var w=x1-x0, h=y1-y0;
-  MARKS.dirty=false;
-  if(w<=0||h<=0) return;
-  gl.bindTexture(gl.TEXTURE_2D,MARKS.tex);
-  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);
-  if(w*h > MARKS.W*MARKS.H*0.45){
-    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,MARKS.cv);
-  } else {
-    var sub=MARKS.g.getImageData(x0,y0,w,h);
-    gl.texSubImage2D(gl.TEXTURE_2D,0,x0,y0,w,h,gl.RGBA,gl.UNSIGNED_BYTE,
-                     new Uint8Array(sub.data.buffer));
+/* старый интерфейс: ширина в пикселях текстуры 1024 по 60 м (≈17 px/м) */
+function addMark(x0,z0,x1,z1,w,a){ markStroke(x0,z0,x1,z1,w/17,a,0); }
+/* все штрихи кадра — в текстуру, одним вызовом */
+function marksFlush(){
+  if(!MARKS.fbo || !MARKS.n) return;
+  var dt=gl.isEnabled(gl.DEPTH_TEST), cf=gl.isEnabled(gl.CULL_FACE);
+  gl.bindFramebuffer(gl.FRAMEBUFFER,MARKS.fbo);
+  gl.viewport(0,0,MARKS.W,MARKS.H);
+  gl.disable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE);
+  gl.enable(gl.BLEND);
+  gl.blendFuncSeparate(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA,gl.ONE,gl.ONE_MINUS_SRC_ALPHA);
+  gl.useProgram(MARKS.prog);
+  gl.uniform3f(MARKS.U.uCol,MARK_COL[0],MARK_COL[1],MARK_COL[2]);
+  gl.bindVertexArray(MARKS.vao);
+  gl.bindBuffer(gl.ARRAY_BUFFER,MARKS.buf);
+  gl.bufferSubData(gl.ARRAY_BUFFER,0,MARKS.q,0,MARKS.n*48);
+  gl.drawArrays(gl.TRIANGLES,0,MARKS.n*6);
+  gl.bindVertexArray(null);
+  gl.disable(gl.BLEND);
+  if(dt) gl.enable(gl.DEPTH_TEST); if(cf) gl.enable(gl.CULL_FACE);
+  gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+  gl.viewport(0,0,cv.width,cv.height);
+  MARKS.n=0; MARKS.cleared=false;
+}
+
+/* ---------- кто что оставляет на льду (кадр, не симуляция: работает и у гостя) ---------- */
+var ICE={wear:0};
+function marksTick(dt){
+  if(!MARKS.fbo || !QC().marks || state!=='play' || dt<=0) return;
+  for(var i=0;i<players.length;i++){
+    var p=players[i]; if(p.boxed) continue;
+    var sp=p.spd||0;
+    /* сглаженное замедление, м/с² — признак торможения «плугом» */
+    var dec=((p._msp===undefined?sp:p._msp)-sp)/dt; p._msp=sp;
+    p._mdec=(p._mdec||0)*0.8+dec*0.2;
+    var px0=p._mx, pz0=p._mz;
+    if(px0===undefined){ p._mx=p.x; p._mz=p.z; continue; }
+    var dx=p.x-px0, dz=p.z-pz0, L=Math.abs(dx)+Math.abs(dz);
+    if(L<0.14) continue;
+    if(L>3){ p._mx=p.x; p._mz=p.z; continue; }        /* телепорт (вбрасывание, штраф) */
+    if(p.down>0){
+      markStroke(px0,pz0,p.x,p.z, 0.55, 0.10, 1);      /* скользит упавший */
+    } else if(p.goalie){
+      if(sp>1.0) markStroke(px0,pz0,p.x,p.z, 0.28, 0.06, 1);   /* вратарь стирает пятак */
+    } else if(p._mdec>7.5 && sp>1.2){
+      /* торможение: широкий снежный след + снежная пыль */
+      markStroke(px0,pz0,p.x,p.z, clamp(0.30+p._mdec*0.012,0.30,0.55), clamp(0.10+p._mdec*0.008,0.10,0.24), 1);
+      if(QC().spray>0 && Math.random()<0.5) addSpray(p);
+    } else if(sp>2.2){
+      /* катание: два лезвия */
+      var L2=Math.hypot(dx,dz)||1, nx=-dz/L2*0.11, nz=dx/L2*0.11;
+      var w=clamp(0.07+sp*0.006,0.07,0.13), a=clamp(0.10+sp*0.016,0.10,0.26);
+      markStroke(px0+nx,pz0+nz,p.x+nx,p.z+nz, w, a, 0);
+      markStroke(px0-nx,pz0-nz,p.x-nx,p.z-nz, w, a*0.8, 0);
+    }
+    p._mx=p.x; p._mz=p.z;
   }
+  /* лёд тускнеет к концу периода: время матча + сколько на нём наезжено */
+  var tf = MATCH.len>0 ? clamp(MATCH.played/MATCH.len,0,1) : 0;
+  ICE.wear = 0.75*tf + 0.25*clamp(MARKS.strokes/60000,0,1);   /* за матч 3 мин ≈ 70 тыс. штрихов */
 }
+/* бросок: клюшка царапает лёд по направлению броска */
+EV.on('shot', function(e){
+  var p=players[e.p]; if(!p || !MARKS.fbo || !QC().marks) return;
+  var sx=p.x+Math.cos(p.yaw)*0.85, sz=p.z+Math.sin(p.yaw)*0.85;
+  var gx=attackDir(p.team)*GOAL_X, dx=gx-sx, dz=-sz, L=Math.hypot(dx,dz)||1;
+  markStroke(sx-dx/L*0.25, sz-dz/L*0.25, sx+dx/L*0.45, sz+dz/L*0.45, 0.10, 0.28, 1);
+});
+EV.on('match:start', function(){ ICE.wear=0; if(typeof GLOK!=='undefined' && GLOK) marksClear(); });
 
 /* Подвесное табло убрано: на игровой камере его почти не видно, а стоило оно
    холста 512x256 с перерисовкой и загрузкой в видеопамять при каждом изменении
@@ -3852,7 +3940,7 @@ function drawGeo(g,model,opt){
   gl.uniformMatrix4fv(U.uM,false,model);
   gl.uniform1f(U.uUseTex,opt.tex?1:0);
   gl.uniform1f(U.uBoost,opt.boost||0);
-  gl.uniform1f(U.uAlpha, REFLPASS ? (opt.alpha===undefined?REFL_A:opt.alpha*REFL_A)
+  gl.uniform1f(U.uAlpha, REFLPASS ? (opt.alpha===undefined?REFL_A:opt.alpha*REFL_A)*(1-0.6*ICE.wear)
                                   : (opt.alpha===undefined?1:opt.alpha));
   var mt=MAT[opt.mat||'flat'];
   gl.uniform1f(U.uRough, opt.rough!==undefined?opt.rough:mt.r);
@@ -3962,7 +4050,8 @@ function render(){
     gl.stencilOp(gl.KEEP,gl.KEEP,gl.REPLACE);
     gl.stencilMask(0xff);
   }
-  drawAt(GEO.ice, 0,0,0,0,{tex:TEX.ice, mat:'ice'});
+  /* износ: лёд матовеет и хуже отражает */
+  drawAt(GEO.ice, 0,0,0,0,{tex:TEX.ice, mat:'ice', rough:MAT.ice.r+0.24*ICE.wear, envK:MAT.ice.e*(1-0.45*ICE.wear)});
 
   if(REFL){
     /* отражение живёт в своём слое глубины и только внутри площадки */
@@ -3983,7 +4072,7 @@ function render(){
   if(QC().marks && MARKS.tex){
     gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
     gl.depthMask(false);
-    drawAt(GEO.ice, 0,0.004,0,0,{tex:MARKS.tex, mat:'ice', alpha:0.78, envK:0});
+    drawAt(GEO.ice, 0,0.004,0,0,{tex:MARKS.tex, mat:'ice', alpha:0.72+0.2*ICE.wear, envK:0, rough:0.9});
     gl.depthMask(true); gl.disable(gl.BLEND);
   }
   drawAt(GEO.boards, 0,0,0,0,{tex:TEX.board, mat:'boards'});
@@ -4540,7 +4629,7 @@ function skinDraw(p, row, teamCol, opt){
   gl.uniform1f(U.uRough,mt.r); gl.uniform1f(U.uMetal,mt.m);
   gl.uniform1f(U.uEnvK,mt.e===undefined?1:mt.e);
   gl.uniform1f(U.uBoost,opt.boost||0);
-  gl.uniform1f(U.uAlpha,REFLPASS?REFL_A:1.0);
+  gl.uniform1f(U.uAlpha,REFLPASS?REFL_A*(1-0.6*ICE.wear):1.0);
   gl.uniform1f(U.uTintK,0);
   gl.uniform1f(U.uFlipN,MIRROR?-1:1);
   gl.uniform3f(U.uCam,cam.x,cam.y,cam.z);
@@ -4864,7 +4953,7 @@ function frameStep(dt){
     uiIdle+=dt;
     if(!_padDim && uiIdle>8){ _padDim=true; padFade(true); }
   }
-  if(GLOK){ marksFlush(dt); boardUpdate(); }
+  if(GLOK){ marksTick(dt); marksFlush(); boardUpdate(); }
 
   /* всплывающая плашка тактики */
   if(toastT>0){
@@ -5438,10 +5527,13 @@ window.__hk={hs:function(){return HS;},net:function(){return NET;},setCam:functi
     return {size:S, fbStatus:st===gl.FRAMEBUFFER_COMPLETE, on:SHADOW.on};
   },
   dbg:function(v){DEBUG_MODE=v;},
-  marks:function(){ if(!MARKS.g) return -1;
-    var im=MARKS.g.getImageData(0,0,MARKS.W,MARKS.H).data, n=0;
-    for(var i=3;i<im.length;i+=4) if(im[i]>4) n++;
-    return n; },
+  /* число штрихов с последней заливки; ice() — износ и сколько пикселей закрашено (readPixels — только для тестов) */
+  marks:function(){ return MARKS.fbo?MARKS.strokes:-1; },
+  ice:function(px){ var o={wear:+ICE.wear.toFixed(3), strokes:MARKS.strokes};
+    if(px && MARKS.fbo){ var b=new Uint8Array(MARKS.W*MARKS.H*4); gl.bindFramebuffer(gl.FRAMEBUFFER,MARKS.fbo);
+      gl.readPixels(0,0,MARKS.W,MARKS.H,gl.RGBA,gl.UNSIGNED_BYTE,b); gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+      var n=0; for(var i=3;i<b.length;i+=4) if(b[i]>4) n++; o.px=n; }
+    return o; },
   camLock:function(o){ if(o===null){CAMLOCK=false;return;} CAMLOCK=true; for(var k in o) cam[k]=o[k]; },
   gfx:function(o){ if(o){ if(o.ssize!==undefined){SHADOW.size=o.ssize;buildShadow();}
                           if(o.exp!==undefined)EXPOSURE=o.exp;
@@ -5472,7 +5564,8 @@ window.__hk={hs:function(){return HS;},net:function(){return NET;},setCam:functi
     fps:Math.round(fpsAvg), gl:GLOK, initErr:INITERR, skin:!!HD.ok,
     puck:{x:+puck.x.toFixed(2), z:+puck.z.toFixed(2), v:+Math.hypot(puck.vx,puck.vz).toFixed(2)},
     shots:STATS.teams[0].shots+STATS.teams[1].shots, passes:STATS.teams[0].passes+STATS.teams[1].passes,
-    stats:statsBrief(), autopilot:autoPilot(), errors:TEST.errors.length}; },
+    stats:statsBrief(), autopilot:autoPilot(), errors:TEST.errors.length,
+    ice:{wear:+ICE.wear.toFixed(3), strokes:MARKS.strokes}, glErr:GLOK?gl.getError():0}; },
   stats:function(){return STATS;}, match:function(){return MATCH;}, ev:EV,
   /* хост: отправить снимок сейчас (с ожидающими событиями) — для тестов после freeze */
   netSnap:function(){ if(NET.on && NET.role==='host') netSnap(); }}; 

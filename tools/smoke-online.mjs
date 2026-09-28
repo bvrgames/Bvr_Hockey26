@@ -48,11 +48,12 @@ try {
   if (Gs.m.id !== H.m.id) fails.push(`match id differs: host ${H.m.id} guest ${Gs.m.id}`);
   if (Gs.m.role !== 'guest' || Gs.m.mode !== 'online') fails.push(`guest match meta ${Gs.m.mode}/${Gs.m.role}`);
   if (!(Gs.net.seen > 0)) fails.push('guest received no events');
+  if (!(Gs.s.ice && Gs.s.ice.strokes > 0)) fails.push('guest: no skate marks on the ice (marks are generated per frame from player positions)');
   const keys = ['shots', 'sog', 'goals', 'passes', 'passesDone', 'saves', 'hits', 'pokes', 'takeaways', 'penalties', 'posts'];
   const diff = keys.filter((k) => H.s.stats[k][0] !== Gs.s.stats[k][0] || H.s.stats[k][1] !== Gs.s.stats[k][1]);
   if (diff.length) fails.push('guest stats ≠ host stats: ' + diff.map((k) => `${k} ${H.s.stats[k]} vs ${Gs.s.stats[k]}`).join(', '));
   if (H.s.stats.faceoffs !== Gs.s.stats.faceoffs) fails.push(`faceoffs ${H.s.stats.faceoffs} vs ${Gs.s.stats.faceoffs}`);
-  console.log(`[${name} online] ${REAL} s · events host ${H.s.stats.events} / guest ${Gs.s.stats.events} (last seq seen ${Gs.net.seen})`);
+  console.log(`[${name} online] ${REAL} s · events host ${H.s.stats.events} / guest ${Gs.s.stats.events} (last seq seen ${Gs.net.seen}) · ice strokes host ${H.s.ice.strokes} / guest ${Gs.s.ice.strokes}`);
   console.log('  stats: ' + keys.map((k) => `${k} ${H.s.stats[k].join(':')}`).join(' · '));
 
   // end the match on the host: both sides must build a summary with the same score
