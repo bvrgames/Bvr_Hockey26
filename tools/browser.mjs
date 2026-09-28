@@ -15,10 +15,10 @@ const ARGS = {
 };
 
 // Fake Telegram.WebApp for layout tests (Bot API 8.0: full screen, safe areas, CloudStorage in memory).
-export function fakeTelegram({ fullscreen = true, safe = {}, content = {} } = {}) {
+export function fakeTelegram({ fullscreen = true, safe = {}, content = {}, lang = 'ru', platform = 'ios' } = {}) {
   const ins = (o) => JSON.stringify({ top: o.top || 0, right: o.right || 0, bottom: o.bottom || 0, left: o.left || 0 });
   return `window.Telegram={WebApp:(function(){ var store={}; var noop=function(){};
-    return { initData:'query_id=test&user=%7B%22id%22%3A1%7D&auth_date=1&hash=test', initDataUnsafe:{}, version:'8.0', platform:'ios',
+    return { initData:'query_id=test&user=%7B%22id%22%3A1%7D&auth_date=1&hash=test', initDataUnsafe:{user:{id:1, language_code:'${lang}'}}, version:'8.0', platform:'${platform}',
       isFullscreen:${!!fullscreen}, safeAreaInset:${ins(safe)}, contentSafeAreaInset:${ins(content)}, viewportStableHeight:0,
       isVersionAtLeast:function(v){ return parseFloat(v)<=8.0; },
       ready:noop, expand:noop, disableVerticalSwipes:noop, setHeaderColor:noop, setBackgroundColor:noop,

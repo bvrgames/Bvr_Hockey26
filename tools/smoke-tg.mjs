@@ -13,10 +13,15 @@ const args = process.argv.slice(2);
 const opt = (k, d) => { const i = args.indexOf('--' + k); return i >= 0 ? args[i + 1] : d; };
 const browserName = opt('browser', 'chromium');
 const port = +opt('port', 8498);
+// tgLang = Telegram's own UI language (width of its "Close" button), independent of the game language
 const SETUPS = [
-  { name: 'land', w: 844, h: 390, safe: { left: 47, right: 47, bottom: 21 }, content: { top: 46 } },
-  { name: 'port', w: 390, h: 844, safe: { top: 47, bottom: 34 }, content: { top: 90 } },
+  { name: 'land', tgLang: 'ru', w: 844, h: 390, safe: { left: 47, right: 47, bottom: 21 }, content: { top: 46 } },
+  { name: 'land-tgen', tgLang: 'en', w: 844, h: 390, safe: { left: 47, right: 47, bottom: 21 }, content: { top: 46 } },
+  { name: 'land-se', tgLang: 'ru', w: 667, h: 375, safe: {}, content: { top: 46 } },          // iPhone SE-size landscape, no notch
+  { name: 'port', tgLang: 'ru', w: 390, h: 844, safe: { top: 47, bottom: 34 }, content: { top: 90 } },
 ];
+// Telegram's buttons as drawn in the test — measured-ish real widths, NOT the game's estimate (the game must keep clear)
+const CLOSE_W = { ru: 100, en: 76, id: 76 }, RIGHT_W = 96;
 const LANGS = ['ru', 'en', 'id'];
 const PAD_KEYS = { bA: ['padA1', 'padA2'], bB: ['padB1', 'padB2'], bX: ['padX1', 'padX2'], bY: ['padY1', 'padY2'], bRT: ['hRT'] };
 
@@ -25,7 +30,8 @@ mkdirSync('shots/ui', { recursive: true });
 const fails = [];
 
 for (const S of SETUPS) {
-  const g = await openGame(browserName, { w: S.w, h: S.h, mobile: true, tg: fakeTelegram({ fullscreen: true, safe: S.safe, content: S.content }) });
+  const g = await openGame(browserName, { w: S.w, h: S.h, mobile: true, tg: fakeTelegram({ fullscreen: true, safe: S.safe, content: S.content, lang: S.tgLang }) });
+  const isPort = S.name.startsWith('port');
   const { page } = g;
   try {
     await page.goto(`http://127.0.0.1:${port}/index.html?autostart=120&autopilot&seed=4`, { waitUntil: 'load', timeout: 120000 });
@@ -34,12 +40,12 @@ for (const S of SETUPS) {
     if (env.band !== S.content.top) fails.push(`${S.name}: game sees contentSafeAreaInset.top=${env.band}, expected ${S.content.top}`);
     // Playwright's WebKit cannot emulate portrait orientation (screen.orientation stays landscape): there the portrait
     // setup runs as a narrow landscape screen — still a useful layout stress test.
-    const noPortrait = browserName === 'webkit' && S.name === 'port';
+    const noPortrait = browserName === 'webkit' && isPort;
     if (noPortrait) console.log('note: WebKit cannot emulate portrait — "port" runs as a narrow landscape screen');
-    else if (env.portrait !== (S.name === 'port')) fails.push(`${S.name}: game thinks portrait=${env.portrait}`);
+    else if (env.portrait !== (isPort)) fails.push(`${S.name}: game thinks portrait=${env.portrait}`);
     // Portrait: the game asks to rotate the phone (#rotate covers everything). Check that screen, then hide it so the
     // portrait layout underneath (used if the overlay is ever dropped) can be inspected too.
-    if (S.name === 'port' && !noPortrait) {
+    if (isPort && !noPortrait) {
       const rot = await page.evaluate('getComputedStyle(document.getElementById("rotate")).display');
       if (rot === 'none') fails.push('port: the "rotate your phone" screen is not shown in portrait');
       if (browserName === 'chromium') await page.screenshot({ path: 'shots/ui/tg-port-rotate.png' });
@@ -49,12 +55,12 @@ for (const S of SETUPS) {
       for (const fps of [false, true]) {
         await page.evaluate(`__hk.lang('${lang}'); __hk.showFps(${fps}); __hk.layoutTop();`);
         await page.waitForTimeout(700);   // one fps refresh (the label text is filled every 0.5 s)
-        const r = await page.evaluate(({ sa, band }) => {
-          const W = innerWidth, H = innerHeight, bw = __hk.tgBtnW;
+        const r = await page.evaluate(({ sa, band, cw, rw }) => {
+          const W = innerWidth, H = innerHeight;
           const rect = (el) => { if (!el) return null; const cs = getComputedStyle(el); if (cs.display === 'none' || cs.visibility === 'hidden') return null;
             const b = el.getBoundingClientRect(); return b.width && b.height ? { x: b.left, y: b.top, w: b.width, h: b.height } : null; };
-          const zones = [{ n: 'tg-left', x: sa.left || 0, y: sa.top || 0, w: bw, h: band },
-                         { n: 'tg-right', x: W - (sa.right || 0) - bw, y: sa.top || 0, w: bw, h: band }];
+          const zones = [{ n: 'tg-close', x: sa.left || 0, y: sa.top || 0, w: cw, h: band },
+                         { n: 'tg-right', x: W - (sa.right || 0) - rw, y: sa.top || 0, w: rw, h: band }];
           // draw the Telegram zones for the screenshot
           document.querySelectorAll('.tgzone').forEach((e) => e.remove());
           for (const z of zones) { const d = document.createElement('div'); d.className = 'tgzone';
@@ -64,7 +70,7 @@ for (const S of SETUPS) {
           const el = {}; for (const id of ids) el[id] = rect(document.getElementById(id));
           const pads = ['bA', 'bB', 'bX', 'bY', 'bRT'].map((id) => rect(document.getElementById(id))).filter(Boolean);
           return { W, H, zones, el, pads, fpsText: document.getElementById('fps').textContent };
-        }, { sa: S.safe, band: S.content.top });
+        }, { sa: S.safe, band: S.content.top, cw: CLOSE_W[S.tgLang], rw: RIGHT_W });
         const hit = (a, b) => a && b && a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
         const tag = `${S.name} ${lang} fps:${fps ? 'on' : 'off'}`;
         for (const id of ['hud', 'bPause', 'fps']) {
@@ -77,12 +83,29 @@ for (const S of SETUPS) {
             fails.push(`${tag}: #${id} outside the device safe area ${JSON.stringify(e)}`);
         }
         if (hit(r.el.hud, r.el.bPause)) fails.push(`${tag}: scoreboard overlaps pause`);
+        const sa = S.safe, rowTop = sa.top || 0, rowBot = rowTop + S.content.top, hud = r.el.hud;
+        if (hud && !isPort) {
+          // landscape full screen: scoreboard on the left, right after "Close", aligned with that row — or below the band
+          if (hud.x + hud.w / 2 >= r.W / 2) fails.push(`${tag}: scoreboard not left of centre (x ${Math.round(hud.x)}, w ${Math.round(hud.w)})`);
+          const inRow = hud.y < rowBot;
+          if (inRow) {
+            const closeR = (sa.left || 0) + CLOSE_W[S.tgLang];
+            if (hud.y < rowTop - 0.5 || hud.y + hud.h > rowBot + 0.5) fails.push(`${tag}: scoreboard sticks out of the Telegram button row`);
+            if (Math.abs((hud.y + hud.h / 2) - (rowTop + rowBot) / 2) > 2) fails.push(`${tag}: scoreboard not vertically aligned with the "Close" row`);
+            if (hud.x - closeR > 40) fails.push(`${tag}: scoreboard ${Math.round(hud.x - closeR)} px away from "Close" (should sit right after it)`);
+          } else if (hud.y < rowBot) fails.push(`${tag}: scoreboard below-band fallback still in the band`);
+          if (!inRow && hud.x > (sa.left || 0) + 20) fails.push(`${tag}: scoreboard fallback not at the left edge`);
+        }
+        if (r.el.fps) {
+          // FPS in the bottom-left corner, inside the safe area (checked above)
+          if (r.el.fps.x > (sa.left || 0) + 20 || r.el.fps.y + r.el.fps.h < r.H - (sa.bottom || 0) - 20) fails.push(`${tag}: FPS not in the bottom-left corner`);
+        }
         if (hit(r.el.fps, r.el.hud)) fails.push(`${tag}: FPS overlaps scoreboard`);
         if (hit(r.el.fps, r.el.bPause)) fails.push(`${tag}: FPS overlaps pause`);
         for (const p of r.pads) if (hit(r.el.fps, p)) fails.push(`${tag}: FPS overlaps an on-screen button`);
         for (const p of r.pads) if (hit(r.el.tacbadge, p)) fails.push(`${tag}: tactic badge overlaps an on-screen button`);
         if (fps && !/\d+ fps/.test(r.fpsText)) fails.push(`${tag}: FPS text "${r.fpsText}"`);
-        if (browserName === 'chromium') await page.screenshot({ path: `shots/ui/tg-${S.name}${S.name === 'port' ? '-layout' : ''}-${lang}-${fps ? 'fps' : 'nofps'}.png` });
+        if (browserName === 'chromium') await page.screenshot({ path: `shots/ui/tg-${S.name}${isPort ? '-layout' : ''}-${lang}-${fps ? 'fps' : 'nofps'}.png` });
       }
       // on-screen button labels: every text this button can show must fit inside it
       const bad = await page.evaluate((PAD_KEYS) => {

@@ -519,7 +519,17 @@ function layout(){
    («Закрыть» слева, «⌄ •••» справа) занимают полосу высотой
    TG.contentSafeAreaInset.top под зоной устройства; середина полосы свободна.
    ============================================================ */
-var TG_BTN_W=100;          /* ширина кнопок Telegram с каждой стороны (API её не даёт — берём с запасом) */
+var TG_BTN_W=100;          /* ширина группы «⌄ •••» справа (API её не даёт — с запасом) */
+/* Ширина кнопки «Закрыть» слева зависит от платформы и языка интерфейса Telegram
+   (RU «Закрыть» шире EN «Close» / ID «Tutup»; на Android — узкая стрелка). API её
+   не даёт — эвристика с запасом. */
+function tgCloseW(){
+  var plat=(TG && TG.platform)||'', lc='';
+  try{ lc=((TG.initDataUnsafe && TG.initDataUnsafe.user && TG.initDataUnsafe.user.language_code)||'').slice(0,2).toLowerCase(); }catch(e){}
+  if(plat==='android' || plat==='android_x') return 64;
+  var wide={ru:1, uk:1, be:1, kk:1, uz:1, de:1, fr:1, es:1, it:1, pt:1};
+  return wide[lc] ? 112 : 96;
+}
 var PAD_R=40;
 var _envProbe=null;
 function envInsets(){
@@ -553,10 +563,11 @@ function layoutTop(){
   var hw=hud.offsetWidth||260, hh=hud.offsetHeight||30;
   var hudX, hudY;
   if(band>0 && !PORTRAIT){
-    /* горизонталь, полный экран: табло по центру в свободной полосе между кнопками Telegram */
-    var freeL=SA.l+TG_BTN_W, freeR=W-SA.r-TG_BTN_W;
-    if(hw<=freeR-freeL-12 && hh<=band-4){ hudX=W/2-hw/2; hudY=top0+(band-hh)/2; }
-    else { hudX=W/2-hw/2; hudY=below+6; }       /* не помещается — ниже кнопок */
+    /* горизонталь, полный экран: табло сразу правее «Закрыть», в том же ряду и по центру ряда
+       по высоте; не помещается до «⌄ •••» — ниже полосы кнопок, у левого края */
+    var freeL=SA.l+tgCloseW()+8, freeR=W-SA.r-TG_BTN_W-8;
+    if(freeL+hw<=freeR && hh<=band){ hudX=freeL; hudY=top0+(band-hh)/2; }
+    else { hudX=SA.l+12; hudY=below+6; }
   } else if(band>0){
     hudX=SA.l+8; hudY=below+6;                  /* вертикаль: всё ниже кнопок Telegram */
   } else {
@@ -575,7 +586,7 @@ function layoutTop(){
   _px(hud,hudX,hudY);
   var hudB=hudY+hh;
   /* штрафы под табло, уведомления — под табло по центру */
-  _px(document.getElementById('hud2'), (band>0&&!PORTRAIT)? W/2-hw/2 : hudX, hudB+4);
+  _px(document.getElementById('hud2'), hudX, hudB+4);
   var tb=document.getElementById('topbar');
   var tbY = (band>0 || PORTRAIT) ? hudB+ (PORTRAIT?26:24) : top0+12;
   tb.style.top=Math.round(tbY)+'px';
@@ -590,13 +601,8 @@ function layoutTop(){
   tbd.style.right=Math.round(SA.r+PAD_R*3.5+6)+'px'; tbd.style.bottom=Math.round(SA.b+8)+'px';
   /* FPS: слева, где нет кнопок Telegram, табло и экранных кнопок */
   var fps=document.getElementById('fps');
-  if(band>0 && !PORTRAIT){
-    /* под кнопкой «Закрыть»; если табло опустилось в ту же колонку — под табло */
-    var fy=below+6; if(hudX<SA.l+10+110 && hudB>fy-2) fy=hudB+6;
-    _px(fps, SA.l+10, fy);
-  }
-  else if(PORTRAIT) _px(fps, SA.l+8, Math.max(hudB, (document.getElementById('hud2').offsetHeight? hudB+22 : hudB))+6+ (band>0?0:0));
-  else { fps.style.left=Math.round(SA.l+10)+'px'; fps.style.top='auto'; fps.style.right='auto'; fps.style.bottom=Math.round(SA.b+8)+'px'; }
+  /* FPS — левый нижний угол, над полоской «домой» и правее выреза */
+  fps.style.left=Math.round(SA.l+10)+'px'; fps.style.top='auto'; fps.style.right='auto'; fps.style.bottom=Math.round(SA.b+8)+'px';
 }
 /* подписи экранных кнопок помещаются в круг: перенос + уменьшение шрифта */
 function fitPadLabels(){
@@ -5835,7 +5841,7 @@ window.__hk={hs:function(){return HS;},net:function(){return NET;},setCam:functi
   showFps:function(on){ setShowFps(on); }, fitPad:function(){ fitPadLabels(); }, T:function(k){ return T(k); },
   layoutTop:function(){ layoutTop(); },
   /* замер: средняя цена кадра отрисовки (мс) при уровне пружин lv (0 — выкл) */
-  benchSprings:function(lv,n){ var q=QC(), old=q.springs; q.springs=lv; n=n||240; var t0=performance.now(); for(var i=0;i<n;i++){ RDT=1/60; render(); } var dt=(performance.now()-t0)/n; q.springs=old; return +dt.toFixed(3); }, tgBtnW:TG_BTN_W, safe:function(){ return {sa:safeInsets(), band:tgButtonsBand(), portrait:PORTRAIT}; },
+  benchSprings:function(lv,n){ var q=QC(), old=q.springs; q.springs=lv; n=n||240; var t0=performance.now(); for(var i=0;i<n;i++){ RDT=1/60; render(); } var dt=(performance.now()-t0)/n; q.springs=old; return +dt.toFixed(3); }, tgBtnW:TG_BTN_W, tgCloseW:function(){ return tgCloseW(); }, safe:function(){ return {sa:safeInsets(), band:tgButtonsBand(), portrait:PORTRAIT}; },
   /* хост: отправить снимок сейчас (с ожидающими событиями) — для тестов после freeze */
   netSnap:function(){ if(NET.on && NET.role==='host') netSnap(); }}; 
 })();
