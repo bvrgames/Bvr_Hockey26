@@ -353,6 +353,10 @@ var TEST=(function(){
          frozen:q.has('frozen'), skipRender:false, errors:[],
          ai:({easy:1,normal:1,hard:1})[q.get('ai')]?q.get('ai'):null,
          side:q.get('side')==='1'?1:0, debug:q.has('debug')};
+  /* Внутри Telegram к ссылке мини-приложения ?debug не допишешь — отладка включается стартовым
+     параметром: t.me/bvr_games_bot/hockeytg?startapp=dbg (или dbg_КОД — сразу в комнату) */
+  try{ var sp0=window.Telegram && Telegram.WebApp && Telegram.WebApp.initDataUnsafe && Telegram.WebApp.initDataUnsafe.start_param;
+       if(sp0 && /^dbg(_|$)/i.test(sp0)) t.debug=true; }catch(e){}
   /* ?debug — показать отладочные индикаторы (класс .dbg): скорость, FPS, сеть */
   if(t.debug) document.body.classList.add('debug');
   if(t.seed){
@@ -5774,7 +5778,8 @@ function shareLink(code){
      "Отправить кому" через t.me/share/url (не требует настройки inline-
      режима бота, в отличие от switchInlineQuery). Вне Telegram (тест в
      обычном браузере) — прежнее поведение: прямая веб-ссылка в буфер. */
-  var deepLink='https://t.me/bvr_games_bot/hockeytg?startapp='+code;
+  /* в отладке приглашение тоже с отладкой, чтобы панель сети была у обоих */
+  var deepLink='https://t.me/bvr_games_bot/hockeytg?startapp='+(TEST.debug?'dbg_':'')+code;
   var webLink=location.origin+location.pathname+'?room='+code+'&srv='+encodeURIComponent(srvEl.value.trim());
   var shown=TG?deepLink:webLink;
   document.getElementById('netlink').textContent=T('linkFriend')+' '+shown;
@@ -5832,6 +5837,9 @@ document.getElementById('bJoin').addEventListener('click',function(){
   var _tg=_tgl;
   if(!room && _tg && _tg.initDataUnsafe && _tg.initDataUnsafe.start_param){
     var sp=_tg.initDataUnsafe.start_param;
+    /* dbg / dbg_КОД — отладка (см. TEST выше); код комнаты — после префикса */
+    var dm=/^dbg(?:_(.*))?$/i.exec(sp);
+    if(dm) sp=dm[1]||'';
     if(/^[A-Za-z0-9_-]{2,16}$/.test(sp)) room=sp;
   }
   if(srv){ srvEl.value=srv; try{localStorage.setItem('bvr_srv',srv);}catch(e){} }
