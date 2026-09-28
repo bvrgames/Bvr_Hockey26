@@ -401,6 +401,7 @@ var EV=(function(){
 var cv=document.getElementById('c');
 var stickCv=document.getElementById('stick'), sctx=stickCv.getContext('2d');
 var W=900,H=460,DPR=1,PORTRAIT=false;
+var VW=900, VH=460, LETTERBOX=0;   /* размер окна; поля сверху/снизу (Telegram на компьютере в высоком окне) */
 
 /* ---------- уровни качества: 0 низкое, 1 среднее, 2 высокое ---------- */
 var QLEVEL=2, QAUTO=true;
@@ -514,8 +515,12 @@ function viewSize(){
   if(tg && tg.viewportStableHeight>0) h=Math.max(h, tg.viewportStableHeight);
   return [Math.max(320,Math.round(w)), Math.max(240,Math.round(h))];
 }
+function isDesktopTG(){
+  var tg=window.Telegram && window.Telegram.WebApp;
+  return !!(tg && /^(tdesktop|macos|web|weba|webk|unigram)$/.test(tg.platform||''));
+}
 function layout(){
-  var vs=viewSize(); W=vs[0]; H=vs[1];
+  var vs=viewSize(); W=vs[0]; H=vs[1]; VW=W; VH=H; LETTERBOX=0;
 
   // Robust orientation detection: use screen.orientation (immune to browser chrome)
   // Falls back to visualViewport-based aspect ratio if unavailable.
@@ -533,16 +538,26 @@ function layout(){
   }catch(e){
     PORTRAIT = (W < H*0.95);
   }
+  /* Telegram на компьютере: «поверни телефон» бессмысленно — окно высокое, но это не телефон.
+     Играем горизонтальной площадкой по ширине окна (с полями сверху/снизу), а при старте матча
+     в высоком окне просим Telegram развернуть мини-приложение на весь экран. */
+  if(isDesktopTG()){
+    PORTRAIT=false;
+    /* высокое окно: площадка 16:9 по ширине окна, по центру, поля сверху и снизу */
+    if(H>W*0.75){ var hr=Math.round(W*0.5625); LETTERBOX=Math.round((H-hr)/2); H=hr; }
+  }
+  cv.style.position='absolute'; cv.style.left='0'; cv.style.top=LETTERBOX+'px'; cv.style.height=H+'px';
   DPR=Math.min(QC().dpr, window.devicePixelRatio||1)*(QAUTO?DYN:1);   /* динамическое разрешение только в «авто» */
   cv.width=Math.round(W*DPR); cv.height=Math.round(H*DPR);
-  stickCv.style.cssText='position:absolute;left:0;top:0;width:'+W+'px;height:'+H+'px;pointer-events:none;z-index:5';
+  stickCv.style.cssText='position:absolute;left:0;top:'+LETTERBOX+'px;width:'+W+'px;height:'+H+'px;pointer-events:none;z-index:5';
   stickCv.width=Math.round(W*DPR); stickCv.height=Math.round(H*DPR);
   sctx.setTransform(DPR,0,0,DPR,0,0);
 
   var R = PORTRAIT ? Math.max(30, Math.min(44, W*0.118))
                    : Math.max(34, Math.min(50, H*0.108));
   var SA=safeInsets();
-  var cx = W - SA.r - R*2.4, cy = H - SA.b - R*2.4;
+  /* кнопки — от низа окна (при полях у Telegram на компьютере — в нижнем поле, не на площадке) */
+  var cx = W - SA.r - R*2.4, cy = VH - SA.b - R*2.4;
   PAD_R=R;
   function place(el,dx,dy,r){
     el.style.width=(r*2)+'px'; el.style.height=(r*2)+'px';
@@ -557,7 +572,7 @@ function layout(){
   rt.style.left=(cx - R*0.95)+'px'; rt.style.top=(cy - R*3.1)+'px';
 
   var pw=document.getElementById('power');
-  pw.style.left=(W*0.5-90)+'px'; pw.style.top=(H-SA.b-26)+'px'; pw.style.width='180px';
+  pw.style.left=(W*0.5-90)+'px'; pw.style.top=(LETTERBOX ? LETTERBOX+H-18 : H-SA.b-26)+'px'; pw.style.width='180px';
 
 
   document.getElementById('rotate').style.display=PORTRAIT?'flex':'none';
@@ -5523,7 +5538,7 @@ function frameStep(dt){
      раскладка, пересобираем её сами. Так поведение одинаково на любой
      платформе, независимо от того, какое событие пришло и пришло ли вообще. */
   var _vs=viewSize();
-  if(_vs[0]!==W || _vs[1]!==H) layout();
+  if(_vs[0]!==VW || _vs[1]!==VH) layout();
 
   readInput();
   RDT=dt;
@@ -6001,6 +6016,10 @@ function newMatchId(){
   return s;
 }
 function matchStart(id, clubA, clubB){
+  /* Telegram на компьютере, окно вертикальное — на весь экран (Bot API 8.0+) */
+  if(isDesktopTG() && innerHeight>innerWidth){
+    try{ if(TG && TG.requestFullscreen && (!TG.isVersionAtLeast || TG.isVersionAtLeast('8.0'))) TG.requestFullscreen(); }catch(e){}
+  }
   MATCH.id=id; MATCH.mode=NET.on?'online':'ai'; MATCH.role=NET.on?NET.role:'solo';
   MATCH.team=HUMAN; MATCH.clubs=[clubA,clubB]; MATCH.len=Math.round(clock);
   MATCH.played=0; MATCH.startedAt=Date.now(); MATCH.summary=null; MATCH.sent=false;
