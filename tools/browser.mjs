@@ -14,11 +14,28 @@ const ARGS = {
   webkit: [],
 };
 
-export async function openGame(name, { w = 1280, h = 720, headed = false } = {}) {
+// Fake Telegram.WebApp for layout tests (Bot API 8.0: full screen, safe areas, CloudStorage in memory).
+export function fakeTelegram({ fullscreen = true, safe = {}, content = {} } = {}) {
+  const ins = (o) => JSON.stringify({ top: o.top || 0, right: o.right || 0, bottom: o.bottom || 0, left: o.left || 0 });
+  return `window.Telegram={WebApp:(function(){ var store={}; var noop=function(){};
+    return { initData:'query_id=test&user=%7B%22id%22%3A1%7D&auth_date=1&hash=test', initDataUnsafe:{}, version:'8.0', platform:'ios',
+      isFullscreen:${!!fullscreen}, safeAreaInset:${ins(safe)}, contentSafeAreaInset:${ins(content)}, viewportStableHeight:0,
+      isVersionAtLeast:function(v){ return parseFloat(v)<=8.0; },
+      ready:noop, expand:noop, disableVerticalSwipes:noop, setHeaderColor:noop, setBackgroundColor:noop,
+      enableClosingConfirmation:noop, requestFullscreen:noop, openTelegramLink:noop, onEvent:noop, offEvent:noop,
+      HapticFeedback:{impactOccurred:noop, notificationOccurred:noop, selectionChanged:noop},
+      CloudStorage:{ getItem:function(k,cb){ setTimeout(function(){ cb(null, store[k]||''); },0); },
+                     setItem:function(k,v,cb){ store[k]=String(v); if(cb) cb(null,true); } } }; })()};`;
+}
+
+export async function openGame(name, { w = 1280, h = 720, headed = false, tg = null, mobile = false } = {}) {
   const engine = ENGINES[name];
   if (!engine) throw new Error(`unknown browser "${name}" (chromium | webkit)`);
   const browser = await engine.launch({ headless: !headed, args: ARGS[name] });
-  const context = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 1 });
+  // mobile: screen = viewport, so screen.orientation (the game's portrait test) follows it; isMobile only exists in Chromium
+  const ctxOpt = { viewport: { width: w, height: h }, deviceScaleFactor: 1 };
+  if (mobile) Object.assign(ctxOpt, { screen: { width: w, height: h }, hasTouch: true }, name === 'chromium' ? { isMobile: true } : {});
+  const context = await browser.newContext(ctxOpt);
   const page = await context.newPage();
   const logs = [];
   page.on('console', (m) => {
@@ -27,7 +44,7 @@ export async function openGame(name, { w = 1280, h = 720, headed = false } = {})
   });
   page.on('pageerror', (e) => logs.push({ type: 'pageerror', text: `${e.message}\n${(e.stack || '').split('\n').slice(0, 5).join('\n')}` }));
   page.on('requestfailed', (r) => logs.push({ type: 'requestfailed', text: `${r.url()} ${r.failure()?.errorText || ''}` }));
-  await page.route(/telegram\.org\/js\/telegram-web-app\.js/, (r) => r.fulfill({ contentType: 'text/javascript', body: '/* telegram stub */' }));
+  await page.route(/telegram\.org\/js\/telegram-web-app\.js/, (r) => r.fulfill({ contentType: 'text/javascript', body: tg || '/* telegram stub */' }));
   return { browser, context, page, logs };
 }
 

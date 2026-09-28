@@ -63,7 +63,10 @@
     align-items:center;justify-content:center;border:1.5px solid rgba(255,255,255,.30);
     background:rgba(14,18,28,.42);backdrop-filter:blur(6px);transition:transform .07s, background .07s}
   .btn b{font-size:15px;font-weight:800;line-height:1}
-  .btn i{font-style:normal;font-size:8.5px;letter-spacing:.06em;opacity:.9;margin-top:2px;text-transform:uppercase}
+  /* подпись переносится и ужимается под размер круга (fitPadLabels) */
+  .btn i{font-style:normal;font-size:8.5px;letter-spacing:.04em;opacity:.9;margin-top:2px;text-transform:uppercase;
+    display:block;max-width:82%;text-align:center;line-height:1.05;white-space:normal;overflow-wrap:break-word}
+  #bRT i{max-width:92%}
   .btn.press{transform:scale(.88);background:rgba(255,255,255,.34)}
   #bPause.press{background:rgba(255,255,255,.34)}
   #bA{background:rgba(28,120,60,.42);border-color:rgba(110,225,150,.6)}
@@ -190,6 +193,8 @@
   #start .dev a{color:#8fd8ff;text-decoration:none;font-weight:700;border-bottom:1px solid rgba(143,216,255,.35)}
   /* отладочные индикаторы (скорость, FPS, сетевые счётчики) видны только с ?debug */
   body:not(.debug) .dbg{display:none!important}
+  /* FPS — настройка игрока (меню/пауза) или ?debug */
+  body:not(.debug):not(.showfps) #fps{display:none!important}
   /* подсказки геймпада на экране матча — только когда геймпад подключён */
   body:not(.pad) .padhint{display:none!important}
 </style>
@@ -230,6 +235,7 @@
       <h2 id="pauseTitle">ПАУЗА</h2>
       <div id="pfps" class="dbg">—</div>
       <button class="pbtn prim" id="pResume">ПРОДОЛЖИТЬ</button>
+      <button class="pbtn" id="pFps">FPS</button>
       <button class="pbtn" id="pMenu">ГЛАВНОЕ МЕНЮ</button>
     </div>
   </div>
@@ -245,7 +251,7 @@
   </div>
 
   <canvas id="stick"></canvas>
-  <div id="fps" class="dbg"></div>
+  <div id="fps"></div>
   <div id="netdbg" class="dbg" style="display:none;position:fixed;left:10px;top:10px;z-index:99;pointer-events:none;
        font:11px/1.4 monospace;font-weight:700;color:#0f0;background:rgba(0,0,0,.65);padding:4px 8px;
        border-radius:4px;white-space:pre"></div>
@@ -273,7 +279,8 @@
       </div>
       <div class="teams">
         <div class="tsel"><b id="lbPlay">ИГРА</b><div class="chips" id="playT"></div></div>
-        <div class="tsel"><b id="lbQual">ГРАФИКА</b><div class="chips" id="qT"></div></div>
+        <div class="tsel"><b id="lbQual">ГРАФИКА</b><div class="chips" id="qT"></div>
+          <div class="chips" id="fpsT" style="margin-top:6px"></div></div>
       </div>
       <div class="teams" id="diffbox">
         <div class="tsel"><b id="lbDiff">СЛОЖНОСТЬ</b><div class="chips" id="diffT"></div></div>
@@ -476,7 +483,9 @@ function layout(){
 
   var R = PORTRAIT ? Math.max(30, Math.min(44, W*0.118))
                    : Math.max(34, Math.min(50, H*0.108));
-  var cx = W - R*2.4, cy = H - R*2.4;
+  var SA=safeInsets();
+  var cx = W - SA.r - R*2.4, cy = H - SA.b - R*2.4;
+  PAD_R=R;
   function place(el,dx,dy,r){
     el.style.width=(r*2)+'px'; el.style.height=(r*2)+'px';
     el.style.left=(cx+dx-r)+'px'; el.style.top=(cy+dy-r)+'px';
@@ -490,13 +499,7 @@ function layout(){
   rt.style.left=(cx - R*0.95)+'px'; rt.style.top=(cy - R*3.1)+'px';
 
   var pw=document.getElementById('power');
-  pw.style.left=(W*0.5-90)+'px'; pw.style.top=(H-26)+'px'; pw.style.width='180px';
-
-  var bp=document.getElementById('bPause');
-  if(bp){
-    bp.style.left=(W-46)+'px';
-    bp.style.top=(PORTRAIT?46:8)+'px';
-  }
+  pw.style.left=(W*0.5-90)+'px'; pw.style.top=(H-SA.b-26)+'px'; pw.style.width='180px';
 
 
   document.getElementById('rotate').style.display=PORTRAIT?'flex':'none';
@@ -504,7 +507,109 @@ function layout(){
   /* fsHint — отдельная не-полноэкранная кнопка (см. ниже), скрываем при
      возврате в portrait вместе с #rotate. Не меняет поведение #rotate. */
   if(PORTRAIT){ var fh0=document.getElementById('fsHint'); if(fh0) fh0.style.display='none'; }
+  layoutTop();
+  fitPadLabels();
 }
+
+/* ============================================================
+   БЕЗОПАСНЫЕ ЗОНЫ И ВЕРХНЯЯ РАСКЛАДКА
+   Устройство (вырез, скругления, полоска «домой»): TG.safeAreaInset (Bot API 8.0+),
+   иначе CSS env(safe-area-inset-*). Кнопки Telegram в полноэкранном режиме
+   («Закрыть» слева, «⌄ •••» справа) занимают полосу высотой
+   TG.contentSafeAreaInset.top под зоной устройства; середина полосы свободна.
+   ============================================================ */
+var TG_BTN_W=100;          /* ширина кнопок Telegram с каждой стороны (API её не даёт — берём с запасом) */
+var PAD_R=40;
+var _envProbe=null;
+function envInsets(){
+  if(!_envProbe){
+    _envProbe=document.createElement('div');
+    _envProbe.style.cssText='position:fixed;left:0;top:0;width:0;height:0;visibility:hidden;pointer-events:none;'+
+      'padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)';
+    document.body.appendChild(_envProbe);
+  }
+  var cs=getComputedStyle(_envProbe);
+  return {t:parseFloat(cs.paddingTop)||0, r:parseFloat(cs.paddingRight)||0, b:parseFloat(cs.paddingBottom)||0, l:parseFloat(cs.paddingLeft)||0};
+}
+function tgInset(o){ return o ? {t:+o.top||0, r:+o.right||0, b:+o.bottom||0, l:+o.left||0} : null; }
+/* зона устройства */
+function safeInsets(){
+  var t=(typeof TG!=='undefined' && TG) ? tgInset(TG.safeAreaInset) : null;
+  var e=envInsets();
+  if(!t) return e;
+  return {t:Math.max(t.t,e.t), r:Math.max(t.r,e.r), b:Math.max(t.b,e.b), l:Math.max(t.l,e.l)};
+}
+/* полоса кнопок Telegram (0 — не полноэкранный режим / старый клиент / вне Telegram) */
+function tgButtonsBand(){
+  var c=(typeof TG!=='undefined' && TG) ? tgInset(TG.contentSafeAreaInset) : null;
+  return c ? c.t : 0;
+}
+function _px(el,x,y){ el.style.left=Math.round(x)+'px'; el.style.top=Math.round(y)+'px'; el.style.right='auto'; el.style.bottom='auto'; }
+function layoutTop(){
+  var hud=document.getElementById('hud'); if(!hud) return;
+  var SA=safeInsets(), band=tgButtonsBand();
+  var top0=SA.t, below=SA.t+band;           /* верх экрана / ниже кнопок Telegram */
+  var hw=hud.offsetWidth||260, hh=hud.offsetHeight||30;
+  var hudX, hudY;
+  if(band>0 && !PORTRAIT){
+    /* горизонталь, полный экран: табло по центру в свободной полосе между кнопками Telegram */
+    var freeL=SA.l+TG_BTN_W, freeR=W-SA.r-TG_BTN_W;
+    if(hw<=freeR-freeL-12 && hh<=band-4){ hudX=W/2-hw/2; hudY=top0+(band-hh)/2; }
+    else { hudX=W/2-hw/2; hudY=below+6; }       /* не помещается — ниже кнопок */
+  } else if(band>0){
+    hudX=SA.l+8; hudY=below+6;                  /* вертикаль: всё ниже кнопок Telegram */
+  } else {
+    hudX=SA.l+(PORTRAIT?8:12); hudY=top0+(PORTRAIT?8:10);
+  }
+  /* пауза: справа, ниже кнопок Telegram */
+  var bp=document.getElementById('bPause');
+  var pY = band>0 ? below+6 : top0+(PORTRAIT?46:8), pX=W-SA.r-46;
+  if(bp) _px(bp, pX, pY);
+  var pB=pY+34;
+  /* узкий экран: табло не должно заходить на паузу — сначала влево, потом под паузу */
+  if(hudY<pB+4 && hudY+hh>pY-4 && hudX+hw>pX-6){
+    hudX=Math.max(SA.l+8, Math.min(hudX, pX-6-hw));
+    if(hudX+hw>pX-6){ hudX=SA.l+8; hudY=pB+6; }
+  }
+  _px(hud,hudX,hudY);
+  var hudB=hudY+hh;
+  /* штрафы под табло, уведомления — под табло по центру */
+  _px(document.getElementById('hud2'), (band>0&&!PORTRAIT)? W/2-hw/2 : hudX, hudB+4);
+  var tb=document.getElementById('topbar');
+  var tbY = (band>0 || PORTRAIT) ? hudB+ (PORTRAIT?26:24) : top0+12;
+  tb.style.top=Math.round(tbY)+'px';
+  var toast=document.getElementById('toast');
+  if(PORTRAIT){ toast.style.top=Math.round(tbY+34)+'px'; toast.style.bottom='auto'; }
+  else { toast.style.top='auto'; toast.style.bottom=Math.round(SA.b+14)+'px'; }
+  /* легенда геймпада — под паузой */
+  var lg=document.getElementById('legend');
+  lg.style.top=Math.round(pB+6)+'px'; lg.style.right=Math.round(SA.r+10)+'px';
+  var tbd=document.getElementById('tacbadge');
+  /* плашка тактики — левее кнопки A, под кнопкой X (раньше наезжала на A) */
+  tbd.style.right=Math.round(SA.r+PAD_R*3.5+6)+'px'; tbd.style.bottom=Math.round(SA.b+8)+'px';
+  /* FPS: слева, где нет кнопок Telegram, табло и экранных кнопок */
+  var fps=document.getElementById('fps');
+  if(band>0 && !PORTRAIT){
+    /* под кнопкой «Закрыть»; если табло опустилось в ту же колонку — под табло */
+    var fy=below+6; if(hudX<SA.l+10+110 && hudB>fy-2) fy=hudB+6;
+    _px(fps, SA.l+10, fy);
+  }
+  else if(PORTRAIT) _px(fps, SA.l+8, Math.max(hudB, (document.getElementById('hud2').offsetHeight? hudB+22 : hudB))+6+ (band>0?0:0));
+  else { fps.style.left=Math.round(SA.l+10)+'px'; fps.style.top='auto'; fps.style.right='auto'; fps.style.bottom=Math.round(SA.b+8)+'px'; }
+}
+/* подписи экранных кнопок помещаются в круг: перенос + уменьшение шрифта */
+function fitPadLabels(){
+  var ids=['bA','bB','bX','bY','bRT'];
+  for(var i=0;i<ids.length;i++){
+    var b=document.getElementById(ids[i]); if(!b) continue;
+    var l=b.querySelector('i'); if(!l) continue;
+    var fs=Math.max(7, Math.min(9.5, PAD_R*0.22));
+    l.style.fontSize=fs+'px';
+    var maxH=(ids[i]==='bRT'? b.clientHeight*0.5 : b.clientHeight*0.42);
+    for(var k=0;k<8 && (l.scrollWidth>l.clientWidth+0.5 || l.offsetHeight>maxH) && fs>6;k++){ fs-=0.5; l.style.fontSize=fs+'px'; }
+  }
+}
+
 window.addEventListener('resize',layout);
 function requestFullscreenOnLandscape(){
   if(window.screen && window.screen.orientation && window.screen.orientation.type){
@@ -586,6 +691,7 @@ checkFsHint(); /* и safety-net кнопка, если попытка не пр�
    ============================================================ */
 var STRINGS={
 ru:{
+  fpsOn:'FPS: ВКЛ', fpsOff:'FPS: ВЫКЛ',
   fsHint:'Нажми — на весь экран', srvHint:'https://имя.workers.dev', docTitle:'BVR Hockey — Лига 5 на 5',
   ad1:'ЗДЕСЬ МОГЛА БЫТЬ', ad2:'ВАША РЕКЛАМА',
   badAddr:'адрес сервера неверный', noConnect:'не удалось подключиться к серверу',
@@ -620,12 +726,13 @@ ru:{
   over:'МАТЧ ОКОНЧЕН', again:'ИГРАТЬ СНОВА',
   draw:'НИЧЬЯ', winner:'ПОБЕДИЛА КОМАНДА', youWin:'ПОБЕДА', youLose:'ПОРАЖЕНИЕ',
   tactic:'Тактика', tacStd:'Стандарт', tacAtt:'Атака', tacDef:'Оборона',
-  padA1:'пас', padA2:'прессинг', padB1:'бросок', padB2:'отбор', padX1:'навес', padX2:'силовой', padY1:'в разрез', padY2:'вратарь вперёд',
+  padA1:'пас', padA2:'прессинг', padB1:'бросок', padB2:'отбор', padX1:'навес', padX2:'силовой', padY1:'в разрез', padY2:'вратарь',
   gamepad:'ГЕЙМПАД', connected:'подключён', kmh:'км/ч',
   qLow:'низкое', qMid:'среднее', qHigh:'высокое',
   rotate:'Поверни телефон горизонтально 🔄', noPauseOnline:'в онлайне паузы нет'
 },
 en:{
+  fpsOn:'FPS: ON', fpsOff:'FPS: OFF',
   fsHint:'Tap for full screen', srvHint:'https://name.workers.dev', docTitle:'BVR Hockey — League 5 on 5',
   ad1:'YOUR BRAND', ad2:'COULD BE HERE',
   badAddr:'invalid server address', noConnect:'could not connect to the server',
@@ -660,12 +767,13 @@ en:{
   over:'FULL TIME', again:'PLAY AGAIN',
   draw:'DRAW', winner:'WINNER:', youWin:'YOU WIN', youLose:'YOU LOSE',
   tactic:'Tactics', tacStd:'Balanced', tacAtt:'Attack', tacDef:'Defence',
-  padA1:'pass', padA2:'press', padB1:'shot', padB2:'poke', padX1:'lob', padX2:'body check', padY1:'through', padY2:'goalie out',
+  padA1:'pass', padA2:'press', padB1:'shot', padB2:'poke', padX1:'lob', padX2:'check', padY1:'through', padY2:'goalie',
   gamepad:'GAMEPAD', connected:'connected', kmh:'km/h',
   qLow:'low', qMid:'medium', qHigh:'high',
   rotate:'Turn your phone sideways 🔄', noPauseOnline:'no pause in online matches'
 },
 id:{
+  fpsOn:'FPS: AKTIF', fpsOff:'FPS: MATI',
   fsHint:'Ketuk untuk layar penuh', srvHint:'https://nama.workers.dev', docTitle:'BVR Hockey — Liga 5 lawan 5',
   ad1:'MEREK ANDA', ad2:'BISA DI SINI',
   badAddr:'alamat server tidak valid', noConnect:'tidak bisa terhubung ke server',
@@ -702,7 +810,7 @@ id:{
   over:'PERTANDINGAN SELESAI', again:'MAIN LAGI',
   draw:'SERI', winner:'PEMENANG:', youWin:'KAMU MENANG', youLose:'KAMU KALAH',
   tactic:'Taktik', tacStd:'Seimbang', tacAtt:'Menyerang', tacDef:'Bertahan',
-  padA1:'umpan', padA2:'tekan', padB1:'tembak', padB2:'rebut', padX1:'lambung', padX2:'benturan', padY1:'terobosan', padY2:'kiper maju',
+  padA1:'umpan', padA2:'tekan', padB1:'tembak', padB2:'rebut', padX1:'lambung', padX2:'benturan', padY1:'terobosan', padY2:'kiper',
   gamepad:'GAMEPAD', connected:'terhubung', kmh:'km/j',
   qLow:'rendah', qMid:'sedang', qHigh:'tinggi',
   rotate:'Putar HP ke posisi mendatar 🔄', noPauseOnline:'tidak ada jeda di mode online'
@@ -811,6 +919,20 @@ function setDifficulty(d, noSave){
   DIFF=d;
   if(!noSave && !TEST.ai) prefSet('difficulty', d);
 }
+/* индикатор FPS для игроков: по умолчанию выключен */
+var SHOWFPS=false;
+function setShowFps(on, noSave){
+  SHOWFPS=!!on;
+  document.body.classList.toggle('showfps', SHOWFPS);
+  setText('pFps', T(SHOWFPS?'fpsOn':'fpsOff'));
+  if(!noSave) prefSet('showfps', SHOWFPS?'1':'0');
+  if(typeof layoutTop==='function') layoutTop();
+}
+prefGet('showfps', function(v, src){
+  var on=(v==='1'); if(on===SHOWFPS) return;
+  setShowFps(on, true);
+  if(src==='cloud') paintOpts();
+});
 if(!TEST.ai) prefGet('difficulty', function(v, src){
   if(!DIFFS[v] || v===DIFF) return;
   DIFF=v;
@@ -4923,6 +5045,7 @@ function frameStep(dt){
   if(fT>0.5){
     var f=Math.round(fN/fT);
     fpsAvg=fpsAvg*0.6+f*0.4;
+    layoutTop();
     document.getElementById('fps').textContent=f+' fps'+(padConnected?' · '+T('gamepad').toLowerCase():'')+' · '+T(['qLow','qMid','qHigh'][QLEVEL]);
     fT=0;fN=0;
     qTimer+=0.5;
@@ -5002,6 +5125,7 @@ function frameStep(dt){
     document.querySelector('#bB i').textContent = owns?T('padB1'):T('padB2');
     document.querySelector('#bX i').textContent = owns?T('padX1'):T('padX2');
     document.querySelector('#bY i').textContent = owns?T('padY1'):T('padY2');
+    fitPadLabels();
     legEl.innerHTML = owns
       ? 'A '+T('padA1')+' · X '+T('padX1')+'<br>Y '+T('padY1')+' · B '+T('padB1')+'<br>RT '+T('hRT')
       : 'A '+T('padA2')+' · B '+T('padB2')+'<br>X '+T('padX2')+' · Y '+T('padY2')+'<br>D-pad — '+T('tactic').toLowerCase();
@@ -5087,6 +5211,14 @@ function paintOpts(){
     el.addEventListener('click',function(){ setDifficulty(o[1]); paintOpts(); });
     dh.appendChild(el);
   });
+  var fh=document.getElementById('fpsT'); fh.innerHTML='';
+  [['fpsOff',false],['fpsOn',true]].forEach(function(o){
+    var el=document.createElement('div');
+    el.className='chip opt'+(SHOWFPS===o[1]?' on':'');
+    el.textContent=T(o[0]);
+    el.addEventListener('click',function(){ setShowFps(o[1]); paintOpts(); });
+    fh.appendChild(el);
+  });
   var qh=document.getElementById('qT'); qh.innerHTML='';
   [['auto',-1,'byFps'],['qlow',0,'maxFps'],['qmid',1,'balance'],['qhigh',2,'pretty']]
   .forEach(function(o){
@@ -5104,6 +5236,7 @@ function paintOpts(){
 }
 function paintLang(){
   setText('mTitle',T('title'));   setText('mSub',T('sub'));
+  if(typeof layoutTop==='function') setTimeout(layoutTop,0);
   setText('lbLang',T('lang'));    setText('lbMode',T('mode'));
   setText('lbPlay',T('play'));    setText('lbQual',T('qual'));
   setText('lbDiff',T('diff'));
@@ -5117,6 +5250,7 @@ function paintLang(){
   setText('mHint',T('hint'));
   setText('pauseTitle',T('pause'));
   setText('pResume',T('resume'));
+  setText('pFps',T(SHOWFPS?'fpsOn':'fpsOff'));
   setText('pMenu',T('mainMenu'));
   setText('oAgain',T('again'));
   setText('oMenu',T('mainMenu'));
@@ -5124,6 +5258,7 @@ function paintLang(){
   setText('go',T('start'));
   setText('fsHint',T('fsHint'));
   var brt=document.querySelector('#bRT i'); if(brt) brt.textContent=T('hRT');
+  fitPadLabels();
   var bpz=document.getElementById('bPause'); if(bpz) bpz.title=T('pause');
   var sv=document.getElementById('srv'); if(sv) sv.placeholder=T('srvHint');
   document.title=T('docTitle');
@@ -5218,6 +5353,10 @@ document.getElementById('bJoin').addEventListener('click',function(){
   /* Telegram меняет высоту окна при разворачивании — пересобираем раскладку */
   try{
     TG.onEvent('viewportChanged', function(){ setTimeout(layout, 60); });
+    /* безопасные зоны и полноэкранный режим (Bot API 8.0+) — пересчитать раскладку */
+    ['safeAreaChanged','contentSafeAreaChanged','fullscreenChanged'].forEach(function(ev){
+      try{ TG.onEvent(ev, function(){ layout(); }); }catch(e){}
+    });
   }catch(e){}
   setTimeout(function(){ try{ TG.expand(); }catch(e){} layout(); }, 350);
 })();
@@ -5294,6 +5433,7 @@ function startMatchAgain(){
   matchStart(mid, MATCH.clubs[0], MATCH.clubs[1]);
 }
 document.getElementById('pResume').addEventListener('click',function(){ setPaused(false); });
+document.getElementById('pFps').addEventListener('click',function(){ setShowFps(!SHOWFPS); paintOpts(); });
 document.getElementById('pMenu').addEventListener('click',backToMenu);
 document.getElementById('oAgain').addEventListener('click',startMatchAgain);
 document.getElementById('oMenu').addEventListener('click',backToMenu);
@@ -5567,6 +5707,9 @@ window.__hk={hs:function(){return HS;},net:function(){return NET;},setCam:functi
     stats:statsBrief(), autopilot:autoPilot(), errors:TEST.errors.length,
     ice:{wear:+ICE.wear.toFixed(3), strokes:MARKS.strokes}, glErr:GLOK?gl.getError():0}; },
   stats:function(){return STATS;}, match:function(){return MATCH;}, ev:EV,
+  /* раскладка / подписи — для tools/smoke-tg.mjs */
+  showFps:function(on){ setShowFps(on); }, fitPad:function(){ fitPadLabels(); }, T:function(k){ return T(k); },
+  layoutTop:function(){ layoutTop(); }, tgBtnW:TG_BTN_W, safe:function(){ return {sa:safeInsets(), band:tgButtonsBand(), portrait:PORTRAIT}; },
   /* хост: отправить снимок сейчас (с ожидающими событиями) — для тестов после freeze */
   netSnap:function(){ if(NET.on && NET.role==='host') netSnap(); }}; 
 })();
