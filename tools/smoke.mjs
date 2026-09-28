@@ -69,6 +69,9 @@ for (const name of browsers) {
     if (!(end.ice && end.ice.strokes > 0)) fails.push('no skate marks painted on the ice');
     if (!(end.ice && end.ice.wear > 0 && end.ice.wear <= 1)) fails.push(`ice wear out of range: ${end.ice && end.ice.wear}`);
     if (end.glErr) fails.push(`WebGL error 0x${end.glErr.toString(16)}`);
+    // secondary animation (phase D): springs move when the quality level has them, and stay moderate
+    if (end.springs && end.springs.level > 0 && !(end.springs.maxLean > 0.005)) fails.push('springs enabled but no player leans');
+    if (end.springs && end.springs.maxLean > 0.6) fails.push(`springs too strong: ${end.springs.maxLean} rad`);
     // match statistics are built only from bus events, so they must agree with the game state
     const st = end.stats || {};
     const sum = (k) => (st[k] ? st[k][0] + st[k][1] : 0);

@@ -411,9 +411,10 @@ var QLEVEL=2, QAUTO=true;
    персонажи прыгали туда-обратно прямо посреди матча. Теперь модели всегда
    одни и те же, а качеством крутим только свет, тени и разрешение. */
 /* следы на льду теперь на GPU и дёшевы — включены на всех уровнях */
-var QCFG=[{dpr:1.00, crowd:512,  ice:1024, board:2048, shadow:false, ssize:512,  spray:0.0, refl:false, marks:true },
-          {dpr:1.50, crowd:768,  ice:1536, board:3072, shadow:true,  ssize:768,  spray:0.5, refl:true,  marks:true },
-          {dpr:2.00, crowd:1024, ice:2048, board:4096, shadow:true,  ssize:1280, spray:1.0, refl:true,  marks:true }];
+/* springs — вторичная анимация: 1 наклон и крен корпуса, 2 + голова, 3 + клюшка и просадка при силовом */
+var QCFG=[{dpr:1.00, crowd:512,  ice:1024, board:2048, shadow:false, ssize:512,  spray:0.0, refl:false, marks:true, springs:1},
+          {dpr:1.50, crowd:768,  ice:1536, board:3072, shadow:true,  ssize:768,  spray:0.5, refl:true,  marks:true, springs:2},
+          {dpr:2.00, crowd:1024, ice:2048, board:4096, shadow:true,  ssize:1280, spray:1.0, refl:true,  marks:true, springs:3}];
 function QC(){ return QCFG[QLEVEL]; }
 
 /* ---------- модели хоккеистов: меш, скелет и клипы ---------- */
@@ -4583,10 +4584,15 @@ function skinPose(M, row, clipA, tA, clipB, tB, mix){
   /* смещение таза из клипа: присед и перенос веса */
   var hb=M.hip*16;
   L[hb+12]+=hx; L[hb+13]+=hy; L[hb+14]+=hz;
+  var SB = SPR_POSE ? sprBones(M) : null;
+  if(SB) L[hb+13]+=SPR_POSE.dip;                /* просадка при силовом */
   for(i=0;i<nb;i++){
     var p=M.parent[i];
     if(p<0){ for(var k=0;k<16;k++) Wm[i*16+k]=L[i*16+k]; }
     else matMulA(Wm,i*16, Wm,p*16, L,i*16);
+    /* вторичная анимация: поворот в пространстве модели вокруг сустава; дети идут следом */
+    if(SB && SB[i]){ var w=SB[i], P=SPR_POSE;
+      sprRotate(Wm,i*16, P.lean*w[0]+P.headP*w[2], P.bank*w[1]+P.headR*w[3], P.stick*w[4]); }
   }
   var base=row*M.stride;
   for(i=0;i<nb;i++) matMulA(M.pal, base+i*16, Wm,i*16, M.ibm,i*16);
@@ -4700,8 +4706,124 @@ function animTick(p, dt){
 }
 function skinPosePlayer(p, row, dt){
   var a=animTick(p, dt);
+  SPR_POSE=sprTick(p, dt);
   skinPose(hdModelFor(p), row, a.c, a.t, a.pc, a.pt, a.mix);
+  SPR_POSE=null;
 }
+/* ============================================================
+   ВТОРИЧНАЯ АНИМАЦИЯ НА ПРУЖИНАХ (только визуально, поверх клипов, по сети не идёт)
+   Демпфированные пружины spr/sprA — из INKWAVE (src/game/character.js,
+   Jayden Davis, MIT; см. THIRD_PARTY.md). Состояние пружины: S[i]=x, S[i+1]=v.
+   Наклон корпуса от продольного ускорения (разгон — вперёд, торможение —
+   назад), крен от поперечного (внутрь поворота), голова догоняет корпус с
+   запаздыванием, клюшка дрожит после броска/приёма, просадка при силовом.
+   Скорость и ускорение берём из отрисованных позиций — работает и у гостя.
+   ============================================================ */
+var TAU=Math.PI*2;
+/** Damped spring (semi-implicit Euler, sub-stepped). S[i] = x, S[i+1] = v. Returns x. */
+function spr(S, i, target, hz, zeta, dt){
+  var w = TAU * hz, k = w * w, c = 2 * zeta * w;
+  var x = S[i], v = S[i + 1];
+  var n = Math.max(1, Math.ceil(dt * w * 1.1)), h = dt / n;
+  for (var j = 0; j < n; j++) { v += (k * (target - x) - c * v) * h; x += v * h; }
+  S[i] = x; S[i + 1] = v; return x;
+}
+/** Damped spring advanced with the exact (analytic) solution — stable for any damping ratio / step. Same S layout as spr. */
+function sprA(S, i, target, hz, zeta, dt){
+  var w = TAU * hz, x0 = S[i] - target, v0 = S[i + 1], x, v;
+  if (zeta < 0.999) {
+    var wd = w * Math.sqrt(1 - zeta * zeta), e = Math.exp(-zeta * w * dt), c = Math.cos(wd * dt), sn = Math.sin(wd * dt);
+    var B = (v0 + zeta * w * x0) / wd;
+    x = e * (x0 * c + B * sn);
+    v = e * ((-zeta * w * x0 + wd * B) * c + (-zeta * w * B - wd * x0) * sn);
+  } else {
+    var e2 = Math.exp(-w * dt), B2 = v0 + w * x0;
+    x = e2 * (x0 + B2 * dt); v = e2 * (v0 - w * B2 * dt);
+  }
+  S[i] = x + target; S[i + 1] = v; return S[i];
+}
+/* слоты пружин */
+var SP_LEAN=0, SP_BANK=2, SP_HEADP=4, SP_HEADR=6, SP_STICK=8, SP_DIP=10;
+var SPR_POSE=null;                  /* поза текущего игрока на время skinPose */
+var _sprPose={lean:0, bank:0, headP:0, headR:0, stick:0, dip:0};
+/* веса по костям: [наклон, крен, голова-тангаж, голова-крен, клюшка] */
+function sprBones(M){
+  if(M._sprB!==undefined) return M._sprB;
+  var W={spine1:[0.35,0.40,0,0,0], spine2:[0.35,0.30,0,0,0], chest:[0.30,0.30,0,0,0],
+         head:[0,0,1,1,0], stick:[0,0,0,0,1]};
+  var out=null;
+  if(M.names && M.names.indexOf('spine1')>=0){
+    out=[];
+    for(var i=0;i<M.nb;i++) out[i]=W[M.names[i]]||null;
+  }
+  M._sprB=out; return out;
+}
+/* поворот 4×4 (столбцы) в пространстве модели вокруг его же начала: тангаж вокруг X (+ вперёд, к +Z),
+   крен вокруг Z, клюшка — тангаж её кости */
+function sprRotate(m,o, pitch, roll, stickPitch){
+  var pt=pitch+stickPitch;
+  if(Math.abs(pt)<1e-4 && Math.abs(roll)<1e-4) return;
+  var cp=Math.cos(pt), sp=Math.sin(pt), cr=Math.cos(roll), sr=Math.sin(roll);
+  /* R = Rz(roll) * Rx(pitch) */
+  var r00=cr, r01=-sr*cp, r02=sr*sp,
+      r10=sr, r11=cr*cp,  r12=-cr*sp,
+      r20=0,  r21=sp,     r22=cp;
+  for(var j=0;j<3;j++){
+    var a=o+j*4, x=m[a], y=m[a+1], z=m[a+2];
+    m[a]=r00*x+r01*y+r02*z; m[a+1]=r10*x+r11*y+r12*z; m[a+2]=r20*x+r21*y+r22*z;
+  }
+}
+function sprState(p){
+  if(!p._spr){ p._spr=new Float32Array(12); p._sv={px:p.x, pz:p.z, vx:0, vz:0, ax:0, az:0, kick:-1}; }
+  return p._spr;
+}
+/* пружины одного игрока за кадр; возвращает позу для skinPose или null */
+function sprTick(p, dt){
+  var lv=QC().springs|0;
+  if(!lv || p.goalie || !(dt>0)) return null;
+  dt=Math.min(dt,0.05);
+  var S=sprState(p), V=p._sv;
+  var vx=(p.x-V.px)/dt, vz=(p.z-V.pz)/dt;
+  V.px=p.x; V.pz=p.z;
+  if(Math.abs(vx)+Math.abs(vz)>40){ vx=V.vx; vz=V.vz; }        /* телепорт: вбрасывание, штраф */
+  var kv=1-Math.exp(-dt*14);
+  var nvx=V.vx+(vx-V.vx)*kv, nvz=V.vz+(vz-V.vz)*kv;
+  var ax=(nvx-V.vx)/dt, az=(nvz-V.vz)/dt;
+  V.vx=nvx; V.vz=nvz;
+  var ka=1-Math.exp(-dt*9);
+  V.ax+=(ax-V.ax)*ka; V.az+=(az-V.az)*ka;
+  /* оси персонажа в мире: вперёд (cos yaw, sin yaw), локальный +X модели — (sin yaw, −cos yaw) */
+  var fx=Math.cos(p.yaw), fz=Math.sin(p.yaw), lx=fz, lz=-fx;
+  var aF=V.ax*fx+V.az*fz, aL=V.ax*lx+V.az*lz;
+  var calm = p.down>0 || state!=='play';
+  var leanT = calm?0:clamp(aF*0.026, -0.17, 0.20);
+  var bankT = calm?0:clamp(aL*0.020, -0.15, 0.15);
+  var P=_sprPose;
+  P.lean=sprA(S,SP_LEAN, leanT, 2.1, 0.55, dt);
+  /* крен к центру поворота (к поперечному ускорению, т.е. к +X при aL>0): поворот вокруг Z на −угол */
+  P.bank=-sprA(S,SP_BANK, bankT, 1.8, 0.60, dt);
+  P.headP=0; P.headR=0; P.stick=0; P.dip=0;
+  if(lv>=2){
+    /* голова догоняет корпус: медленная пружина следует за наклоном, разница — запаздывание головы */
+    P.headP=(sprA(S,SP_HEADP, S[SP_LEAN], 1.3, 0.8, dt)-S[SP_LEAN])*0.8;
+    P.headR=-(sprA(S,SP_HEADR, S[SP_BANK], 1.2, 0.8, dt)-S[SP_BANK])*0.8;
+  }
+  if(lv>=3){
+    if(V.kick>0){ V.kick-=dt; if(V.kick<=0){ S[SP_STICK+1]+=3.2; V.kick=-1; } }   /* клюшка «отдаёт» после замаха */
+    P.stick=sprA(S,SP_STICK, 0, 5.5, 0.16, dt);
+    P.dip=sprA(S,SP_DIP, 0, 3.2, 0.45, dt);
+  }
+  return P;
+}
+/* толчки от событий (события приходят и гостю) */
+EV.on('shot', function(e){ var p=players[e.p]; if(p && !p.goalie){ sprState(p); p._sv.kick=0.26; } });
+EV.on('pass:recv', function(e){ var p=players[e.p]; if(p && !p.goalie){ var S=sprState(p); S[SP_STICK+1]-=1.6; } });
+EV.on('hit', function(e){
+  var v=players[e.v], h=players[e.p];
+  if(v && !v.goalie){ var S=sprState(v); S[SP_DIP+1]-=0.55; S[SP_LEAN+1]-=1.3; }
+  if(h && !h.goalie){ var S2=sprState(h); S2[SP_DIP+1]-=0.30; S2[SP_LEAN+1]+=0.8; }
+});
+
 /* игра просит проиграть действие один раз */
 function playAction(p, name, dur){
   p._act=name; p._actT=dur||0.5;
@@ -5705,11 +5827,15 @@ window.__hk={hs:function(){return HS;},net:function(){return NET;},setCam:functi
     puck:{x:+puck.x.toFixed(2), z:+puck.z.toFixed(2), v:+Math.hypot(puck.vx,puck.vz).toFixed(2)},
     shots:STATS.teams[0].shots+STATS.teams[1].shots, passes:STATS.teams[0].passes+STATS.teams[1].passes,
     stats:statsBrief(), autopilot:autoPilot(), errors:TEST.errors.length,
-    ice:{wear:+ICE.wear.toFixed(3), strokes:MARKS.strokes}, glErr:GLOK?gl.getError():0}; },
+    ice:{wear:+ICE.wear.toFixed(3), strokes:MARKS.strokes},
+    springs:{level:QC().springs|0, maxLean:+players.reduce(function(m,p){ return p._spr?Math.max(m,Math.abs(p._spr[0])+Math.abs(p._spr[2])):m; },0).toFixed(3)},
+    glErr:GLOK?gl.getError():0}; },
   stats:function(){return STATS;}, match:function(){return MATCH;}, ev:EV,
   /* раскладка / подписи — для tools/smoke-tg.mjs */
   showFps:function(on){ setShowFps(on); }, fitPad:function(){ fitPadLabels(); }, T:function(k){ return T(k); },
-  layoutTop:function(){ layoutTop(); }, tgBtnW:TG_BTN_W, safe:function(){ return {sa:safeInsets(), band:tgButtonsBand(), portrait:PORTRAIT}; },
+  layoutTop:function(){ layoutTop(); },
+  /* замер: средняя цена кадра отрисовки (мс) при уровне пружин lv (0 — выкл) */
+  benchSprings:function(lv,n){ var q=QC(), old=q.springs; q.springs=lv; n=n||240; var t0=performance.now(); for(var i=0;i<n;i++){ RDT=1/60; render(); } var dt=(performance.now()-t0)/n; q.springs=old; return +dt.toFixed(3); }, tgBtnW:TG_BTN_W, safe:function(){ return {sa:safeInsets(), band:tgButtonsBand(), portrait:PORTRAIT}; },
   /* хост: отправить снимок сейчас (с ожидающими событиями) — для тестов после freeze */
   netSnap:function(){ if(NET.on && NET.role==='host') netSnap(); }}; 
 })();
