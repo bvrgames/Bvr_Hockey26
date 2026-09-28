@@ -5093,8 +5093,10 @@ function netConnect(url, code, cb){
   var base=url.replace(/^http/,'ws').replace(/\/+$/,'');
   netStatus(T('connecting'));
   var ws;
-  /* ?hint=apac-se|none — подсказка региона для НОВОЙ комнаты (сравнение в фазе 3.0); иначе по умолчанию Worker'а */
-  var hq=(new URLSearchParams(location.search)).get('hint');
+  /* Подсказка региона для НОВОЙ комнаты (Durable Object). Замер фазы 3.0 из Индонезии, по 10 комнат:
+     apac-se — Сингапур 8/10 (RTT до DO от ~42 мс), apac — Сингапур/Гонконг/Токио, без подсказки —
+     иногда Милан (провайдер уводит в Марсель). ?hint=… в ссылке — для повторных сравнений. */
+  var hq=(new URLSearchParams(location.search)).get('hint')||'apac-se';
   try{ ws=new WebSocket(base+'/room/'+code+(hq?'?hint='+encodeURIComponent(hq):'')); }
   catch(e){ netStatus(T('badAddr')); return; }
   NET.ws=ws;

@@ -9,7 +9,7 @@
  * Protocol (all messages are JSON):
  *   client connects to  wss://<worker>/room/<CODE>   (CODE: 2-16 chars, [A-Za-z0-9_-])
  *                        optional ?hint=apac|apac-se|none|… — Durable Object location hint, only used when the room's
- *                        object is created for the first time (default: apac)
+ *                        object is created for the first time (default: apac-se; the game sends apac-se itself)
  *
  *   server -> client:
  *     {t:'hello', role:'host'|'guest', n:<peerCount 1|2>, diag}   sent once, right after connect
@@ -37,7 +37,8 @@
 
 const ROOM_CODE_RE = /^\/room\/([A-Za-z0-9_-]{2,16})(\/diag)?$/;
 const HINTS = new Set(['wnam', 'enam', 'sam', 'weur', 'eeur', 'apac', 'apac-ne', 'apac-se', 'oc', 'afr', 'me']);
-const DEFAULT_HINT = 'apac';
+// phase 3.0 measurement from Indonesia (10 new rooms per hint): apac-se → SIN 8/10, apac → SIN/HKG/NRT, none → sometimes MXP
+const DEFAULT_HINT = 'apac-se';
 
 export class Room {
   constructor(state, env) {

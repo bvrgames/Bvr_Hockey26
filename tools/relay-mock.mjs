@@ -28,7 +28,7 @@ export function startRelay(port = 8787, net = {}) {
   const count = (r) => (r.host ? 1 : 0) + (r.guest ? 1 : 0);
   const peers = (r) => { const m = JSON.stringify({ t: 'peer', n: count(r) }); for (const s of [r.host, r.guest]) if (s) s.send(m); };
   wss.on('connection', (ws, req) => {
-    const m = /^\/room\/([A-Za-z0-9_-]{2,16})$/.exec(req.url || '');
+    const m = /^\/room\/([A-Za-z0-9_-]{2,16})(?:\?.*)?$/.exec(req.url || '');   // ?hint=… is for the real Worker
     if (!m) { ws.close(1008, 'bad path'); return; }
     const code = m[1].toUpperCase();
     const r = rooms.get(code) || { host: null, guest: null };
