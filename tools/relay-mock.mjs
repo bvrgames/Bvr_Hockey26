@@ -37,9 +37,18 @@ export function startRelay(port = 8787, net = {}) {
     if (!r.host) slot = 'host'; else if (!r.guest) slot = 'guest';
     else { ws.send(JSON.stringify({ t: 'full' })); ws.close(1000, 'room full'); return; }
     r[slot] = ws;
-    ws.send(JSON.stringify({ t: 'hello', role: slot, n: count(r) }));
+    const diag = () => ({ doColo: 'LOCAL', doLoc: 'XX', hint: 'mock', created: r.created || (r.created = Date.now()), st: Date.now(),
+      conns: ['host', 'guest'].filter((k) => r[k]).map((k) => ({ slot: k, colo: 'LOCAL', country: 'XX' })) });
+    ws.send(JSON.stringify({ t: 'hello', role: slot, n: count(r), diag: diag() }));
     peers(r);
     ws.on('message', (data, isBinary) => {
+      // diagnostics are answered by the relay itself, like server/worker.js (with the emulated one-way lag both ways)
+      const txt = data.toString();
+      if (txt.startsWith('{"t":"png"') || txt.startsWith('{"t":"dg"')) {
+        const m = JSON.parse(txt), reply = m.t === 'png' ? { t: 'pog', n: m.n, k: m.k, st: Date.now() } : { t: 'dgr', ...diag() };
+        setTimeout(() => { if (ws.readyState === 1) ws.send(JSON.stringify(reply)); }, lag);
+        return;
+      }
       const to = slot === 'host' ? r.guest : r.host;
       const m = /^\{"t":"(\w+)"/.exec(data.toString().slice(0, 16));
       const key = `${slot}:${m ? m[1] : '?'}`;

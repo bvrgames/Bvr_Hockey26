@@ -253,8 +253,8 @@
   <canvas id="stick"></canvas>
   <div id="fps"></div>
   <div id="netdbg" class="dbg" style="display:none;position:fixed;left:10px;top:10px;z-index:99;pointer-events:none;
-       font:11px/1.4 monospace;font-weight:700;color:#0f0;background:rgba(0,0,0,.65);padding:4px 8px;
-       border-radius:4px;white-space:pre"></div>
+       font:12px/1.45 monospace;font-weight:700;color:#7dff8a;background:rgba(0,0,0,.78);padding:6px 10px;
+       border-radius:6px;white-space:pre;max-width:calc(100vw - 20px);overflow:hidden"></div>
   <!-- Отдельно от #rotate: не полноэкранный, не блокирует меню/игру под собой,
        не задет paintLang() (тот стирает содержимое #rotate целиком через textContent).
        Показывается только если автоматический requestFullscreen (через orientationchange —
@@ -654,6 +654,8 @@ function layoutTop(){
   tbd.style.right=Math.round(SA.r+PAD_R*3.5+6)+'px'; tbd.style.bottom=Math.round(SA.b+8)+'px';
   /* FPS: слева, где нет кнопок Telegram, табло и экранных кнопок */
   var fps=document.getElementById('fps');
+  /* сетевая диагностика (?debug) — под табло, у левого края */
+  var nd=document.getElementById('netdbg'); if(nd){ nd.style.left=Math.round(SA.l+8)+'px'; nd.style.top=Math.round(Math.max(hudB+6, below+6))+'px'; }
   /* FPS — левый нижний угол, над полоской «домой» и правее выреза */
   fps.style.left=Math.round(SA.l+10)+'px'; fps.style.top='auto'; fps.style.right='auto'; fps.style.bottom=Math.round(SA.b+8)+'px';
 }
@@ -1591,33 +1593,55 @@ var HS=[mkHS(),mkHS()];
 var NET={on:false,role:null,code:'',url:'',ws:null,peer:false,sendT:0,
          a:null,b:null,at:0,bt:0,status:'',ping:0};
 var NIN={mx:0,mz:0,_A:false,_B:false,_X:false,_Y:false,RT:false,LB:false};
-/* TEMP debug (диагностика лагов у гостя, живой тест на реальных
-   устройствах) — счётчики факта отправки/приёма 's'/'i' по сети.
-   Удалить вместе с #netdbg и netSnap()/netSendInput()/onmessage
-   инкрементами, когда причина лагов найдена и починена. */
-var NETDBG={sSent:0,sRecv:0,iSent:0,iRecv:0,tLast:0};
+/* Сетевая диагностика (фаза 3.0, видна только с ?debug — панель #netdbg).
+   Раз в секунду: пинг до Durable Object комнаты (png→pog, отвечает сам DO) и до соперника
+   (pp→pq через релей); раз в 10 с — где живёт DO и откуда подключены игроки (dg→dgr).
+   Статистика за последние 30 с: медиана, p90, джиттер (ст. отклонение). */
+var NETDBG={sSent:0,sRecv:0,iSent:0,iRecv:0,tLast:0, sRate:0, iRate:0};
+var NDG={pings:[],opp:[],n:0,diag:null,stOff:null};
+function ndgPong(m){
+  var now=performance.now(), r=now-m.k;
+  NDG.pings.push([now,r]);
+  if(m.st) NDG.stOff=Math.round(m.st-(Date.now()-r/2));      /* часы сервера минус наши */
+}
+function ndgOpp(m){ var now=performance.now(); NDG.opp.push([now, now-m.k]); }
+function ndgDiag(d){ NDG.diag=d; }
+function ndgStats(a){
+  var now=performance.now();
+  while(a.length && a[0][0]<now-30000) a.shift();
+  if(!a.length) return null;
+  var v=a.map(function(x){return x[1];}).sort(function(x,y){return x-y;});
+  var mean=v.reduce(function(s,x){return s+x;},0)/v.length;
+  var sd=Math.sqrt(v.reduce(function(s,x){return s+(x-mean)*(x-mean);},0)/v.length);
+  return {med:Math.round(v[Math.floor(v.length/2)]), p90:Math.round(v[Math.floor(v.length*0.9)]), jit:Math.round(sd), n:v.length};
+}
 setInterval(function(){
-  if(!NET.on) return;
   var now=performance.now();
   if(!NETDBG.tLast) NETDBG.tLast=now;
   var dt=Math.max(0.001,(now-NETDBG.tLast)/1000); NETDBG.tLast=now;
-  var r=function(v){ return (v/dt).toFixed(1); };
-  var el=document.getElementById('netdbg');
-  if(el){
-    el.style.display='block';
-    var extra='';
-    if(NET.role==='host'){
-      /* TEMP: замыкаем цепочку "пакет пришёл -> значение осмысленное ->
-         применяется к движению" — видно ли NIN живьём и на каком игроке. */
-      var gp=HS[1-HUMAN]&&HS[1-HUMAN].ctrl, gi=gp?players.indexOf(gp):-1;
-      extra='\nNIN mx,mz: '+NIN.mx.toFixed(2)+','+NIN.mz.toFixed(2)+
-        '\nguest ctrl: idx='+gi+(gp?' team='+gp.team+' x='+gp.x.toFixed(1)+' z='+gp.z.toFixed(1):' (нет игрока!)');
-    }
-    el.textContent='NET role:'+NET.role+' peer:'+NET.peer+'\n'+
-      's sent:'+r(NETDBG.sSent)+'/s  recv:'+r(NETDBG.sRecv)+'/s\n'+
-      'i sent:'+r(NETDBG.iSent)+'/s  recv:'+r(NETDBG.iRecv)+'/s'+extra;
-  }
+  NETDBG.sRate=(NET.role==='host'?NETDBG.sSent:NETDBG.sRecv)/dt; NETDBG.iRate=(NET.role==='host'?NETDBG.iRecv:NETDBG.iSent)/dt;
   NETDBG.sSent=0; NETDBG.sRecv=0; NETDBG.iSent=0; NETDBG.iRecv=0;
+  if(!NET.on || !NET.ws || NET.ws.readyState!==1) return;
+  NDG.n++;
+  netSend({t:'png', n:NDG.n, k:now});
+  if(NET.peer) netSend({t:'pp', k:now});
+  if(NDG.n%10===1) netSend({t:'dg'});
+  var el=document.getElementById('netdbg');
+  if(!el) return;
+  el.style.display='block';
+  var d=NDG.diag, me=NET.role, pd=ndgStats(NDG.pings), po=ndgStats(NDG.opp);
+  var mine=null, opp=null;
+  if(d && d.conns) d.conns.forEach(function(c){ if(c.slot===me) mine=c; else opp=c; });
+  var f=function(st){ return st ? 'med '+st.med+'  p90 '+st.p90+'  jit '+st.jit+' ms  (n='+st.n+')' : '—'; };
+  var since=d && d.created ? new Date(d.created+(NDG.stOff?-NDG.stOff:0)).toTimeString().slice(0,8) : '—';
+  el.textContent=
+    'NET '+me+' · peer '+(NET.peer?'yes':'no')+' · room '+NET.code+'\n'+
+    'DO: '+(d?(d.doColo||'?')+' ('+(d.doLoc||'?')+') · hint '+(d.hint||'?')+' · up since '+since:'— (old Worker?)')+'\n'+
+    'me: '+(mine?mine.colo+' ('+mine.country+')':'—')+' · opp: '+(opp?opp.colo+' ('+opp.country+')':'—')+'\n'+
+    'RTT→DO   '+f(pd)+'\n'+
+    'RTT→opp  '+f(po)+'\n'+
+    'snap '+NETDBG.sRate.toFixed(1)+'/s · input '+NETDBG.iRate.toFixed(1)+'/s · interp D '+Math.round(NETV.D*1000)+' ms · rtt(ack) '+Math.round(NETV.rtt||0)+' ms\n'+
+    'server clock Δ '+(NDG.stOff===null?'—':(NDG.stOff>0?'+':'')+NDG.stOff+' ms');
 },1000);
 
 /* ---------- client-side prediction (гость, только свой игрок) ----------
@@ -5065,7 +5089,9 @@ function netConnect(url, code, cb){
   var base=url.replace(/^http/,'ws').replace(/\/+$/,'');
   netStatus(T('connecting'));
   var ws;
-  try{ ws=new WebSocket(base+'/room/'+code); }
+  /* ?hint=apac-se|none — подсказка региона для НОВОЙ комнаты (сравнение в фазе 3.0); иначе по умолчанию Worker'а */
+  var hq=(new URLSearchParams(location.search)).get('hint');
+  try{ ws=new WebSocket(base+'/room/'+code+(hq?'?hint='+encodeURIComponent(hq):'')); }
   catch(e){ netStatus(T('badAddr')); return; }
   NET.ws=ws;
   var opened=false;
@@ -5079,6 +5105,13 @@ function netConnect(url, code, cb){
   ws.onclose=function(){ if(NET.on) netStatus(T('lost')); };
   ws.onmessage=function(ev){
     var m; try{ m=JSON.parse(ev.data); }catch(e){ return; }
+    /* сетевая диагностика (фаза 3.0): ответы Durable Object и пинг соперника через релей */
+    if(m.t==='pog'){ ndgPong(m); return; }
+    if(m.t==='dgr'){ ndgDiag(m); return; }
+    if(m.t==='pp'){ netSend({t:'pq',k:m.k}); return; }
+    if(m.t==='pq'){ ndgOpp(m); return; }
+    if(m.t==='png'||m.t==='dg') return;              /* старый Worker переслал бы их сопернику */
+    if(m.t==='hello' && m.diag){ NDG={pings:[],opp:[],n:0,diag:null,stOff:null}; ndgDiag(m.diag); }
     if(m.t==='hello'){
       NET.role=m.role; NET.on=true;
       HUMAN = (m.role==='host')?0:1;
