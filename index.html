@@ -356,8 +356,20 @@ var TEST=(function(){
          side:q.get('side')==='1'?1:0, debug:q.has('debug')};
   /* Внутри Telegram к ссылке мини-приложения ?debug не допишешь — отладка включается стартовым
      параметром: t.me/bvr_games_bot/hockeytg?startapp=dbg (или dbg_КОД — сразу в комнату) */
-  try{ var sp0=window.Telegram && Telegram.WebApp && Telegram.WebApp.initDataUnsafe && Telegram.WebApp.initDataUnsafe.start_param;
-       if(sp0 && /^dbg(_|$)/i.test(sp0)) t.debug=true; }catch(e){}
+  /* startapp: префиксы dbg_ (отладка) и srv_ (матч считает сервер) в любом порядке, дальше — код комнаты:
+     dbg, srv, dbg_КОД, srv_КОД, srv_dbg_КОД */
+  t.startParam=function(sp){
+    var o={dbg:false, srv:false, room:''}, m;
+    sp=String(sp||'');
+    while((m=/^(dbg|srv)(?:_|$)/i.exec(sp))){ o[m[1].toLowerCase()]=true; sp=sp.slice(m[0].length); }
+    o.room=sp; return o;
+  };
+  var sp0=null;
+  try{ sp0=window.Telegram && Telegram.WebApp && Telegram.WebApp.initDataUnsafe && Telegram.WebApp.initDataUnsafe.start_param; }catch(e){}
+  t.sp=t.startParam(sp0);
+  if(t.sp.dbg) t.debug=true;
+  /* ?net=server / startapp=srv… — сетевой матч считает сервер (фаза 3.2), иначе — хост (по умолчанию) */
+  t.srv = q.get('net')==='server' || t.sp.srv;
   /* ?debug — показать отладочные индикаторы (класс .dbg): скорость, FPS, сеть */
   if(t.debug) document.body.classList.add('debug');
   if(t.seed){
@@ -1642,6 +1654,10 @@ var HUMAN=TEST.side;
 var NET={on:false,role:null,code:'',url:'',ws:null,peer:false,sendT:0,
          a:null,b:null,at:0,bt:0,status:'',ping:0};
 var NIN={mx:0,mz:0,_A:false,_B:false,_X:false,_Y:false,RT:false,LB:false};
+/* Кто считает сетевой матч. netHost — этот клиент (хост в старой схеме): симуляция, снимки, ввод гостя.
+   netFollow — матч считает другой: хост (мы гость) или сервер (NET.srv, оба игрока): снимки, предсказание. */
+function netHost(){ return NET.on && !NET.srv && NET.role==='host'; }
+function netFollow(){ return NET.on && (NET.srv || NET.role==='guest'); }
 /* Сетевая диагностика (фаза 3.0, видна только с ?debug — панель #netdbg).
    Раз в секунду: пинг до Durable Object комнаты (png→pog, отвечает сам DO) и до соперника
    (pp→pq через релей); раз в 10 с — где живёт DO и откуда подключены игроки (dg→dgr).
@@ -1668,7 +1684,7 @@ setInterval(function(){
   var now=performance.now();
   if(!NETDBG.tLast) NETDBG.tLast=now;
   var dt=Math.max(0.001,(now-NETDBG.tLast)/1000); NETDBG.tLast=now;
-  NETDBG.sRate=(NET.role==='host'?NETDBG.sSent:NETDBG.sRecv)/dt; NETDBG.iRate=(NET.role==='host'?NETDBG.iRecv:NETDBG.iSent)/dt;
+  NETDBG.sRate=(netHost()?NETDBG.sSent:NETDBG.sRecv)/dt; NETDBG.iRate=(netHost()?NETDBG.iRecv:NETDBG.iSent)/dt;
   NETDBG.sSent=0; NETDBG.sRecv=0; NETDBG.iSent=0; NETDBG.iRecv=0;
   if(!NET.on || !NET.ws || NET.ws.readyState!==1){
     var pe=document.getElementById('netdbg');
@@ -1688,8 +1704,9 @@ setInterval(function(){
   var f=function(st){ return st ? 'med '+st.med+'  p90 '+st.p90+'  jit '+st.jit+' ms  (n='+st.n+')' : '—'; };
   var since=d && d.created ? new Date(d.created+(NDG.stOff?-NDG.stOff:0)).toTimeString().slice(0,8) : '—';
   el.textContent=
-    'NET '+me+' · peer '+(NET.peer?'yes':'no')+' · room '+NET.code+'\n'+
-    'DO: '+(d?(d.doColo||'?')+' ('+(d.doLoc||'?')+') · hint '+(d.hint||'?')+' · up since '+since:'— (old Worker?)')+'\n'+
+    'NET '+me+' · '+(NET.srv?'SERVER sim':'host sim')+' · peer '+(NET.peer?'yes':'no')+' · room '+NET.code+'\n'+
+    'DO: '+(d?(d.doColo||'?')+' ('+(d.doLoc||'?')+') · hint '+(d.hint||'?')+' · up since '+since:'— (old Worker?)')+
+    (d && d.sim ? ' · sim '+d.sim.steps+' steps, max '+d.sim.maxStepMs+' ms' : '')+'\n'+
     'me: '+(mine?mine.colo+' ('+mine.country+')':'—')+' · opp: '+(opp?opp.colo+' ('+opp.country+')':'—')+'\n'+
     'RTT→DO   '+f(pd)+'\n'+
     'RTT→opp  '+f(po)+'\n'+
@@ -1832,7 +1849,7 @@ var _edgeA=0;   /* сколько раз кнопка A дала фронт — 
 function autoPilot(){ return TEST.autopilot && !NET.on; }
 /* ввод → команды симуляции: игрок (или автопилот), у хоста — ещё гость; уровень ИИ соперника */
 function simCfg(){
-  var ap=autoPilot(), host=NET.on && NET.role==='host', o=1-HUMAN, c=SIM.control;
+  var ap=autoPilot(), host=netHost(), o=1-HUMAN, c=SIM.control;
   c.first=HUMAN;
   c.tick[HUMAN]=true; c.hum[HUMAN]=!ap; c.inp[HUMAN]=ap?SIM.NOIN:IN; c.edge[HUMAN]=ap?SIM.NOEDGE:EDGE; c.rem[HUMAN]=null;
   c.tick[o]=host; c.hum[o]=host; c.inp[o]=NIN; c.edge[o]=NEDGE; c.rem[o]=host?NETV:null;
@@ -4097,7 +4114,7 @@ function randCode(){
 }
 function netConnect(url, code, cb){
   try{ if(NET.ws) NET.ws.close(); }catch(e){}
-  NET.code=code; NET.url=url; NET.peer=false; NET.role=null;
+  NET.code=code; NET.url=url; NET.peer=false; NET.role=null; NET.srv=false;
   var base=url.replace(/^http/,'ws').replace(/\/+$/,'');
   netStatus(T('connecting'));
   var ws;
@@ -4105,7 +4122,10 @@ function netConnect(url, code, cb){
      apac-se — Сингапур 8/10 (RTT до DO от ~42 мс), apac — Сингапур/Гонконг/Токио, без подсказки —
      иногда Милан (провайдер уводит в Марсель). ?hint=… в ссылке — для повторных сравнений. */
   var hq=(new URLSearchParams(location.search)).get('hint')||'apac-se';
-  try{ ws=new WebSocket(base+'/room/'+code+(hq?'?hint='+encodeURIComponent(hq):'')); }
+  /* mode=srv — просьба, чтобы матч считал сервер; решает тот, кто открывает пустую комнату,
+     второй игрок узнаёт режим из hello (srv:1). Старый Worker её не знает — тогда матч по-старому, у хоста. */
+  var qs=[]; if(hq) qs.push('hint='+encodeURIComponent(hq)); if(TEST.srv) qs.push('mode=srv');
+  try{ ws=new WebSocket(base+'/room/'+code+(qs.length?'?'+qs.join('&'):'')); }
   catch(e){ netStatus(T('badAddr')); return; }
   NET.ws=ws;
   var opened=false;
@@ -4127,10 +4147,10 @@ function netConnect(url, code, cb){
     if(m.t==='png'||m.t==='dg') return;              /* старый Worker переслал бы их сопернику */
     if(m.t==='hello' && m.diag){ NDG={pings:[],opp:[],n:0,diag:null,stOff:null}; ndgDiag(m.diag); }
     if(m.t==='hello'){
-      NET.role=m.role; NET.on=true;
+      NET.role=m.role; NET.on=true; NET.srv=!!m.srv;
       HUMAN = (m.role==='host')?0:1;
       NET.peer = m.n>1;
-      netStatus(T('room')+' '+code+' · '+(m.role==='host' ? T('youHost') : T('youGuest')));
+      netStatus(T('room')+' '+code+' · '+(m.role==='host' ? T('youHost') : T('youGuest'))+(NET.srv?' · server':''));
       if(cb) cb();
     }
     else if(m.t==='full'){ NET.on=false; netStatus(T('roomFull')); }
@@ -4139,7 +4159,7 @@ function netConnect(url, code, cb){
       netStatus(NET.peer?T('peerIn'):T('waiting'));
       if(!NET.peer && state!=='menu'){ flash(T('peerOut'),'',2.2); }
     }
-    else if(m.t==='cfg' && NET.role==='guest'){
+    else if(m.t==='cfg' && netFollow()){
       TEAM[0]=CLUBS[m.a]; TEAM[1]=CLUBS[m.b];
       buildTeamMeshes();
       MATCH_MIN=m.min; clock=MATCH_MIN*60;
@@ -4154,8 +4174,8 @@ function netConnect(url, code, cb){
       audioInit();
       matchStart(m.id||newMatchId(), m.a, m.b);
     }
-    else if(m.t==='s' && NET.role==='guest'){ NETDBG.sRecv++; netRecvSnap(m); }
-    else if(m.t==='i' && NET.role==='host'){ NETDBG.iRecv++; netRecvInput(m); }
+    else if(m.t==='s' && netFollow()){ NETDBG.sRecv++; netRecvSnap(m); }
+    else if(m.t==='i' && netHost()){ NETDBG.iRecv++; netRecvInput(m); }
   };
 }
 function netSend(o){
@@ -4443,7 +4463,10 @@ function predictedOwn(e, kind){
 function netSendInput(){
   var b=(IN._A?1:0)|(IN._B?2:0)|(IN._X?4:0)|(IN._Y?8:0)|(IN.RT?16:0)|(IN._LB?32:0);
   var q=++NETV.q;
-  netSend({t:'i',m:[r2(IN.mx),r2(IN.mz)],b:b,tc:TACTIC[HUMAN],q:q,c:NETV.cnt.slice()});
+  /* серверу — стик уже в мировых координатах (у него нет камеры); хосту — как раньше, экранный */
+  var sm=IN.mx, sz=IN.mz;
+  if(NET.srv){ var wv=toWorld(IN.mx,IN.mz,[0,0]); sm=wv[0]; sz=wv[1]; }
+  netSend({t:'i',m:[r2(sm),r2(sz)],b:b,tc:TACTIC[HUMAN],q:q,c:NETV.cnt.slice()});
   NETV.sentT[q]=performance.now();
   NETDBG.iSent++; /* TEMP debug — see netSnap() comment */
   /* client-side prediction: история своего ввода для доигрывания после
@@ -4576,7 +4599,7 @@ function frameStepInner(dt){
   if(PAUSED || state==='over'){
     /* хост продолжает слать снимки и после конца матча: иначе гость не видит
        финальное состояние и событие match:end (пауза в сети невозможна) */
-    if(NET.on && NET.role==='host' && state==='over'){
+    if(netHost() && state==='over'){
       NET.sendT-=dt;
       if(NET.sendT<=0){ NET.sendT=1/6; netSnap(); }
     }
@@ -4584,7 +4607,7 @@ function frameStepInner(dt){
     return;
   }
 
-  if(NET.on && NET.role==='guest'){
+  if(netFollow()){
     var _tn=pfNow();
     netApply();
     netPredictGuest(dt);
@@ -4607,7 +4630,7 @@ function frameStepInner(dt){
     var _ts2=pfNow();
     sim(dt);
     pfAdd('sim',_ts2);
-    if(NET.on && NET.role==='host'){
+    if(netHost()){
       var _tn2=pfNow();
       NET.sendT-=dt;
       if(NET.sendT<=0){ NET.sendT+=1/SNAP_HZ; if(NET.sendT<0) NET.sendT=0; netSnap(); }
@@ -4823,8 +4846,9 @@ function shareLink(code){
      режима бота, в отличие от switchInlineQuery). Вне Telegram (тест в
      обычном браузере) — прежнее поведение: прямая веб-ссылка в буфер. */
   /* в отладке приглашение тоже с отладкой, чтобы панель сети была у обоих */
-  var deepLink='https://t.me/bvr_games_bot/hockeytg?startapp='+(TEST.debug?'dbg_':'')+code;
-  var webLink=location.origin+location.pathname+'?room='+code+'&srv='+encodeURIComponent(srvEl.value.trim());
+  /* серверный режим — тоже в приглашении (комнату и так ведёт сервер, но у друга будет та же пометка) */
+  var deepLink='https://t.me/bvr_games_bot/hockeytg?startapp='+(NET.srv?'srv_':'')+(TEST.debug?'dbg_':'')+code;
+  var webLink=location.origin+location.pathname+'?room='+code+'&srv='+encodeURIComponent(srvEl.value.trim())+(NET.srv?'&net=server':'');
   var shown=TG?deepLink:webLink;
   document.getElementById('netlink').textContent=T('linkFriend')+' '+shown;
   if(TG && TG.openTelegramLink){
@@ -4880,10 +4904,8 @@ document.getElementById('bJoin').addEventListener('click',function(){
   });
   var _tg=_tgl;
   if(!room && _tg && _tg.initDataUnsafe && _tg.initDataUnsafe.start_param){
-    var sp=_tg.initDataUnsafe.start_param;
-    /* dbg / dbg_КОД — отладка (см. TEST выше); код комнаты — после префикса */
-    var dm=/^dbg(?:_(.*))?$/i.exec(sp);
-    if(dm) sp=dm[1]||'';
+    /* dbg_ / srv_ — отладка и серверный режим (см. TEST выше); код комнаты — после префиксов */
+    var sp=TEST.startParam(_tg.initDataUnsafe.start_param).room;
     if(/^[A-Za-z0-9_-]{2,16}$/.test(sp)) room=sp;
   }
   if(srv){ srvEl.value=srv; try{localStorage.setItem('bvr_srv',srv);}catch(e){} }
@@ -4902,6 +4924,8 @@ document.getElementById('go').addEventListener('click',function(){
   if(ONLINE){
     if(!NET.on || NET.role!=='host' || !NET.peer) return;
     netSend({t:'cfg',a:selMy,b:selOp,min:MODES[selMode].m,id:mid});
+    /* серверный режим: матч начнёт сервер — его cfg придёт обоим, как гостю */
+    if(NET.srv) return;
   } else { NET.on=false; HUMAN=TEST.side; }
   TEAM[0]=CLUBS[selMy]; TEAM[1]=CLUBS[selOp];
   buildTeamMeshes();
@@ -4928,6 +4952,7 @@ function startMatchAgain(){
   if(NET.on && NET.role==='host'){
     if(!NET.peer) return;
     netSend({t:'cfg',a:MATCH.clubs[0],b:MATCH.clubs[1],min:MATCH_MIN,id:mid});
+    if(NET.srv) return;              /* серверный режим: реванш начнёт сервер (cfg придёт обоим) */
   }
   hideResult(); setPaused(false);
   score[0]=0; score[1]=0; clock=MATCH_MIN*60; pen.length=0;
@@ -5047,7 +5072,7 @@ function matchStart(id, clubA, clubB){
   if(isDesktopTG() && innerHeight>innerWidth){
     try{ if(TG && TG.requestFullscreen && (!TG.isVersionAtLeast || TG.isVersionAtLeast('8.0'))) TG.requestFullscreen(); }catch(e){}
   }
-  MATCH.id=id; MATCH.mode=NET.on?'online':'ai'; MATCH.role=NET.on?NET.role:'solo';
+  MATCH.id=id; MATCH.mode=NET.on?'online':'ai'; MATCH.role=NET.on?NET.role:'solo'; MATCH.net=NET.on?(NET.srv?'server':'host'):null;
   MATCH.team=HUMAN; MATCH.clubs=[clubA,clubB]; MATCH.len=Math.round(clock);
   MATCH.played=0; MATCH.startedAt=Date.now(); MATCH.summary=null; MATCH.sent=false;
   MATCH.difficulty = NET.on ? null : DIFF;   /* в сетевом матче соперник — человек */
@@ -5058,7 +5083,7 @@ function buildSummary(sc){
   var me=MATCH.team, res = sc[me]>sc[1-me]?'win':(sc[me]<sc[1-me]?'loss':'draw');
   var pl=[];
   for(var k in STATS.players){ var q=STATS.players[k]; pl.push({t:q.t, num:q.num, g:q.g, a:q.a, s:q.s, h:q.h}); }
-  return {v:1, id:MATCH.id, client:CLIENT_VER, mode:MATCH.mode, role:MATCH.role, team:me, difficulty:MATCH.difficulty,
+  return {v:1, id:MATCH.id, client:CLIENT_VER, mode:MATCH.mode, role:MATCH.role, net:MATCH.net||null, team:me, difficulty:MATCH.difficulty,
           clubs:MATCH.clubs.slice(), len:MATCH.len, played:Math.round(MATCH.played),
           startedAt:MATCH.startedAt, endedAt:Date.now(), score:sc.slice(), result:res,
           teams:[STATS.teams[0], STATS.teams[1]], players:pl, faceoffs:STATS.faceoffs, events:STATS.events,
@@ -5105,7 +5130,7 @@ EV.on('match:start', function(){ sumFlush(); });
    ============================================================ */
 var NET_EVQ=[];
 EV.on('*', function(e,n){
-  if(!NET.on || NET.role!=='host' || !EV.NETWORKED[n] || e.remote) return;
+  if(!netHost() || !EV.NETWORKED[n] || e.remote) return;
   NET_EVQ.push({n:n, e:e, left:3});
   if(NET_EVQ.length>60) NET_EVQ.splice(0, NET_EVQ.length-60);
 });
@@ -5239,7 +5264,7 @@ window.__hk={hs:function(){return HS;},net:function(){return NET;},setCam:functi
   /* замер: средняя цена кадра отрисовки (мс) при уровне пружин lv (0 — выкл) */
   benchSprings:function(lv,n){ var q=QC(), old=q.springs; q.springs=lv; n=n||240; var t0=performance.now(); for(var i=0;i<n;i++){ RDT=1/60; render(); } var dt=(performance.now()-t0)/n; q.springs=old; return +dt.toFixed(3); }, tgBtnW:TG_BTN_W, tgCloseW:function(){ return tgCloseW(); }, safe:function(){ return {sa:safeInsets(), band:tgButtonsBand(), portrait:PORTRAIT}; },
   /* хост: отправить снимок сейчас (с ожидающими событиями) — для тестов после freeze */
-  netSnap:function(){ if(NET.on && NET.role==='host') netSnap(); },
+  netSnap:function(){ if(netHost()) netSnap(); },
   /* разбивка времени кадра (последние 0.5 с) — tools/perf.mjs; on — включить замеры без ?debug */
   perf:function(on){ if(on!==undefined) PERF.on=!!on; return PERF.out; },
   /* цена кадра на GPU: n раз render + readPixels(1 px), мс на кадр (skip — не рисовать игроков) */
