@@ -28,12 +28,12 @@ export function fakeTelegram({ fullscreen = true, safe = {}, content = {}, lang 
                      setItem:function(k,v,cb){ store[k]=String(v); if(cb) cb(null,true); } } }; })()};`;
 }
 
-export async function openGame(name, { w = 1280, h = 720, headed = false, tg = null, mobile = false } = {}) {
+export async function openGame(name, { w = 1280, h = 720, headed = false, tg = null, mobile = false, dpr = 1 } = {}) {
   const engine = ENGINES[name];
   if (!engine) throw new Error(`unknown browser "${name}" (chromium | webkit)`);
   const browser = await engine.launch({ headless: !headed, args: ARGS[name] });
   // mobile: screen = viewport, so screen.orientation (the game's portrait test) follows it; isMobile only exists in Chromium
-  const ctxOpt = { viewport: { width: w, height: h }, deviceScaleFactor: 1 };
+  const ctxOpt = { viewport: { width: w, height: h }, deviceScaleFactor: dpr };
   if (mobile) Object.assign(ctxOpt, { screen: { width: w, height: h }, hasTouch: true }, name === 'chromium' ? { isMobile: true } : {});
   const context = await browser.newContext(ctxOpt);
   const page = await context.newPage();
