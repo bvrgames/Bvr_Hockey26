@@ -6,7 +6,16 @@
 //   · pickup  — guest's stick reaches a loose puck on the guest screen → the guest sees it owned (host decides)
 //   · jerks   — per-frame jumps against constant-velocity motion (> 3 cm): own player / others / puck, per second
 //   · snapshots — rate, interval jitter, size; inputs per second
-// usage: node tools/smoke-lag.mjs [--rtt 0,80,150,250] [--json out.json] [--trials 5]
+//
+// Default run — mobile comparison, host scheme vs server scheme (phase 3.4). Each player has their own link to the
+// server: RTT and jitter (standard deviation of the RTT, like "jit" in the ?debug panel), 1 % loss bursts.
+//   · host scheme: the match runs on the host's phone, the guest's path to it is guest → server → host, so the relay
+//     gets the sum of both links (RTT_h + RTT_g, jitter of both); the host itself plays with zero delay;
+//   · server scheme (?net=server): the match runs in relay-mock's MatchRoom (= the Durable Object's code), each player
+//     over their own link. "(host)" values are the host's own — in this scheme they are networked too.
+//   Scenarios A: host 140 ms / jit 55, guest 80 / jit 80 (the RZYT phone test); B: both 140 / jit 80.
+// --rtt 0,80,150,250 — the old host-scheme sweep (one relay hop, jitter 10 %).
+// usage: node tools/smoke-lag.mjs [--scen A,B] [--rtt …] [--json out.json] [--trials 5]
 // Exit code 1 only on page errors / a broken run (the numbers themselves are a report, not pass/fail),
 // or with --max-move / --max-lost thresholds when given.
 import { writeFileSync } from 'node:fs';
@@ -16,10 +25,23 @@ import { openGame, isError } from './browser.mjs';
 
 const args = process.argv.slice(2);
 const opt = (k, d) => { const i = args.indexOf('--' + k); return i >= 0 ? args[i + 1] : d; };
-const RTTS = opt('rtt', '0,80,150,250').split(',').map(Number);
 const TRIALS = +opt('trials', 5);
 const port = +opt('port', 8502), rport = +opt('relay', 8795);
 const NET_FOR = (rtt) => ({ lag: rtt / 2, jitter: rtt ? Math.max(5, rtt * 0.1) : 0, loss: rtt ? 1 : 0 });
+// one-way ±J uniform on both halves of a round trip gives an RTT standard deviation of J·√(2/3)
+const J_FOR_SD = (sd) => Math.round(sd * Math.sqrt(1.5));
+const SCEN = { A: { host: [140, 55], guest: [80, 80] }, B: { host: [140, 80], guest: [140, 80] } };
+const RUNS = [];
+if (opt('rtt', null)) for (const rtt of opt('rtt').split(',').map(Number)) RUNS.push({ label: `RTT ${rtt}`, mode: 'host', net: NET_FOR(rtt), rtt });
+else for (const k of opt('scen', 'A,B').split(',')) {
+  const s = SCEN[k]; if (!s) continue;
+  const link = ([rtt, sd]) => ({ lag: rtt / 2, jitter: J_FOR_SD(sd), loss: 1 });
+  const h = link(s.host), g = link(s.guest);
+  // host scheme: one relay hop carries both links — delays add up, jitters add in quadrature
+  RUNS.push({ label: `${k} host`, mode: 'host', rtt: s.host[0] + s.guest[0],
+              net: { lag: h.lag + g.lag, jitter: Math.round(Math.hypot(h.jitter, g.jitter)), loss: 2 }, scen: s });
+  RUNS.push({ label: `${k} server`, mode: 'server', rtt: s.guest[0], net: { per: [h, g] }, scen: s });
+}
 
 // WebSocket wrapper, installed before the game loads: snapshot arrival times / sizes, inputs sent
 const WS_HOOK = `(() => { const W = window.WebSocket; window.__net = { snaps: [], inputs: 0 };
@@ -34,18 +56,20 @@ const PAGE_HELPERS = `
 window.__smp = { on: false, fr: [] };
 (function loop(){ requestAnimationFrame(function(t){
   if (__smp.on) { var c = __hk.ctrl(), P = __hk.p, pk = __hk.puck, row = [t, c ? P.indexOf(c) : -1, pk.x, pk.z, pk.owner ? P.indexOf(pk.owner) : -1, __hk.st()];
-    var au = window.__authPos && __hk.net().role === 'guest' ? window.__authPos(window.__myIdx()) : null; __smp.au = __smp.au || []; __smp.au.push(au ? [au[0], au[1]] : null);
+    var au = window.__authPos && window.__follow() ? window.__authPos(window.__myIdx()) : null; __smp.au = __smp.au || []; __smp.au.push(au ? [au[0], au[1]] : null);
     __smp.src = __smp.src || []; var ni = __hk.netInfo ? __hk.netInfo() : null; __smp.src.push(ni ? (ni.pmode || ni.src) : null);
     for (var i = 0; i < P.length; i++) row.push(P[i].x, P[i].z, P[i].boxed || P[i].down > 0 ? 1 : 0);
     __smp.fr.push(row); }
   loop(); }); })();
 window.__frames = function (test, timeout) { return new Promise(function (res) { var t0 = performance.now();
   (function poll(){ requestAnimationFrame(function (t) { var r = test(t); if (r !== undefined) return res(r); if (t - t0 > timeout) return res(-1); poll(); }); })(); }); };
+// this page follows someone else's simulation (the guest of the host scheme, or either player in server mode)
+window.__follow = function () { var n = __hk.net(); return !!(n.on && (n.role === 'guest' || n.srv)); };
 window.__myIdx = function () { var b = __hk.net().b; return b ? (__hk.human() === 0 ? b[7] : b[8]) : -1; };
 window.__authPos = function (i) { var b = __hk.net().b; return b && i >= 0 ? [b[20 + i * 6], b[21 + i * 6]] : null; };
 window.__moveLat = function (dx, dz) {           // → [screen ms, authoritative ms or -1]
   // record 700 ms of drawn (and, on the guest, authoritative) positions, then measure along the final direction
-  var c = __hk.ctrl(), t0 = performance.now(), guest = __hk.net().on && __hk.net().role === 'guest';
+  var c = __hk.ctrl(), t0 = performance.now(), guest = window.__follow();
   var mi = window.__myIdx(), S = [], A = [];
   __hk.move(dx, dz);
   return __frames(function (t) {
@@ -121,13 +145,19 @@ const med = (a) => { const v = a.filter((x) => x >= 0).sort((x, y) => x - y); re
 const srv = await startServer(port);
 const results = [];
 let broken = false;
-for (const rtt of RTTS) {
-  const net = NET_FOR(rtt);
+for (const run of RUNS) {
+  const { rtt, net, mode } = run;
   const relay = await startRelay(rport, net);
   const room = 'LAG' + Math.floor(Math.random() * 1e5);
-  const url = `http://127.0.0.1:${port}/index.html?room=${room}&srv=http://127.0.0.1:${rport}&seed=3`;
+  const url = `http://127.0.0.1:${port}/index.html?room=${room}&srv=http://127.0.0.1:${rport}&seed=3${mode === 'server' ? '&net=server' : ''}`;
   const sides = {};
-  const R = { rtt, net, errors: [] };
+  const R = { label: run.label, mode, rtt, net, scen: run.scen, errors: [] };
+  // test set-ups change the authoritative match: the host's page in the host scheme, relay-mock's simulation (same
+  // process) in server mode. fn(HS, puck, players) must be self-contained (it is also sent into the page as text).
+  const setup = async (fn) => {
+    if (mode !== 'server') return sides.host.page.evaluate(`(${fn})(__hk.hs(), __hk.puck, __hk.p)`);
+    const S = relay.stats.rooms.get(room).match.sim; return fn(S.HS, S.puck, S.players);
+  };
   try {
     for (const who of ['host', 'guest']) {
       const g = await openGame('chromium', { w: 1280, h: 720 });
@@ -196,12 +226,12 @@ for (const rtt of RTTS) {
     const act = { pass: { g: [], gc: [], h: [] }, shot: { g: [], gc: [], h: [] } };
     for (const [kind, btn] of [['pass', 'A'], ['shot', 'B']]) {
       for (let i = 0; i < TRIALS; i++) {
-        await H.evaluate('(function(){ var g=__hk.hs()[1].ctrl; __hk.puck.owner=g; g.vx=g.vz=0; })()');
+        await setup(function (hs, puck) { var g = hs[1].ctrl; puck.owner = g; g.vx = g.vz = 0; });
         await G.waitForTimeout(700);
         const ga = await G.evaluate(`__actLat("${btn}")`); act[kind].g.push(ga[0]); act[kind].gc.push(ga[1]);
         await H.waitForTimeout(400);
-        await H.evaluate('(function(){ var h=__hk.hs()[0].ctrl; __hk.puck.owner=h; h.vx=h.vz=0; })()');
-        await H.waitForTimeout(300);
+        await setup(function (hs, puck) { var h = hs[0].ctrl; puck.owner = h; h.vx = h.vz = 0; });
+        await H.waitForTimeout(mode === 'server' ? 700 : 300);   // server mode: the host too waits for the snapshot
         act[kind].h.push((await H.evaluate(`__actLat("${btn}")`))[0]);
         await H.waitForTimeout(400);
       }
@@ -216,8 +246,8 @@ for (const rtt of RTTS) {
       await G.evaluate(`__hk.move(${i % 2 ? -1 : 1},0)`); await G.waitForTimeout(700);
       // host: loose puck 6 m ahead of the guest's player (host's view); every other skater is moved 14 m away so
       // nobody else can reach it during the trial
-      await H.evaluate('(function(){ var g=__hk.hs()[1].ctrl, v=Math.hypot(g.vx,g.vz)||1, p=__hk.puck; p.owner=null; p.x=g.x+g.vx/v*6; p.z=g.z+g.vz/v*6; p.vx=p.vz=0; p.vy=0; p.y=0.05; p.free=0;'
-        + ' __hk.p.forEach(function(o){ if(o!==g && !o.goalie && !o.boxed && Math.hypot(o.x-p.x,o.z-p.z)<14){ var d=Math.hypot(o.x-p.x,o.z-p.z)||1; o.x=Math.max(-27,Math.min(27,p.x+(o.x-p.x)/d*14)); o.z=Math.max(-12,Math.min(12,p.z+(o.z-p.z)/d*14)); o.vx=o.vz=0; } }); })()');
+      await setup(function (hs, p, pl) { var g = hs[1].ctrl, v = Math.hypot(g.vx, g.vz) || 1; p.owner = null; p.x = g.x + g.vx / v * 6; p.z = g.z + g.vz / v * 6; p.vx = p.vz = 0; p.vy = 0; p.y = 0.05; p.free = 0;
+        pl.forEach(function (o) { if (o !== g && !o.goalie && !o.boxed && Math.hypot(o.x - p.x, o.z - p.z) < 14) { var d = Math.hypot(o.x - p.x, o.z - p.z) || 1; o.x = Math.max(-27, Math.min(27, p.x + (o.x - p.x) / d * 14)); o.z = Math.max(-12, Math.min(12, p.z + (o.z - p.z) / d * 14)); o.vx = o.vz = 0; } }); });
       // start timing only once the guest actually sees the loose puck (the snapshot with it has arrived)
       // …and until the drawn puck is really at its new spot (the drawn puck trails the snapshots by the interpolation delay)
       const seen = await G.waitForFunction('(function(){ var c=__hk.ctrl(), p=__hk.puck; return p.owner!==c && Math.hypot(c.x+Math.cos(c.yaw)*0.95-p.x, c.z+Math.sin(c.yaw)*0.95-p.z)>2; })()', null, { timeout: 3000 }).then(() => true, () => false);
@@ -226,7 +256,7 @@ for (const rtt of RTTS) {
       await G.evaluate('__hk.move(0,0)'); await G.waitForTimeout(600);
     }
     R.pickup = { waitMs: med(pk), visMs: med(pkv), lost: pk.filter((x) => x === -1).length, trials: pk.length, raw: pk, rawVis: pkv };
-    R.relay = relay.stats;
+    R.relay = { msgs: relay.stats.msgs, bytes: relay.stats.bytes, lost: relay.stats.lost };
     for (const [who, g] of Object.entries(sides)) {
       for (const e of g.logs.filter(isError)) R.errors.push(`${who} [${e.type}] ${e.text}`);
       for (const e of await g.page.evaluate('__hk.errors()')) R.errors.push(`${who} [window] ${e}`);
@@ -239,17 +269,20 @@ for (const rtt of RTTS) {
   }
   if (R.errors.length) broken = true;
   results.push(R);
-  console.log(`RTT ${rtt} ms done${R.errors.length ? ' — ERRORS: ' + R.errors.join(' | ') : ''}`);
+  console.log(`${run.label} done${R.errors.length ? ' — ERRORS: ' + R.errors.join(' | ') : ''}`);
 }
 srv.close();
 
 // ---------- report
-const cols = results.map((r) => `RTT ${r.rtt}`);
+const cols = results.map((r) => r.label);
 const row = (name, f) => console.log(name.padEnd(46) + results.map((r) => String(f(r) ?? '—').padStart(12)).join(''));
 console.log('\n' + ''.padEnd(46) + cols.map((c) => c.padStart(12)).join(''));
-console.log('(one-way lag / jitter / loss)'.padEnd(46) + results.map((r) => `${r.net.lag}/${Math.round(r.net.jitter)}/${r.net.loss}%`.padStart(12)).join(''));
-row('move: guest screen, ms (host baseline)', (r) => r.move && `${r.move.guestScreen} (${r.move.host})`);
-row('move: guest in host snapshot, ms', (r) => r.move && r.move.guestAuth);
+if (results.some((r) => r.scen)) {
+  console.log('(RTT/jit to server: host, guest)'.padEnd(46) + results.map((r) => (r.scen ? `${r.scen.host.join('/')} ${r.scen.guest.join('/')}` : '').padStart(12)).join(''));
+  console.log('(emulated one-way lag ±jitter, loss)'.padEnd(46) + results.map((r) => (r.net.per ? `${r.net.per[0].lag}±${r.net.per[0].jitter} ${r.net.per[1].lag}±${r.net.per[1].jitter}` : `${r.net.lag}±${r.net.jitter} ${r.net.loss}%`).padStart(12)).join(''));
+} else console.log('(one-way lag / jitter / loss)'.padEnd(46) + results.map((r) => `${r.net.lag}/${Math.round(r.net.jitter)}/${r.net.loss}%`.padStart(12)).join(''));
+row('move: guest screen, ms (host)', (r) => r.move && `${r.move.guestScreen} (${r.move.host})`);
+row('move: guest in authoritative snapshot, ms', (r) => r.move && r.move.guestAuth);
 row('pass: guest press → drawn puck leaves (host)', (r) => r.pass && `${r.pass.guest} (${r.pass.host})`);
 row('  … host releases it (guest sees), ms', (r) => r.pass && r.pass.confirm);
 row('shot: guest press → drawn puck leaves (host)', (r) => r.shot && `${r.shot.guest} (${r.shot.host})`);
