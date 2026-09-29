@@ -513,7 +513,7 @@ function qualityGuess(d){
    одни и те же, а качеством крутим только свет, тени и разрешение. */
 /* следы на льду теперь на GPU и дёшевы — включены на всех уровнях */
 /* springs — вторичная анимация: 1 наклон и крен корпуса, 2 + голова, 3 + клюшка и просадка при силовом */
-var QCFG=[{dpr:1.00, crowd:512,  ice:1024, board:2048, shadow:false, ssize:512,  spray:0.0, refl:false, marks:true, springs:1, lod:true},
+var QCFG=[{dpr:1.00, crowd:512,  ice:1024, board:2048, shadow:false, ssize:512,  spray:0.0, refl:false, marks:true, springs:1, lod:true, lite:true},
           {dpr:1.50, crowd:768,  ice:1536, board:3072, shadow:true,  ssize:768,  spray:0.5, refl:true,  marks:true, springs:2},
           {dpr:2.00, crowd:1024, ice:2048, board:4096, shadow:true,  ssize:1280, spray:1.0, refl:true,  marks:true, springs:3}];
 function QC(){ return QCFG[QLEVEL]; }
@@ -2186,6 +2186,21 @@ var FS_MAIN=[
 '    albedo=mix(albedo, toLin(mk.rgb), mw); mRough=mix(uRough,0.9,mw); mEnv=uEnvK*(1.0-mw);',
 '  }',
 '  vec3 N=normalize(vN); N.y*=uFlipN;',
+'#ifdef LITE',
+/* облегчённый (низкое качество): ламберт от солнца + рассеянное из гармоник, блик окружения — те же
+   гармоники по отражённому лучу вместо карты окружения; без GGX, без тени, без atan/acos/textureLod */
+'  vec3 V=normalize(uCam-vW);',
+'  float ndl=max(dot(N,uSunDir),0.0);',
+'  float ndv=max(dot(N,V),1e-4);',
+'  float rough=clamp(mRough,0.045,1.0);',
+'  vec3 f0=mix(vec3(0.04), albedo, uMetal);',
+'  vec3 diffCol=albedo*(1.0-uMetal);',
+'  vec3 direct=diffCol/3.14159265*uSunCol*ndl;',
+'  vec3 ambient=diffCol*max(shIrradiance(N),0.0)*uAmbK;',
+'  float fr=1.0-ndv; fr*=fr; fr*=fr*(1.0-ndv);',
+'  float gl=(1.0-rough)*(1.0-rough);',
+'  vec3 envSpec=max(shIrradiance(reflect(-V,N)),0.0)*(f0+(1.0-f0)*fr)*gl*mix(0.35,1.0,ndv)*uAmbK*mEnv*0.5;',
+'#else',
 '  vec3 V=normalize(uCam-vW);',
 '  vec3 L=uSunDir;',
 '  vec3 Hv=normalize(L+V);',
@@ -2226,6 +2241,7 @@ var FS_MAIN=[
 '    float dd=texture(uShadow,pp.xy).r;',
 '    frag=vec4(vec3(dd),1.0); return;',
 '  }',
+'#endif',
 '  vec3 col=direct+ambient+envSpec;',
 '  col*=uExposure*(1.0+uBoost);',
 '  col=aces(col);',
@@ -3036,21 +3052,16 @@ function rebuildPlayerGeo(){
    ============================================================ */
 function glInit(){
   try{
-    gl=cv.getContext('webgl2',{antialias:true,alpha:false,stencil:true,
+    /* сглаживание (MSAA) задаётся при создании контекста и потом не меняется: на старте с низкого
+       качества (слабый телефон) его нет — там оно дорогое, а при 0.75 разрешения мало что даёт.
+       ?aa=0/1 — принудительно (замеры) */
+    var aaQ=new URLSearchParams(location.search).get('aa');
+    AA = aaQ!==null ? aaQ==='1' : QLEVEL>0;
+    gl=cv.getContext('webgl2',{antialias:AA,alpha:false,stencil:true,
                                powerPreference:'high-performance',
                                preserveDrawingBuffer:false,desynchronized:true});
     if(!gl){ INITERR='no webgl2 context'; return false; }
-    PROG=glProgram(VS_MAIN,FS_MAIN);
-    gl.useProgram(PROG);
-    ['uMVP','uM','uLVP','uTex','uEnv','uShadow','uCam','uSunDir','uSunCol',
-     'uUseTex','uRough','uMetal','uBoost','uAlpha','uTint','uTintK',
-     'uShadowOn','uTexel','uExposure','uDebug','uAmbK','uEnvK','uFlipN','uMarks','uMarksK'].forEach(function(k){
-      U[k]=gl.getUniformLocation(PROG,k);
-    });
-    gl.uniform1i(U.uMarks,3);
-    for(var si=0;si<9;si++) U['uSH'+si]=gl.getUniformLocation(PROG,'uSH['+si+']');
-    gl.uniform1i(U.uTex,0); gl.uniform1i(U.uEnv,1); gl.uniform1i(U.uShadow,2);
-    for(si=0;si<9;si++) gl.uniform3f(U['uSH'+si],ENV_SH[si][0],ENV_SH[si][1],ENV_SH[si][2]);
+    useMainProgs(!!QC().lite);
 
     PROG_D=glProgram(VS_DEPTH,FS_DEPTH);
     UD.uMVP=gl.getUniformLocation(PROG_D,'uMVP');
@@ -3077,6 +3088,32 @@ function glInit(){
   }
 }
 
+/* Основной шейдер в двух вариантах: полный и облегчённый (#define LITE, низкое качество). Вариант
+   компилируется при первой нужде; U / HD.U — места uniform'ов текущего варианта. */
+var PROGS={}, MAIN_LITE=null, AA=true;
+var U_NAMES=['uMVP','uM','uLVP','uTex','uEnv','uShadow','uCam','uSunDir','uSunCol',
+  'uUseTex','uRough','uMetal','uBoost','uAlpha','uTint','uTintK',
+  'uShadowOn','uTexel','uExposure','uDebug','uAmbK','uEnvK','uFlipN','uMarks','uMarksK'];
+function fsMain(lite){ return lite ? FS_MAIN.replace('#version 300 es\n','#version 300 es\n#define LITE\n') : FS_MAIN; }
+function progUniforms(prog, out, skin){
+  gl.useProgram(prog);
+  U_NAMES.forEach(function(k){ out[k]=gl.getUniformLocation(prog,k); });
+  for(var si=0;si<9;si++) out['uSH'+si]=gl.getUniformLocation(prog,'uSH['+si+']');
+  if(skin){ out.uBones=gl.getUniformLocation(prog,'uBones[0]'); out.uTeam=gl.getUniformLocation(prog,'uTeam[0]'); }
+  gl.uniform1i(out.uTex,0); gl.uniform1i(out.uEnv,1); gl.uniform1i(out.uShadow,2); gl.uniform1i(out.uMarks,3);
+  for(si=0;si<9;si++) gl.uniform3f(out['uSH'+si],ENV_SH[si][0],ENV_SH[si][1],ENV_SH[si][2]);
+}
+function useMainProgs(lite){
+  if(MAIN_LITE===lite) return;
+  var k=lite?'lite':'full', o=PROGS[k]||(PROGS[k]={prog:null, U:{}, hprog:null, HU:{}});
+  if(!o.prog){ o.prog=glProgram(VS_MAIN, fsMain(lite)); progUniforms(o.prog, o.U, false); }
+  if(!o.hprog && typeof HD_DATA!=='undefined' && HD_DATA){
+    o.hprog=glProgramSkin(VS_SKIN.replace(/NB/g,String(NBMAX)), fsMain(lite)); progUniforms(o.hprog, o.HU, true);
+  }
+  PROG=o.prog; for(var a in o.U) U[a]=o.U[a];
+  if(o.hprog){ HD.prog=o.hprog; for(var b in o.HU) HD.U[b]=o.HU[b]; }
+  MAIN_LITE=lite;
+}
 function glRebuildTextures(){
   if(!GLOK) return;
   glTexUpdate(TEX.ice,   buildIceTex());
@@ -3252,7 +3289,7 @@ function pfRoll(frameMs){
   o.cpu=+cpu.toFixed(2); o.wait=+Math.max(0,frameMs-cpu).toFixed(2);
   o.gpu=PERF.gpuN?+(PERF.gpuAcc/PERF.gpuN).toFixed(2):null; PERF.gpuAcc=0; PERF.gpuN=0;
   o.draws=Math.round(PERF.draws/n); o.tris=Math.round(PERF.tris/n); PERF.draws=0; PERF.tris=0;
-  o.q=QLEVEL; o.dpr=+DPR.toFixed(2); o.cw=cv.width; o.ch=cv.height; o.spray=spray.length;
+  o.q=QLEVEL; o.lite=!!MAIN_LITE; o.aa=!!AA; o.dpr=+DPR.toFixed(2); o.cw=cv.width; o.ch=cv.height; o.spray=spray.length;
   PERF.n=0; PERF.out=o; return o;
 }
 function pfText(){
@@ -3260,7 +3297,7 @@ function pfText(){
   return 'FRAME '+o.frame+' ms ('+o.fps+' fps) · cpu '+o.cpu+' · wait '+o.wait+(o.gpu!==null?' · gpu '+o.gpu:'')+'\n'+
     'sim '+o.sim+' · net '+o.net+' · pose '+o.pose+' · draw '+o.draw+'\n'+
     'marks '+o.marks+' · ovl '+o.ovl+' · hud '+o.hud+' ms\n'+
-    'q'+o.q+' dpr '+o.dpr+' '+o.cw+'×'+o.ch+' · draws '+o.draws+' · tris '+Math.round(o.tris/1000)+'k · spray '+o.spray;
+    'q'+o.q+(o.lite?' lite':'')+(o.aa?' aa':' noAA')+' dpr '+o.dpr+' '+o.cw+'×'+o.ch+' · draws '+o.draws+' · tris '+Math.round(o.tris/1000)+'k · spray '+o.spray;
 }
 
 /* ============================================================
@@ -3269,6 +3306,7 @@ function pfText(){
 function render(){
   if(TEST.skipRender) return;
   if(!GLOK) return;
+  if(MAIN_LITE!==!!QC().lite) useMainProgs(!!QC().lite);
   F=H*camPreset().fk;
   var sx=0, sy=0;
   if(cam.shake>0){ sx=rnd(-1,1)*cam.shake*0.0022; sy=rnd(-1,1)*cam.shake*0.0022; }
@@ -3689,18 +3727,7 @@ function skinInit(){
   try{
     if(typeof HD_DATA==='undefined' || !HD_DATA) { HD.ok=false; return false; }
     var NBS=String(NBMAX);
-    HD.prog=glProgramSkin(VS_SKIN.replace(/NB/g,NBS), FS_MAIN);
-    gl.useProgram(HD.prog);
-    ['uMVP','uM','uLVP','uTex','uEnv','uShadow','uCam',
-     'uSunDir','uSunCol','uUseTex','uRough','uMetal','uBoost','uAlpha','uTint','uTintK',
-     'uShadowOn','uTexel','uExposure','uDebug','uAmbK','uEnvK','uFlipN'].forEach(function(k){
-      HD.U[k]=gl.getUniformLocation(HD.prog,k);
-    });
-    HD.U.uBones=gl.getUniformLocation(HD.prog,'uBones[0]');
-    HD.U.uTeam =gl.getUniformLocation(HD.prog,'uTeam[0]');
-    for(var si=0;si<9;si++) HD.U['uSH'+si]=gl.getUniformLocation(HD.prog,'uSH['+si+']');
-    gl.uniform1i(HD.U.uTex,0); gl.uniform1i(HD.U.uEnv,1); gl.uniform1i(HD.U.uShadow,2);
-    for(si=0;si<9;si++) gl.uniform3f(HD.U['uSH'+si],ENV_SH[si][0],ENV_SH[si][1],ENV_SH[si][2]);
+    MAIN_LITE=null; useMainProgs(!!QC().lite);      /* с моделями: пересобрать и программу скиннинга */
 
     HD.progD=glProgramSkin(VS_SKIN_D.replace(/NB/g,NBS), FS_DEPTH);
     gl.useProgram(HD.progD);
@@ -5167,7 +5194,7 @@ window.__hk={hs:function(){return HS;},net:function(){return NET;},setCam:functi
   face:function(x,z){ state='face'; stateT=1.4; placeFaceoff(x,z); },
   q:function(l,a){setQuality(l,a);},
   /* качество: уровень, авто, источник, стартовая оценка, динамическое разрешение */
-  qInfo:function(){ return {level:QLEVEL, auto:QAUTO, src:QSRC, guess:QGUESS, dyn:DYN, dpr:+DPR.toFixed(3), fps:RT.ms?+(1000/RT.ms).toFixed(1):0, info:QINFO}; },
+  qInfo:function(){ return {level:QLEVEL, auto:QAUTO, src:QSRC, guess:QGUESS, dyn:DYN, aa:AA, lite:!!MAIN_LITE, dpr:+DPR.toFixed(3), fps:RT.ms?+(1000/RT.ms).toFixed(1):0, info:QINFO}; },
   qGuessFor:function(d){ return qualityGuess(d); },
   /* прогнать автоподстройку n раз по 0.5 с при заданном fps (тест логики без настоящих тормозов) */
   qTickSim:function(fps,n){ QA.warm=0; for(var i=0;i<(n||1);i++) qualityTick(fps); return {level:QLEVEL, dyn:DYN}; }, cams:function(){return CAM_PRESETS;}, ql:function(){return [QLEVEL,QAUTO];}, gl:function(){return gl;}, dpr:function(){return DPR;},
@@ -5224,6 +5251,7 @@ window.__hk={hs:function(){return HS;},net:function(){return NET;},setCam:functi
   gfx:function(o){ if(o){ if(o.ssize!==undefined){SHADOW.size=o.ssize;buildShadow();}
                           if(o.exp!==undefined)EXPOSURE=o.exp;
                           if(o.lod!==undefined)QC().lod=!!o.lod;
+                          if(o.lite!==undefined)QC().lite=!!o.lite;
                           if(o.amb!==undefined)AMBK=o.amb;
                           if(o.refl!==undefined)REFL_A=o.refl;
                           if(o.sun!==undefined)SUNCOL=[o.sun,o.sun*0.97,o.sun*0.92]; }
