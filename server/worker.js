@@ -31,9 +31,16 @@
  *   only 'host' is expected to send 's', only 'guest' is expected to send 'i', but the relay itself does not enforce
  *   that — index.html's own role checks already gate it.
  *
+ *   Server mode (phase 3.2, ?mode=srv from the player who opens an empty room; hello then carries srv:1 and the
+ *   second player follows it): the Durable Object itself runs the match — shared/sim.js through server/room-sim.js,
+ *   60 Hz steps, 30 Hz snapshots to both. 'cfg' (from the host) and 'i' (from both) are consumed here; the rest
+ *   (opponent ping pp/pq) is still relayed. See room-sim.js for the message formats.
+ *
  * One Durable Object instance per room code (env.ROOMS.idFromName(code)),
  * so state (who is host/guest) lives with the room, not the Worker.
  */
+
+import { MatchRoom, SIM_HZ } from './room-sim.js';
 
 const ROOM_CODE_RE = /^\/room\/([A-Za-z0-9_-]{2,16})(\/diag)?$/;
 const HINTS = new Set(['wnam', 'enam', 'sam', 'weur', 'eeur', 'apac', 'apac-ne', 'apac-se', 'oc', 'afr', 'me']);
@@ -48,6 +55,22 @@ export class Room {
     this.created = Date.now();   // this instance's start (the object may be evicted and restarted between matches)
     this.hint = null;
     this.doColo = null; this.doLoc = null; this._colo = null;
+    this.srv = false;     // server mode: set by whoever opens the empty room
+    this.match = null;    // MatchRoom while in server mode
+    this.timer = null;
+  }
+
+  sendSlot(slot, txt) {
+    const s = slot === 0 ? this.host : this.guest;
+    if (s) { try { s.ws.send(txt); } catch (e) {} }
+  }
+
+  // 60 Hz while a match runs; setInterval keeps the object awake (no hibernation) only for the match itself
+  startTicking() {
+    if (this.timer) return;
+    this.timer = setInterval(() => {
+      if (!this.match || !this.match.tick() || (!this.host && !this.guest)) { clearInterval(this.timer); this.timer = null; }
+    }, 1000 / SIM_HZ);
   }
 
   // where this Durable Object runs: an outbound request from inside it reports the data centre it leaves from
@@ -63,7 +86,10 @@ export class Room {
 
   diag() {
     const c = (slot, s) => (s ? { slot, colo: s.colo, country: s.country } : null);
+    const m = this.match;
     return { doColo: this.doColo, doLoc: this.doLoc, hint: this.hint, created: this.created, st: Date.now(),
+             mode: this.srv ? 'server' : 'relay',
+             sim: m ? { steps: m.stat.steps, snaps: m.stat.snaps, maxStepMs: m.stat.maxStepMs, running: m.running } : null,
              conns: [c('host', this.host), c('guest', this.guest)].filter(Boolean) };
   }
 
@@ -81,6 +107,12 @@ export class Room {
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
     server.accept();
+    // the room's mode is chosen by whoever opens it empty (the second player follows the room)
+    if (!this.host && !this.guest) {
+      this.srv = new URL(request.url).searchParams.get('mode') === 'srv';
+      if (this.timer) { clearInterval(this.timer); this.timer = null; }
+      this.match = this.srv ? new MatchRoom((slot, txt) => this.sendSlot(slot, txt)) : null;
+    }
     this.handleSocket(server, { colo: request.headers.get('X-Edge-Colo') || '?', country: request.headers.get('X-Edge-Country') || '?' });
 
     return new Response(null, { status: 101, webSocket: client });
@@ -103,7 +135,7 @@ export class Room {
     }
 
     try {
-      ws.send(JSON.stringify({ t: 'hello', role: slot, n: this.peerCount(), diag: this.diag() }));
+      ws.send(JSON.stringify({ t: 'hello', role: slot, n: this.peerCount(), diag: this.diag(), srv: this.srv ? 1 : 0 }));
     } catch (e) {}
     this.broadcastPeerCount();
 
@@ -117,6 +149,12 @@ export class Room {
         if (m && m.t === 'png') { try { ws.send(JSON.stringify({ t: 'pog', n: m.n, k: m.k, st: Date.now() })); } catch (e) {} return; }
         if (m && m.t === 'dg') { try { ws.send(JSON.stringify({ t: 'dgr', ...this.diag() })); } catch (e) {} return; }
       }
+      // server mode: input and match start are for the simulation here, not for the other player
+      if (this.srv && this.match && typeof data === 'string' && (data.startsWith('{"t":"i"') || data.startsWith('{"t":"cfg"') || data.startsWith('{"t":"s"'))) {
+        let m = null; try { m = JSON.parse(data); } catch (e) {}
+        if (m && this.match.onMessage(slot === 'host' ? 0 : 1, m) && m.t === 'cfg') this.startTicking();
+        return;
+      }
       const to = slot === 'host' ? this.guest : this.host;
       if (to) {
         try { to.ws.send(data); } catch (e) {}
@@ -126,6 +164,7 @@ export class Room {
     const onLeave = () => {
       if (slot === 'host' && this.host && this.host.ws === ws) this.host = null;
       if (slot === 'guest' && this.guest && this.guest.ws === ws) this.guest = null;
+      if (this.match) this.match.leave(slot === 'host' ? 0 : 1);
       this.broadcastPeerCount();
     };
     ws.addEventListener('close', onLeave);

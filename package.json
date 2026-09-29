@@ -18,11 +18,13 @@
     "smoke:tg": "node tools/smoke-tg.mjs && node tools/smoke-tg.mjs --browser webkit",
     "smoke:quality": "node tools/smoke-quality.mjs && node tools/smoke-quality.mjs --browser webkit",
     "smoke:lag": "node tools/smoke-lag.mjs",
-    "sim:node": "node tools/sim-node.mjs"
+    "sim:node": "node tools/sim-node.mjs",
+    "room:proto": "node tools/room-proto.mjs && node tools/room-proto.mjs --target wrangler"
   },
   "devDependencies": {
     "meshoptimizer": "^1.3.0",
     "playwright": "^1.55.0",
+    "wrangler": "^4.143.0",
     "ws": "^8.22.0"
   }
 }

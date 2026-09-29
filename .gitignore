@@ -8,3 +8,4 @@ test_skate_slide.js
 # инструменты тестирования
 node_modules/
 shots/
+server/.wrangler/
