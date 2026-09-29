@@ -24,23 +24,34 @@ try {
   ok(q.src === 'device' && q.auto && q.guess, `start: expected device auto-choice, got ${JSON.stringify(q)}`);
   console.log(`this machine: level ${q.level} — ${q.guess && q.guess.reason} (GPU "${q.info && q.info.gpu}")`);
 
-  // 2. dynamic resolution first, preset second (simulated fps; 0.5 s per tick)
-  await page.evaluate('__hk.q(2,true)');
+  // 2. dynamic resolution first, preset second (simulated fps; 0.5 s per tick). Target: steady 60 fps.
+  await page.evaluate('__hk.q(2,true); __hk.qReset()');
   const cw0 = (await page.evaluate('__hk.wh()')).cvw;
-  let r = await page.evaluate('__hk.qTickSim(40, 2)');
+  let r = await page.evaluate('__hk.qTickSim(52, 2)');
   const cw1 = (await page.evaluate('__hk.wh()')).cvw;
   ok(cw1 < cw0, `dynamic resolution must shrink the canvas: ${cw0} → ${cw1}`);
-  ok(r.level === 2 && r.dyn < 1, `slow: resolution should drop first (level 2 kept), got ${JSON.stringify(r)}`);
-  r = await page.evaluate('__hk.qTickSim(40, 10)');
-  ok(r.level === 2 && Math.abs(r.dyn - 0.75) < 1e-6, `slow: resolution should bottom out at 0.75 before the preset drops, got ${JSON.stringify(r)}`);
-  r = await page.evaluate('__hk.qTickSim(30, 8)');
-  ok(r.level === 1, `very slow at min resolution: preset should drop to 1, got ${JSON.stringify(r)}`);
-  r = await page.evaluate('__hk.qTickSim(60, 40)');
-  ok(r.dyn === 1, `fast: resolution should climb back to 1, got ${JSON.stringify(r)}`);
-  r = await page.evaluate('__hk.qTickSim(60, 40)');
-  ok(r.level === 2, `fast at full resolution: preset should come back to 2, got ${JSON.stringify(r)}`);
-  r = await page.evaluate('__hk.qTickSim(53, 20)');
-  ok(r.level === 2 && r.dyn === 1, `53 fps is inside the hysteresis band: nothing should change, got ${JSON.stringify(r)}`);
+  ok(r.level === 2 && r.dyn < 1, `52 fps: resolution should drop first (level 2 kept), got ${JSON.stringify(r)}`);
+  r = await page.evaluate('__hk.qTickSim(52, 6)');
+  ok(r.level === 2 && Math.abs(r.dyn - 0.75) < 1e-6, `52 fps: resolution should bottom out at 0.75 before the preset drops, got ${JSON.stringify(r)}`);
+  r = await page.evaluate('__hk.qTickSim(52, 5)');
+  ok(r.level === 2, `under 55 fps at min resolution for 2.5 s: preset must hold, got ${JSON.stringify(r)}`);
+  r = await page.evaluate('__hk.qTickSim(52, 1)');
+  ok(r.level === 1, `under 55 fps at min resolution for 3 s: preset should drop to 1, got ${JSON.stringify(r)}`);
+  r = await page.evaluate('__hk.qTickSim(60, 60)');
+  ok(r.dyn === 1 && r.level === 1, `60 fps after the drop: resolution back to 1, level 2 banned for 2 min, got ${JSON.stringify(r)}`);
+  r = await page.evaluate('__hk.qTickSim(60, 200)');
+  ok(r.level === 2, `after the 2-minute ban level 2 may come back, got ${JSON.stringify(r)}`);
+  r = await page.evaluate('__hk.qTickSim(40, 16)');
+  ok(r.level === 1, `level 2 failing again → 1, got ${JSON.stringify(r)}`);
+  r = await page.evaluate('__hk.qTickSim(60, 600)');
+  ok(r.level === 1 && r.dyn === 1, `second failure: level 2 banned for the session, got ${JSON.stringify(r)}`);
+  r = await page.evaluate('__hk.qTickSim(56, 30)');
+  ok(r.level === 1 && r.dyn === 1, `56 fps is inside the hysteresis band (55–58): nothing should change, got ${JSON.stringify(r)}`);
+  r = await page.evaluate('__hk.qTickSim(30, 60)');
+  ok(r.level === 0, `very slow: down to 0, got ${JSON.stringify(r)}`);
+  r = await page.evaluate('__hk.qTickSim(30, 30)');
+  ok(r.level === 0 && Math.abs(r.dyn - 0.75) < 1e-6, `level 0 is the floor, got ${JSON.stringify(r)}`);
+  await page.evaluate('__hk.qReset()');
 
   // 3. manual choice: saved, survives reload, not touched by auto-adjust
   await page.evaluate('document.querySelectorAll("#qT .chip")[1].click()');   // LOW

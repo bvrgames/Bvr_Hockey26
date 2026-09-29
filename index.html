@@ -514,7 +514,7 @@ function qualityGuess(d){
 /* следы на льду теперь на GPU и дёшевы — включены на всех уровнях */
 /* springs — вторичная анимация: 1 наклон и крен корпуса, 2 + голова, 3 + клюшка и просадка при силовом */
 var QCFG=[{dpr:1.00, crowd:512,  ice:1024, board:2048, shadow:false, ssize:512,  spray:0.0, refl:false, marks:true, springs:1, lod:true, lite:true},
-          {dpr:1.50, crowd:768,  ice:1536, board:3072, shadow:true,  ssize:768,  spray:0.5, refl:true,  marks:true, springs:2},
+          {dpr:1.50, crowd:768,  ice:1536, board:3072, shadow:true,  ssize:768,  spray:0.5, refl:true,  marks:true, springs:2, lod:true},
           {dpr:2.00, crowd:1024, ice:2048, board:4096, shadow:true,  ssize:1280, spray:1.0, refl:true,  marks:true, springs:3}];
 function QC(){ return QCFG[QLEVEL]; }
 
@@ -3121,30 +3121,41 @@ function glRebuildTextures(){
   glTexUpdate(TEX.crowd, buildCrowdTex());
 }
 /* Автоподстройка раз в 0.5 с по реальному fps (RT.ms — сглаженное время кадра по часам браузера).
-   1-я ступень — динамическое разрешение 0.75…1 (раз в секунду, вниз при fps<50, вверх после
-   3 с подряд при fps>57.5); 2-я — пресет, только когда разрешение упёрлось в край, с выдержкой
-   после каждой смены (иначе качество мигало на границе порога). Ручной выбор — не трогаем. */
-var RT={ms:0, last:0}, QA={t:0, pt:0, hold:0, up:0, warm:3};
+   Цель — ровные 60 fps. 1-я ступень — динамическое разрешение 0.75…1 (раз в секунду: вниз при fps<55,
+   вверх после 3 с подряд при fps>58); 2-я — пресет: вниз, если на минимальном разрешении 3 с подряд
+   fps<55; вверх — только при полном разрешении и fps>58 2.5 с. Уровень, который не выдержал, 2 минуты
+   не возвращается, после второго провала — до конца сессии (иначе качели: на «среднем» 60 → вверх →
+   снова тормоза). Ручной выбор — не трогаем. */
+var RT={ms:0, last:0}, QA={t:0, pt:0, hold:0, up:0, warm:3, low:0, hi:0, fail:[0,0,0], ban:[0,0,0], clock:0};
+var Q_LOW=55, Q_HIGH=58;
 function qualityTick(fps){
   if(!QAUTO){ if(DYN!==1){ DYN=1; layout(); } return; }
+  QA.clock+=0.5;
   QA.hold=Math.max(0,QA.hold-0.5);
   if(QA.warm>0){ QA.warm-=0.5; return; }          /* компиляция шейдеров и прочие рывки старта */
+  /* пресет вниз: разрешение уже минимальное, а fps всё ещё ниже цели 3 с подряд */
+  if(fps<Q_LOW && DYN<=DYN_MIN+1e-3) QA.low+=0.5; else QA.low=0;
+  if(QA.low>=3 && QLEVEL>0 && QA.hold<=0){
+    var f=QLEVEL;
+    QA.fail[f]++; QA.ban[f] = QA.fail[f]>=2 ? Infinity : QA.clock+120;
+    QA.low=0; QA.hi=0; setQuality(QLEVEL-1,true); QA.hold=4;
+    return;
+  }
   QA.t+=0.5;
   if(QA.t>=1){
     QA.t=0;
-    if(fps<50){
+    if(fps<Q_LOW){
       QA.up=0;
       if(DYN>DYN_MIN+1e-3){ DYN=Math.max(DYN_MIN, DYN-DYN_STEP); layout(); return; }
-    } else if(fps>57.5 && DYN<1){
+    } else if(fps>Q_HIGH && DYN<1){
       if(++QA.up>=3){ QA.up=0; DYN=Math.min(1, DYN+DYN_STEP); layout(); }
       return;
     } else QA.up=0;
   }
-  QA.pt+=0.5;
-  if(QA.pt>=2.5 && QA.hold<=0){
-    QA.pt=0;
-    if(fps<34 && QLEVEL>0 && DYN<=DYN_MIN+1e-3){ setQuality(QLEVEL-1,true); QA.hold=6; }
-    else if(fps>58 && QLEVEL<2 && DYN>=1){ setQuality(QLEVEL+1,true); QA.hold=12; }
+  /* пресет вверх: полное разрешение и запас 2.5 с, уровень не в запрете */
+  if(fps>Q_HIGH && DYN>=1) QA.hi+=0.5; else QA.hi=0;
+  if(QA.hi>=2.5 && QA.hold<=0 && QLEVEL<2 && QA.clock>=QA.ban[QLEVEL+1]){
+    QA.hi=0; setQuality(QLEVEL+1,true); QA.hold=12;
   }
 }
 function setQuality(q,auto){
@@ -5197,7 +5208,8 @@ window.__hk={hs:function(){return HS;},net:function(){return NET;},setCam:functi
   qInfo:function(){ return {level:QLEVEL, auto:QAUTO, src:QSRC, guess:QGUESS, dyn:DYN, aa:AA, lite:!!MAIN_LITE, dpr:+DPR.toFixed(3), fps:RT.ms?+(1000/RT.ms).toFixed(1):0, info:QINFO}; },
   qGuessFor:function(d){ return qualityGuess(d); },
   /* прогнать автоподстройку n раз по 0.5 с при заданном fps (тест логики без настоящих тормозов) */
-  qTickSim:function(fps,n){ QA.warm=0; for(var i=0;i<(n||1);i++) qualityTick(fps); return {level:QLEVEL, dyn:DYN}; }, cams:function(){return CAM_PRESETS;}, ql:function(){return [QLEVEL,QAUTO];}, gl:function(){return gl;}, dpr:function(){return DPR;},
+  qTickSim:function(fps,n){ QA.warm=0; for(var i=0;i<(n||1);i++) qualityTick(fps); return {level:QLEVEL, dyn:DYN}; },
+  qReset:function(){ QA.low=0; QA.hi=0; QA.up=0; QA.t=0; QA.hold=0; QA.fail=[0,0,0]; QA.ban=[0,0,0]; QA.clock=0; }, cams:function(){return CAM_PRESETS;}, ql:function(){return [QLEVEL,QAUTO];}, gl:function(){return gl;}, dpr:function(){return DPR;},
   lt:function(p){lastTouch=p;}, pz:function(){return prevZone;},
   lang:function(c){ LANG=c; try{localStorage.setItem('bvr_lang',c);}catch(e){}
                     paintLang(); paintOpts(); paintChips(); },
