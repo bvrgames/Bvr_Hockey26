@@ -327,6 +327,7 @@
   </div>
 </div>
 
+<script src="shared/sim.js?v=4b94501948"></script>
 <script>
 (function(){
 'use strict';
@@ -397,6 +398,36 @@ var EV=(function(){
     }
   };
 })();
+
+/* ---------- симуляция матча (shared/sim.js) ----------
+   Физика, правила, ИИ — общие с сервером. Здесь — хуки клиента: звук, надписи, анимация, брызги.
+   Состояние матча (state, clock, players, puck, score, HS, …) живёт в симуляции; старые имена —
+   свойства-посредники на window, поэтому остальной код читает и пишет их как раньше. */
+var SIM=BVRSim.create({
+  emit:function(n,e){ return EV.emit(n,e); },
+  toWorld:function(mx,mz,out){ return toWorld(mx,mz,out); },
+  sprayK:function(){ return QC().spray; },
+  fx:{ boards:function(){ SFX.stick(); },
+       offside:function(){ SFX.swap(); },
+       swap:function(team){ if(team===HUMAN){ SFX.swap(); buzz(10,'soft'); } },
+       over:function(){ showResult(); },
+       score:function(){ document.getElementById('s1').textContent=score[0]; document.getElementById('s2').textContent=score[1]; },
+       act:function(p,n,d){ playAction(p,n,d); },
+       spray:function(p){ addSpray(p); } }
+});
+['players',  'puck',  'score',  'period',  'clock',  'state',  'stateT',  'HS',  'checkT',  'pokeT',  'pen',  'offWarn',  'lastTouch',  'prevZone',  'TACTIC',  'gkRush',  'offT',  'icing',  'SIMT',  'SIMF',  'LASTPASS',  'LASTRECV',  'LASTSHOT',  'LASTSAVE'].forEach(function(k){
+  Object.defineProperty(window, k, {configurable:true, get:function(){ return SIM[k]; }, set:function(v){ SIM[k]=v; }});
+});
+var mkHS=SIM.mkHS,
+    attackDir=SIM.attackDir,
+    placeFaceoff=SIM.placeFaceoff,
+    whistle=SIM.whistle,
+    penaltyLeft=SIM.penaltyLeft,
+    passAim=SIM.passAim,
+    shotAim=SIM.shotAim,
+    humanTick=SIM.humanTick,
+    humanMoveIntent=SIM.humanMoveIntent,
+    humanMoveIntegrate=SIM.humanMoveIntegrate;
 
 var cv=document.getElementById('c');
 var stickCv=document.getElementById('stick'), sctx=stickCv.getContext('2d');
@@ -1049,8 +1080,9 @@ function buzz(ms, kind){
 }
 
 /* ---------- площадка: X = длина, Z = ширина ---------- */
-var RL=30, RW=15;
-var GOAL_X=RL-4.0, BLUE_X=8.5, CORNER=7.0;
+var RL=BVRSim.RL, RW=BVRSim.RW;
+var GOAL_X=BVRSim.GOAL_X, BLUE_X=BVRSim.BLUE_X, CORNER=BVRSim.CORNER;
+var halfWidthAt=BVRSim.halfWidthAt;
 function rinkOutline(step){
   var r=CORNER, pts=[], i;
   function arc(cx,cz,a0,a1){
@@ -1607,12 +1639,6 @@ function setPaused(v){
 
 /* ---------- состояние ---------- */
 var HUMAN=TEST.side;
-var players=[], puck={x:0,y:0.05,z:0,vx:0,vz:0,vy:0,owner:null,free:0};
-var score=[0,0], period=1, clock=5*60, state='menu', stateT=0;
-function mkHS(){ return {ctrl:null, charge:0, pressT:0, pressCd:0, autoT:0,
-  press:{on:false,x:0,z:0,d:0}, goalieCtl:false, prevCtl:null, pokeT:0,
-  aimX:1, aimZ:0}; }
-var HS=[mkHS(),mkHS()];
 var NET={on:false,role:null,code:'',url:'',ws:null,peer:false,sendT:0,
          a:null,b:null,at:0,bt:0,status:'',ping:0};
 var NIN={mx:0,mz:0,_A:false,_B:false,_X:false,_Y:false,RT:false,LB:false};
@@ -1717,16 +1743,9 @@ function netPredictGuest(dt){
 }
 var NEDGE={A:false,B:false,X:false,Y:false,LB:false};
 var _npv={A:false,B:false,X:false,Y:false,LB:false};
-var controlled=null, chargeT=0, checkT=0, pokeT=0;
+var controlled=null, chargeT=0;
 var PRESS=HS[0].press, goalieCtl=false;
-var pen=[], offWarn=-1, lastTouch=null, prevZone=[0,0];
-/* тактика ботов: 0 стандарт, 1 атака, 2 оборона (на команду) */
-var TACTIC=[0,0];
 var PAUSED=false;
-/* вратарь-«выход на игрока»: удержание Y */
-var gkRush=[false,false];
-var offT=0;   /* время удержания отложенного офсайда (для мигания) */
-var icing={armed:false,team:-1};
 var QUALITY=0, fpsAvg=60, qTimer=0, qHold=0;
 var CAM_TYPE=1;      /* фиксированная камера «классика» — дефолт для NHL feel */
 /* PORTRAIT объявлена и уже вычислена настоящим layout() выше — здесь её
@@ -1753,141 +1772,14 @@ var CAM_PRESETS=[
                     port:{y:11.0,d:9.0,pitch:0.58,fk:0.80,fx:0.94,fz:0.45}}
 ];
 function camPreset(){ var p=CAM_PRESETS[CAM_TYPE]; return PORTRAIT?p.port:p.land; }
-function attackDir(t){ return t===0?1:-1; }
-function zoneOf(x,dir){ var v=x*dir; return v>BLUE_X?1:(v<-BLUE_X?-1:0); }
-function onIce(t){ return players.filter(function(p){return p.team===t&&!p.goalie&&!p.boxed;}); }
 /* Стартовая расстановка по ролям: 0 левый край, 1 центр, 2 правый край,
    3 и 4 защитники. Защитники стоят сзади, крайние шире, центр по оси. */
-/* ---------- PHASE 1: Player feel constants (tunable) ---------- */
-var PLAYER_CFG = {
-  /* base skating */
-  maxSpeed: 7.0,         // was 8.6
-  accel: 12,             // was 13 (10 was too sluggish)
-  damping: 0.972,        // was 0.975 — lighter slide for target top speed
-  turnRate: 6.5,         // was 9.0 rad/s — more gradual turn
-  /* with puck penalty */
-  puckSpeedMul: 0.94,
-  /* press assist (when pressing stick toward target) */
-  pressRange: 2.6,       // was 2.6
-  pressMaxSpeed: 9.6,    // was 9.6
-  pressAccel: 17,        // was 17
-  /* sprint (RT) */
-  sprintMaxSpeed: 9.5,   // was 11.4
-  sprintAccel: 16,       // was 16
-  /* AI speeds */
-  aiBaseMaxSpeed: 9.0,   // was 9.0
-  aiAttackMaxSpeed: 8.4, // was 8.4
-  aiChaseMaxSpeed: 9.7,  // was 9.7
-  aiTacticAttackBonus: 0.5,
-  aiOffsidesMaxSpeed: 10.2,
-  /* puck pickup at stick end */
-  pickupReachSkater: 0.85,  // was 1.05 (body center)
-  pickupReachGoalie: 1.35,  // unchanged
-  pickupHeight: 0.85,       // unchanged
-  pickupMaxSpeed: 24,       // unchanged
-  /* poke check */
-  pokeRangeCarrier: 1.6,   // was 2.0
-  pokeRangeLoose: 1.8,     // was 1.8
-  /* body check */
-  checkRange: 1.7,         // was 1.9
-  checkMinSpeed: 4.2,      // unchanged
-  checkDownTime: 1.5,      // unchanged
-  checkKnockback: 9,       // unchanged
-  checkPuckKnockback: 5.5, // unchanged
-  /* shot/pass */
-  shotBaseSpeed: 17,       // unchanged per user request
-  shotPowerScale: 17,      // unchanged
-  passFreeTime: 0.16,      // unchanged
-  shotFreeTime: 0.2        // unchanged
-};
-/* TURN_RATE kept as alias for backward compat */
-var TURN_RATE = PLAYER_CFG.turnRate;
-var LANEZ=[-7.6,0,7.6,-5.2,5.2], DEPTH=[6.5,4.5,6.5,-4.0,-4.0];
-var NAMES=[['Тарасов','Гурьев','Лукоянов','Шипачёв','Кагарлицкий','Соколов'],
-           ['Адамчук','Журавлёв','Бурмистров','Провольнев','Юдин','Панюков']];
-
-function makeTeam(t){
-  var dir = t===0?1:-1;
-  for(var i=0;i<5;i++){
-    players.push({team:t,role:i,dir:dir,goalie:false,
-      x:-dir*rnd(3,11), z:LANEZ[i], vx:0,vz:0, yaw:0, spd:0, stride:rnd(0,6.3),
-      down:0, boxed:0, num:[9,17,77,4,55][i], name:NAMES[t][i]});
-  }
-  /* вратарь защищает СВОИ ворота: его dir противоположен направлению атаки */
-  var gdir=-dir;
-  players.push({team:t,role:9,dir:gdir,goalie:true,
-    x:gdir*(GOAL_X-0.7), z:0, vx:0,vz:0, yaw:gdir>0?-Math.PI/2:Math.PI/2, spd:0,stride:0,down:0,boxed:0,num:30,name:NAMES[t][5]});
-}
+/* Константы, расстановка, правила, действия, ИИ — shared/sim.js */
 function reset(faceoff){
-  players.length=0; makeTeam(0); makeTeam(1);
-  puck.x=0;puck.z=0;puck.y=0.05;puck.vx=0;puck.vz=0;puck.vy=0;puck.owner=null;puck.free=0;
-  HS[0]=mkHS(); HS[1]=mkHS();
-  HS[0].ctrl = players.filter(function(p){return p.team===0&&!p.goalie;})[2];
-  HS[1].ctrl = players.filter(function(p){return p.team===1&&!p.goalie;})[2];
+  SIM.reset(faceoff);
   controlled = HS[HUMAN].ctrl; chargeT=0;
 }
 reset(true);
-
-function teamOf(t){ return players.filter(function(p){return p.team===t&&!p.goalie&&!p.boxed;}); }
-function nearestOf(t,x,z){
-  var arr=teamOf(t),best=arr[0],bd=1e9;
-  for(var i=0;i<arr.length;i++){var d=Math.hypot(arr[i].x-x,arr[i].z-z); if(d<bd){bd=d;best=arr[i];}}
-  return best;
-}
-function goalieOf(t){ return players.filter(function(p){return p.team===t&&p.goalie;})[0]; }
-
-/* ---------- правила ---------- */
-var FACE_OFFS=[[0,0],[20,7],[20,-7],[-20,7],[-20,-7],[4.5,7],[4.5,-7],[-4.5,7],[-4.5,-7]];
-function placeFaceoff(dx,dz){
-  puck.x=dx;puck.z=dz;puck.y=0.05;puck.vx=0;puck.vz=0;puck.vy=0;puck.owner=null;puck.free=0.35;
-  var offs=[[-1.1,0],[-3.4,-4.6],[-3.4,4.6],[-8.0,-3.2],[-8.0,3.2]];
-  for(var t=0;t<2;t++){
-    var dir=attackDir(t), arr=onIce(t);
-    for(var i=0;i<arr.length;i++){
-      var o=offs[Math.min(i,offs.length-1)];
-      arr[i].x=clamp(dx+o[0]*dir,-RL+2,RL-2);
-      arr[i].z=clamp(dz+o[1],-RW+2,RW-2);
-      arr[i].vx=0; arr[i].vz=0; arr[i].down=0; arr[i].os=0;
-      arr[i].yaw=dir>0?0:Math.PI;
-    }
-  }
-  lastTouch=null; icing.armed=false; offWarn=-1; offT=0;
-  for(var zz=0;zz<players.length;zz++) players[zz].os=0;
-  HS[0].goalieCtl=false; HS[0].prevCtl=null;
-  HS[1].goalieCtl=false; HS[1].prevCtl=null;
-  /* Зону запоминаем по точке вбрасывания, а не нулём. Иначе первый же кадр
-     после вбрасывания в чужой зоне читался как «шайба только что вошла» —
-     и на каждом атакующем вбрасывании зажигался отложенный офсайд. */
-  prevZone=[zoneOf(dx,attackDir(0)), zoneOf(dx,attackDir(1))];
-}
-/* reason: 'offside' | 'icing' | 'penalty' — по нему подписчик выбирает надпись */
-function whistle(reason,dx,dz,team){
-  state='face'; stateT=1.4;
-  EV.emit('stoppage',{reason:reason, t:team===undefined?-1:team});
-  placeFaceoff(dx,dz);
-}
-function penalize(p,reason){
-  p.boxed=1; pen.push({team:p.team,t:120,p:p});
-  if(HS[p.team].ctrl===p){ var alt=onIce(p.team)[0]; if(alt) HS[p.team].ctrl=alt; }
-  EV.emit('penalty',{p:pIdx(p), t:p.team, reason:reason});
-  var dir=attackDir(p.team);
-  whistle('penalty', -dir*20, puck.z>0?7:-7, p.team);
-}
-function penaltyLeft(t){
-  var m=0;
-  for(var i=0;i<pen.length;i++) if(pen[i].team===t&&pen[i].t>m) m=pen[i].t;
-  return m;
-}
-function clearOnePenalty(t){
-  for(var i=0;i<pen.length;i++) if(pen[i].team===t){
-    var pp=pen[i].p;
-    pp.boxed=0;
-    /* выпускаем со скамейки, а не из точки, где он стоял два месяца назад */
-    pp.x=-attackDir(t)*BLUE_X; pp.z=(RW-2)*(Math.random()<0.5?1:-1);
-    pp.vx=0; pp.vz=0; pp.down=0; pp.os=0;
-    pen.splice(i,1); return;
-  }
-}
 
 /* ---------- экран результата ---------- */
 function showResult(){
@@ -1933,1008 +1825,38 @@ function flash(a,b,dur){
   msgT=dur||1.6;
 }
 
-/* ---------- действия ---------- */
-/* Прицел паса/броска берём со стика только того человека, который управляет
-   этим игроком. Раньше стик локального игрока направлял пасы и броски всех,
-   включая ИИ соперника и игрока гостя на хосте. */
-function aimInput(p){
-  var hs=HS[p.team]; if(!hs || hs.ctrl!==p) return null;
-  if(p.team===HUMAN) return autoPilot()?null:IN;
-  if(NET.on && NET.role==='host') return NIN;
-  return null;
-}
-function aimDir(p){
-  var inp=aimInput(p);
-  if(inp){
-    var L=Math.hypot(inp.mx,inp.mz);
-    if(L>0.25){ var w=toWorld(inp.mx/L,inp.mz/L,[0,0]); return {x:w[0], z:w[1]}; }
-  }
-  return {x:p.dir, z:0};
-}
-function bestMate(p, mode){
-  var d=aimDir(p), arr=teamOf(p.team), best=null, bs=-1e9;
-  for(var i=0;i<arr.length;i++){
-    var m=arr[i]; if(m===p) continue;
-    var ddx=m.x-p.x, ddz=m.z-p.z, L=Math.hypot(ddx,ddz)||1;
-    if(L>26) continue;
-    var dot=(ddx/L)*d.x+(ddz/L)*d.z;
-    var s=dot*2.2 - L*0.045;
-    if(mode==='thru') s += (m.x*p.dir)*0.05;
-    if(s>bs){bs=s;best=m;}
-  }
-  return best;
-}
-/* ---------- что нужно событиям: время симуляции, последний пас и бросок ---------- */
-var SIMT=0;                 /* секунды симуляции с загрузки (только у хоста / в одиночной игре) */
-var SIMF=0;                 /* номер кадра симуляции — чередует порядок обхода игроков */
-var LASTPASS=null;          /* {from, to, t} — для «пас дошёл» */
-var LASTRECV=null;          /* {from, to, t} — последний дошедший пас: для передачи при голе */
-var LASTSHOT=null;          /* {p, t} — чтобы отличить сейв после броска от простого подбора */
-var LASTSAVE=null;          /* {t: команда вратаря, time} — отскок для добивания */
-function pIdx(p){ return p ? players.indexOf(p) : -1; }
-/* подбор шайбы полевым: владение, перехват или дошедший пас */
-function pickupEvent(p, prev){
-  var e={p:pIdx(p), t:p.team, prev:pIdx(prev)};
-  if(LASTPASS && LASTPASS.from!==p && SIMT-LASTPASS.t<3){
-    if(LASTPASS.from.team===p.team){
-      LASTRECV={from:LASTPASS.from, to:p, t:SIMT};
-      p._recvT=SIMT; p._recvLead=!!LASTPASS.lead;
-      EV.emit('pass:recv',{p:pIdx(p), t:p.team, from:pIdx(LASTPASS.from), aimed:LASTPASS.to===p?1:0, lead:LASTPASS.lead?1:0});
-    } else e.intercept=1;
-  }
-  LASTPASS=null;
-  if(prev && prev.team!==p.team) e.turnover=1;
-  EV.emit('pickup',e);
-}
-/* гол: автор — последний коснувшийся из забившей команды, передача — кто отдал ему пас */
-function goalEvent(team, z){
-  var sc = (lastTouch && lastTouch.team===team) ? lastTouch : null;
-  var as = (sc && LASTRECV && LASTRECV.to===sc && LASTRECV.from.team===team && SIMT-LASTRECV.t<10) ? LASTRECV.from : null;
-  /* гол всегда считается броском: добивание или рикошет без doShot помечаем noShot */
-  var shot = !!(LASTSHOT && LASTSHOT.p.team===team && SIMT-LASTSHOT.t<3);
-  EV.emit('goal',{t:team, p:pIdx(sc), assist:pIdx(as), own:(lastTouch && lastTouch.team!==team)?1:0, noShot:shot?0:1,
-                  z:r2(z), score:score.slice(), clock:Math.round(clock)});
-  LASTSHOT=null; LASTPASS=null; LASTRECV=null;
-}
-
-var _passN=0;
+/* ---------- симуляция: shared/sim.js ----------
+   Здесь только клиентская часть: кто чем управляет (simCfg), камера и брызги после шага. */
 var _edgeA=0;   /* сколько раз кнопка A дала фронт — для тестов ввода */
-/* target / pt — адресат и точка паса, выбранные ИИ; у человека не передаются */
-/* куда пасовать (без побочных эффектов) — общее для симуляции и предсказания гостя */
-function passAim(p,lead,target,pt){
-  var m=target||bestMate(p, lead?'thru':'norm');
-  var tx,tz;
-  if(pt){ tx=pt.x; tz=pt.z; }
-  else if(m){
-    tx=m.x + (lead? m.vx*0.55 + p.dir*3.2 : m.vx*0.30);
-    tz=m.z + (lead? m.vz*0.55 : m.vz*0.30);
-  } else {
-    var d=aimDir(p); tx=p.x+d.x*12; tz=p.z+d.z*12;
-  }
-  return {tx:tx, tz:tz, m:m};
-}
-/* куда бросать (без побочных эффектов) */
-function shotAim(p,aiZ){
-  var gx=p.dir*GOAL_X, aimZ;
-  if(aiZ!==undefined) aimZ=aiZ;
-  else {
-    var d=aimDir(p);
-    aimZ = clamp(d.z*0.9, -0.85, 0.85);
-    var gk=goalieOf(p.team===0?1:0);
-    var open = gk ? (gk.z>0 ? -0.72 : 0.72) : 0;
-    aimZ = clamp(aimZ*0.45 + open*0.55, -0.85, 0.85);
-  }
-  return {tx:gx, tz:aimZ};
-}
-function doPass(p,power,lift,lead,target,pt){
-  playAction(p,'pass_forehand',0.45);
-  var pa=passAim(p,lead,target,pt), m=pa.m, tx=pa.tx, tz=pa.tz;
-  var dx=tx-puck.x, dz=tz-puck.z, L=Math.hypot(dx,dz)||1;
-  puck.vx=dx/L*power; puck.vz=dz/L*power;
-  puck.vy = lift?3.2:0;
-  puck.owner=null; puck.free=0.16; lastTouch=p;
-  if(p.x*p.dir < -1) { icing.armed=true; icing.team=p.team; } else icing.armed=false;
-  LASTPASS={from:p, to:m||null, t:SIMT, lead:!!lead};
-  EV.emit('pass',{p:pIdx(p), t:p.team, to:m?pIdx(m):-1, x:r2(p.x), z:r2(p.z), power:r2(power), lift:!!lift, lead:!!lead});
-}
-/* aiZ — точка по ширине ворот, выбранная ИИ (может быть мимо створа); у человека не передаётся */
-function doShot(p,power,aiZ){
-  var gx=p.dir*GOAL_X, sa=shotAim(p,aiZ), tx=sa.tx, tz=sa.tz;
-  var dx=tx-puck.x, dz=tz-puck.z, L=Math.hypot(dx,dz)||1;
-  var sp=17+power*17;
-  puck.vx=dx/L*sp; puck.vz=dz/L*sp; puck.vy=0;
-  puck.owner=null; puck.free=0.2; lastTouch=p;
-  if(p.x*p.dir < -1) { icing.armed=true; icing.team=p.team; } else icing.armed=false;
-  /* сильный бросок отыгрывается размашистым клипом, обычный — кистевым */
-  playAction(p, power>0.55?'slap_shot':'wrist_shot', power>0.55?0.9:0.65);
-  LASTSHOT={p:p, t:SIMT};
-  EV.emit('shot',{p:pIdx(p), t:p.team, x:r2(p.x), z:r2(p.z), power:r2(power), dist:r2(Math.hypot(gx-p.x,p.z))});
-}
-function doPoke(p){
-  playAction(p,'poke_check',0.45);
-  HS[p.team].pokeT=0.22; pokeT=0.22;
-  var o=puck.owner;
-  if(o && o.team!==p.team){
-    var d=Math.hypot(o.x-p.x,o.z-p.z);
-    if(d<PLAYER_CFG.pokeRangeCarrier){
-      puck.owner=null; puck.free=0.35;
-      var a=Math.atan2(puck.z-p.z,puck.x-p.x);
-      puck.vx=Math.cos(a)*7; puck.vz=Math.sin(a)*7;
-      EV.emit('poke',{p:pIdx(p), t:p.team, from:pIdx(o), btn:1});
-    }
-  } else if(!puck.owner){
-    if(Math.hypot(puck.x-p.x,puck.z-p.z)<PLAYER_CFG.pokeRangeLoose){ puck.owner=p; puck.vx=0;puck.vz=0; }
-  }
-}
-function doCheck(p){
-  playAction(p,'body_check',0.7);
-  checkT=0.30;
-  var arr=players;
-  for(var i=0;i<arr.length;i++){
-    var o=arr[i];
-    if(o.team===p.team||o.goalie||o.down>0||o.boxed) continue;
-    var d=Math.hypot(o.x-p.x,o.z-p.z);
-    if(d<PLAYER_CFG.checkRange && p.spd>PLAYER_CFG.checkMinSpeed){
-      /* запоминаем до того, как отберём шайбу: ниже puck.owner уже null,
-         и чистый силовой на владельце засчитывался как нарушение */
-      var wasCarrier = (puck.owner===o);
-      o.down=1.5;
-      var a=Math.atan2(o.z-p.z,o.x-p.x);
-      o.vx=Math.cos(a)*9; o.vz=Math.sin(a)*9;
-      if(puck.owner===o){ puck.owner=null; puck.free=0.4;
-        puck.vx=Math.cos(a)*5.5; puck.vz=Math.sin(a)*5.5; }
-      var clean = wasCarrier || (lastTouch===o && Math.hypot(puck.x-o.x,puck.z-o.z)<2.2);
-      EV.emit('hit',{p:pIdx(p), t:p.team, v:pIdx(o), vt:o.team, clean:clean, x:r2(o.x), z:r2(o.z), hard:1});
-      if(!clean) penalize(p,'interference');
-      return;
-    }
-  }
-}
-function switchPlayer(team){
-  if(team===undefined) team=HUMAN;
-  var hs=HS[team], arr=teamOf(team), best=null, bd=1e9;
-  for(var i=0;i<arr.length;i++){
-    if(arr[i]===hs.ctrl||arr[i].down>0) continue;
-    var d=Math.hypot(arr[i].x-puck.x,arr[i].z-puck.z);
-    if(d<bd){bd=d;best=arr[i];}
-  }
-  if(best){ hs.ctrl=best; if(team===HUMAN){ SFX.swap(); buzz(10,'soft'); } }
-}
-
-
-/* ============================================================
-   ИИ С ШАЙБОЙ: когда бросать, кому пасовать
-   Раньше: бросок только ближе 11–15 м «по таймеру», а под давлением —
-   мгновенный пас наугад в первом же кадре. Теперь владелец оценивает
-   момент (дистанция, угол, слот, свободна ли линия броска, вратарь, свежий
-   пас в разрез, отскок) и выбирает открытого партнёра.
-   Уровень задаёт качество решений, а не просто частоту бросков: сильный
-   ИИ точнее целится, читает вратаря и ждёт открытую линию.
-   ============================================================ */
-var AI_LV={
-  /* think — пауза между решениями, с; thr — порог оценки для броска;
-     aimErr — разброс прицела по ширине ворот (створ ±0.92); read — доля
-     бросков в дальний от вратаря угол; lane — штраф за перекрытую линию;
-     react — задержка реакции на давление, с; meet — адресат идёт к шайбе;
-     crash — нападающие идут на добивание; smart — выбор паса по открытости;
-     passErr — промах паса, м; pow — сила броска (по умолчанию 1);
-     noise — ошибка в оценке момента: слабый ИИ бьёт из плохих позиций и пропускает хорошие */
-  easy:   {think:[0.8,1.5],  thr:0.45, aimErr:0.90, read:0.0, lane:0.15, react:[0.45,0.80], meet:0.4, crash:0, smart:0, passErr:3.6, pow:0.70, noise:0.25},
-  normal: {think:[0.35,0.8], thr:0.38, aimErr:0.36, read:0.6, lane:0.25, react:[0.20,0.40], meet:0.9, crash:1, smart:1, passErr:2.8},
-  hard:   {think:[0.25,0.55],thr:0.40, aimErr:0.22, read:1.0, lane:0.30, react:[0.10,0.25], meet:1.0, crash:1, smart:1, passErr:1.7}
-};
-/* соперник-компьютер получает уровень ?ai=, партнёры живого игрока — normal */
-function aiLevel(team){ return AI_LV[(!NET.on && team!==HUMAN) ? DIFF : 'normal']; }
-
-/* clamp, которому всё равно, в каком порядке границы (для «от своих ворот до синей» с любой стороны) */
-function clampR(v,a,b){ return a<b ? clamp(v,a,b) : clamp(v,b,a); }
-/* расстояние от точки до отрезка */
-function segDist(px,pz, ax,az, bx,bz){
-  var dx=bx-ax, dz=bz-az, L2=dx*dx+dz*dz||1e-6;
-  var t=clamp(((px-ax)*dx+(pz-az)*dz)/L2,0,1);
-  return Math.hypot(px-(ax+dx*t), pz-(az+dz*t));
-}
-/* ближайший полевой соперник к отрезку a→b (кроме вратаря) */
-function laneBlock(team, ax,az, bx,bz){
-  var fo=teamOf(team===0?1:0), m=99;
-  for(var i=0;i<fo.length;i++){ var d=segDist(fo[i].x,fo[i].z, ax,az, bx,bz); if(d<m) m=d; }
-  return m;
-}
-function nearestFoe(p){
-  var fo=teamOf(p.team===0?1:0), m=99;
-  for(var i=0;i<fo.length;i++){ var d=Math.hypot(fo[i].x-p.x,fo[i].z-p.z); if(d<m) m=d; }
-  return m;
-}
-/* оценка броска из точки (x,z) для команды team: 0 — безнадёжно, 1 — пустые ворота */
-function shotQuality(team, x, z, LV){
-  var dir=attackDir(team), gx=dir*GOAL_X;
-  var ahead=(gx-x)*dir;                          /* сколько до линии ворот */
-  if(ahead<0.6) return 0;                        /* из-за ворот не бросаем */
-  var d=Math.hypot(gx-x, z);
-  var fd = clamp((19-d)/13, 0, 1);               /* 1 ближе 6 м, 0 дальше 19 м */
-  var ang = ahead/d;                             /* 1 — прямо по центру, 0 — с линии ворот */
-  var fa = clamp((ang-0.25)/0.55, 0, 1);
-  var q = fd*(0.35+0.65*fa);
-  if(d<10 && Math.abs(z)<4.5) q+=0.12;           /* слот */
-  var lb=laneBlock(team, x,z, gx,0);             /* перекрыта ли линия броска */
-  if(lb<0.9) q-=LV.lane; else if(lb>2.2) q+=0.05;
-  var gk=goalieOf(team===0?1:0);
-  if(gk){                                         /* вратарь не на месте — ворота открыты */
-    var gd=segDist(gk.x,gk.z, x,z, gx,0);
-    if(gd>1.2) q+=0.15*LV.read;
-  }
-  return q;
-}
-function aiCarrier(p, dt, foes){
-  var LV=aiLevel(p.team), gx=p.dir*GOAL_X;
-  if(offWarn===p.team){ p._t=0.05; return; }     /* сначала снять офсайд */
-  var pd=nearestFoe(p), pressed=pd<2.3;
-  var q=shotQuality(p.team, p.x, p.z, LV);
-  if(LV.noise){
-    /* оценка «плавает» медленно (раз в решение), а не дрожит каждый кадр */
-    if(p._qn===undefined || p._t<=0) p._qn=(Math.random()*2-1)*LV.noise;
-    q+=p._qn;
-  }
-  /* свежий пас в разрез — бросок в одно касание */
-  var fresh = p._recvT!==undefined && SIMT-p._recvT<0.9;
-  if(fresh && p._recvLead) q+=0.28;
-  else if(fresh) q+=0.08;
-  /* подобрал отскок у чужих ворот сразу после сейва */
-  if(LASTSAVE && LASTSAVE.t!==p.team && SIMT-LASTSAVE.time<2.5 && Math.hypot(gx-p.x,p.z)<8) q+=0.32;
-  /* долго держит шайбу в зоне атаки — не катать по кругу, а бросать */
-  /* (но только с нормальной дистанции — не выстреливать издалека от скуки) */
-  if((p.x*p.dir)>BLUE_X){ p._zoneT=(p._zoneT||0)+dt; if(Math.hypot(gx-p.x,p.z)<13) q+=Math.min(0.15, p._zoneT*0.04); } else p._zoneT=0;
-
-  /* реакция на давление: не в первом же кадре, а через задержку */
-  if(pressed){ p._pr=(p._pr===undefined? rnd(LV.react[0],LV.react[1]) : p._pr-dt); }
-  else p._pr=undefined;
-  p._t=(p._t===undefined? rnd(0.15,0.35) : p._t-dt);
-
-  var mustAct = pressed && p._pr<=0;
-  var oneTimer = fresh && q>=LV.thr;               /* бросок сразу по приёму */
-  if(!(p._t<=0 || mustAct || oneTimer)) return;
-  p._t=rnd(LV.think[0], LV.think[1]);
-
-  if(q>=LV.thr || (mustAct && q>=LV.thr-0.12)){ aiShoot(p, LV, q); return; }
-  var ps=aiPassPick(p, LV, q);
-  if(ps && (mustAct || ps.gain>0.12)){
-    /* промах паса растёт с дальностью */
-    var e=LV.passErr*(0.6+ps.L/20)*(Math.random()*2-1), a=Math.random()*6.283;
-    doPass(p, ps.lead?20:18, ps.lift, ps.lead, ps.m, {x:ps.pt.x+Math.cos(a)*e, z:ps.pt.z+Math.sin(a)*e});
-    return;
-  }
-  if(mustAct){ /* открытых нет: сброс в сторону ворот соперника */
-    doPass(p, 18, true, false); return;
-  }
-  /* ничего лучше — везём шайбу дальше, решим чуть позже */
-  p._t=rnd(0.15,0.3);
-}
-function aiShoot(p, LV, q){
-  var gk=goalieOf(p.team===0?1:0);
-  /* угол: дальний от вратаря (читает вратаря) или случайный */
-  var side = (Math.random()<LV.read && gk) ? (gk.z>0?-1:1) : (Math.random()<0.5?-1:1);
-  var z = side*0.68 + (Math.random()*2-1)*LV.aimErr;
-  var power = clamp((0.45+q*0.5+rnd(-0.1,0.15))*(LV.pow||1), 0.25, 1);
-  p._zoneT=0; p._recvT=undefined;
-  doShot(p, power, clamp(z,-1.4,1.4));
-}
-/* лучший пас: открытый партнёр со свободной линией, в хорошей позиции для броска */
-function aiPassPick(p, LV, myQ){
-  var arr=teamOf(p.team), best=null, bs=-1e9;
-  var inZone=(p.x*p.dir)>BLUE_X;
-  for(var i=0;i<arr.length;i++){
-    var m=arr[i]; if(m===p || m.down>0) continue;
-    var dx=m.x-p.x, dz=m.z-p.z, L=Math.hypot(dx,dz);
-    if(L<3 || L>24) continue;
-    /* не отдаём за синюю, пока шайба не в зоне, — это офсайд */
-    if(!inZone && m.x*p.dir>BLUE_X+0.3) continue;
-    var fwd=(m.x-p.x)*p.dir;
-    var lead = LV.smart && fwd>1.0 && m.vx*p.dir>1.5 && (m.x*p.dir)>BLUE_X-6;
-    /* упреждение на время полёта шайбы; в разрез — ещё на шаг вперёд по ходу */
-    var tf=L/(lead?20:18)*1.05;
-    var txp=m.x+m.vx*tf+(lead? p.dir*1.2 : 0), tzp=m.z+m.vz*tf;
-    var lane=laneBlock(p.team, p.x,p.z, txp,tzp);
-    var cover=nearestFoe(m);
-    var mq=shotQuality(p.team, txp, tzp, LV);
-    var sc = mq*1.6 + clamp(cover,0,5)*0.12 + fwd*0.02 - L*0.02;
-    if(LV.smart){ if(lane<1.0) sc-=1.2; else if(lane<1.8) sc-=0.4; }
-    else sc += Math.random()*0.6;               /* слабый ИИ видит поле хуже */
-    if(lead) sc+=0.25;
-    if(sc>bs){ bs=sc; best={m:m, lead:lead, lift:lane<1.0 && L>10, gain:mq-myQ+(lead?0.2:0), pt:{x:txp, z:tzp}, L:L}; }
-  }
-  return best;
-}
-
-/* ---------- управление живым игроком ---------- */
 /* автопилот только в одиночной игре: в сетевом матче за игроком живой человек */
 function autoPilot(){ return TEST.autopilot && !NET.on; }
-var NOIN={mx:0,mz:0}, NOEDGE={};
-function humanTick(team, inp, edge, dt){
-  var hs=HS[team];
-  if(!hs.ctrl || hs.ctrl.boxed){ var f0=onIce(team)[0]; if(f0) hs.ctrl=f0; }
-  if(state!=='play'){ hs.press.on=false; hs.pressT=0; gkRush[team]=false; return; }
-
-  /* заряд броска */
-  if(hs.charge>0 && !inp._B){
-    if(hs.ctrl && puck.owner===hs.ctrl) doShot(hs.ctrl, clamp(hs.charge/0.85,0.18,1));
-    hs.charge=0;
-  }
-
-  /* автовыбор активного */
-  if(!hs.goalieCtl){
-    if(puck.owner && puck.owner.team===team && !puck.owner.goalie){
-      if(hs.ctrl!==puck.owner) hs.ctrl=puck.owner;
-    } else {
-      hs.autoT-=dt;
-      if(hs.autoT<=0){
-        hs.autoT=0.22;
-        var cand=nearestOf(team,puck.x,puck.z);
-        if(cand){
-          var dCur=(hs.ctrl&&!hs.ctrl.boxed)?Math.hypot(hs.ctrl.x-puck.x,hs.ctrl.z-puck.z):999;
-          var dNew=Math.hypot(cand.x-puck.x,cand.z-puck.z);
-          if(cand!==hs.ctrl && dNew<dCur-1.5) hs.ctrl=cand;
-        }
-      }
-    }
-  }
-
-  var p=hs.ctrl;
-  if(!p || p.down>0) return;
-  /* вектор прицела: направление левого стика, иначе — вперёд по атаке */
-  var aL=Math.hypot(inp.mx,inp.mz);
-  if(aL>0.22){ var aw=toWorld(inp.mx/aL,inp.mz/aL,[0,0]); hs.aimX=aw[0]; hs.aimZ=aw[1]; }
-  else if(!hs.aimX && !hs.aimZ){ hs.aimX=attackDir(team); hs.aimZ=0; }
-  var hasPuck = puck.owner===p;
-  if(hasPuck){ hs.press.on=false; hs.pressT=0; }
-
-  if(hasPuck){
-    /* счётчик пасов для тестов: считаем само нажатие, а не игрока —
-       игра может переключить управление между тапом и пасом */
-    if(edge.A){ doPass(p,19,false,false); if(team===HUMAN) _passN++; }
-    if(edge.Y){ doPass(p,21,false,true);  if(team===HUMAN) _passN++; }
-    if(edge.X){ doPass(p,15,true,false);  if(team===HUMAN) _passN++; }
-    if(inp._B) hs.charge=Math.min(0.85,hs.charge+dt);
-  } else {
-    gkRush[team]=!!inp._Y;
-    if(true){
-      if(inp._A) hs.pressT+=dt;
-      else { if(hs.pressT>0 && hs.pressT<0.20) switchPlayer(team); hs.pressT=0; }
-      if(edge.B) doPoke(p);
-      if(edge.X) doCheck(p);
-      if(edge.LB) switchPlayer(team);
-      if(hs.pressCd>0) hs.pressCd-=dt;
-      if(hs.pressT>0.18){
-        var tgt = puck.owner && puck.owner.team!==team ? puck.owner : null;
-        var tx3=tgt?tgt.x:puck.x, tz3=tgt?tgt.z:puck.z;
-        var ddx=tx3-p.x, ddz=tz3-p.z, L4=Math.hypot(ddx,ddz)||1;
-        hs.press.on=true; hs.press.x=ddx/L4; hs.press.z=ddz/L4; hs.press.d=L4;
-        if(L4<2.1 && hs.pressCd<=0){ hs.pressCd=0.42; doPoke(p); }
-      } else hs.press.on=false;
-    }
-  }
+/* ввод → команды симуляции: игрок (или автопилот), у хоста — ещё гость; уровень ИИ соперника */
+function simCfg(){
+  var ap=autoPilot(), host=NET.on && NET.role==='host', o=1-HUMAN, c=SIM.control;
+  c.first=HUMAN;
+  c.tick[HUMAN]=true; c.hum[HUMAN]=!ap; c.inp[HUMAN]=ap?SIM.NOIN:IN; c.edge[HUMAN]=ap?SIM.NOEDGE:EDGE; c.rem[HUMAN]=null;
+  c.tick[o]=host; c.hum[o]=host; c.inp[o]=NIN; c.edge[o]=NEDGE; c.rem[o]=host?NETV:null;
+  /* соперник-компьютер получает уровень ?ai=, партнёры живого игрока — normal */
+  c.lv[HUMAN]='normal'; c.lv[o]=NET.on?'normal':DIFF;
 }
 
-/* ---------- вратарь ---------- */
-/* Вратарь работает сам: держит угол между шайбой и воротами,
-   выкатывается навстречу дальнему броску, прижимается к линии при близкой шайбе,
-   а при летящей на ворота шайбе смещается в точку её пересечения с линией. */
-function goalieLogic(g,dt){
-  var gx0=g.dir*GOAL_X;                  /* линия ворот */
-  var dxp=puck.x-gx0, dzp=puck.z;
-  var dist=Math.hypot(dxp,dzp);
-  var mine = Math.sign(puck.x)===Math.sign(g.dir) || Math.abs(puck.x)<6;
-
-  /* угол на шайбу от центра ворот */
-  var ang=Math.atan2(dzp, -g.dir*dxp);   /* 0 = прямо перед воротами */
-  ang=clamp(ang,-1.15,1.15);
-
-  /* глубина выхода: далеко — смелее, близко — в воротах */
-  var depth;
-  if(!mine) depth=0.55;
-  else depth = clamp(0.45 + (clamp(dist,2,16)-2)*0.075, 0.45, 1.55);
-  if(dist<2.6) depth=0.42;
-
-  var tx = gx0 - g.dir*depth*Math.cos(ang);
-  var tz = clamp(depth*Math.sin(ang)*1.35 + clamp(dzp,-3,3)*0.30, -1.45, 1.45);
-
-  /* шайба летит в створ — идём в точку пересечения */
-  var speed=Math.hypot(puck.vx,puck.vz);
-  if(!puck.owner && speed>6 && Math.sign(puck.vx)===g.dir && Math.abs(dxp)<22){
-    var tt=Math.abs(dxp)/Math.max(1,Math.abs(puck.vx));
-    var cz=puck.z+puck.vz*tt;
-    if(Math.abs(cz)<2.6){
-      tz=lerp(tz, clamp(cz,-1.5,1.5), 0.85);
-      tx=lerp(tx, gx0-g.dir*0.45, 0.6);
-    }
-  }
-
-  /* выход на игрока с шайбой по удержанию Y */
-  var rush = gkRush[g.team] && puck.owner && puck.owner.team!==g.team &&
-             Math.sign(puck.owner.x)===Math.sign(g.dir) &&
-             Math.abs(puck.owner.x-gx0)<9.5;
-  var spd = rush?9.0:6.5;
-  if(rush){
-    var o=puck.owner;
-    var L=Math.hypot(o.x-gx0,o.z)||1;
-    var reach=Math.min(L-0.5, 6.2);
-    tx = gx0 + (o.x-gx0)/L*reach;
-    tz = clamp(o.z/L*reach, -5.0, 5.0);
-  }
-
-  /* реальное движение с ограничением скорости */
-  var mvx=tx-g.x, mvz=tz-g.z, mL=Math.hypot(mvx,mvz);
-  if(mL>0.001){
-    var step=Math.min(mL, spd*dt);
-    g.x+=mvx/mL*step; g.z+=mvz/mL*step;
-  }
-  /* никогда не заезжает за линию ворот назад */
-  if(g.dir>0) g.x=clamp(g.x,GOAL_X-7.0,GOAL_X+0.30);
-  else        g.x=clamp(g.x,-GOAL_X-0.30,-GOAL_X+7.0);
-  g.z=clamp(g.z,-6.0,6.0);
-  g.spd=mL>0.001?Math.min(mL/Math.max(dt,0.001),spd):0;
-  /* Вратарь провожает шайбу взглядом, но не разворачивается спиной к площадке.
-     Раньше при шайбе за воротами (x дальше линии) он вставал лицом к своей
-     сетке — ровно то, на что жаловались. Держим курс в пределах ±65° от «в поле». */
-  var faceOut = g.dir>0 ? Math.PI : 0;
-  var want = Math.atan2(puck.z-g.z, puck.x-g.x);
-  var dyG = Math.atan2(Math.sin(want-faceOut), Math.cos(want-faceOut));
-  g.yaw = faceOut + clamp(dyG, -1.15, 1.15);
-}
-
-/* ---------- симуляция ---------- */
-/* Доля шага, на которой шайба пересекла плоскость x=gx (или -1, если не пересекла).
-   Проверять надо именно отрезок: за кадр шайба пролетает больше ширины створа,
-   и на 30 кадрах бросок 34 м/с проходил сквозь сетку без гола. */
-function crossAt(x0,x1,gx,dirC){
-  if((x0-gx)*dirC>=0) return -1;      /* уже была за линией */
-  if((x1-gx)*dirC<0)  return -1;      /* не дошла */
-  var d=x1-x0;
-  return Math.abs(d)<1e-9 ? 0 : (gx-x0)/d;
-}
 var spray=[];
 function addSpray(p){
   spray.push({x:p.x,y:0.05,z:p.z,vx:-p.vx*0.13+rnd(-.5,.5),vy:rnd(0.5,1.6),vz:-p.vz*0.13+rnd(-.5,.5),
     life:rnd(0.22,0.5),max:0.5});
 }
 
-/* ---------- движение человека-игрока: вынесено в отдельные функции,
-   чтобы предсказание на госте (netPredictGuest) считало ТЕМ ЖЕ кодом,
-   что и sim() на хосте — без риска расхождения между предсказанным и
-   авторитетным движением. sim() ниже вызывает их вместо старого
-   инлайн-кода; поведение не изменилось, просто вынесено. ---------- */
-function humanMoveIntent(p, hsp, inp2){
-  var ax=0,az=0,maxs=PLAYER_CFG.maxSpeed,accel=PLAYER_CFG.accel;
-  var wv=toWorld(inp2.mx,inp2.mz,[0,0]);
-  ax=wv[0]; az=wv[1];
-  var PR=hsp.press;
-  if(PR.on){
-    // Auto-approach: blend stick input with press direction when A held
-    // If stick is significantly deflected (>0.35), manual input has more weight
-    var stickMag = Math.hypot(inp2.mx, inp2.mz);
-    var blend = stickMag > 0.35 ? 0.55 : 0.0;  // 0 = full auto, 0.55 = blend
-    ax = blend === 0 ? PR.x : lerp(ax, PR.x, blend);
-    az = blend === 0 ? PR.z : lerp(az, PR.z, blend);
-    if(PR.d<PLAYER_CFG.pressRange){ maxs=PLAYER_CFG.pressMaxSpeed; accel=PLAYER_CFG.pressAccel; }
-  }
-  if(inp2.RT){ maxs=PLAYER_CFG.sprintMaxSpeed; accel=PLAYER_CFG.sprintAccel; }
-  if(puck.owner===p){ maxs*=PLAYER_CFG.puckSpeedMul; }
-  return [ax,az,maxs,accel];
-}
-function humanMoveIntegrate(st, ax, az, maxs, accel, dt){
-  st.vx+=ax*accel*dt; st.vz+=az*accel*dt;
-  var sp=Math.hypot(st.vx,st.vz);
-  if(sp>maxs){st.vx=st.vx/sp*maxs;st.vz=st.vz/sp*maxs;sp=maxs;}
-  st.vx*=PLAYER_CFG.damping; st.vz*=PLAYER_CFG.damping;
-  st.x+=st.vx*dt; st.z+=st.vz*dt;
-  // Rectangular clamp first
-  st.x=clamp(st.x,-RL+0.8,RL-0.8); st.z=clamp(st.z,-RW+0.8,RW-0.8);
-  // Corner projection: keep players inside rounded corners (CORNER=7.0)
-  var cornerSafe = CORNER - 0.8;           // 6.2 — safe radius inside corner arc
-  var cornerX = RL - cornerSafe;           // 23.8 — x threshold where corner starts
-  var cornerZ = RW - cornerSafe;           // 8.8  — z threshold where corner starts
-  var axm = Math.abs(st.x), azm = Math.abs(st.z);
-  if(axm > cornerX && azm > cornerZ){
-    var cx = (st.x > 0 ? 1 : -1) * (RL - CORNER); // ±23
-    var cz = (st.z > 0 ? 1 : -1) * (RW - CORNER); // ±8
-    var dx = st.x - cx, dz = st.z - cz;
-    var d = Math.hypot(dx, dz);
-    if(d > cornerSafe){
-      st.x = cx + dx/d * cornerSafe;
-      st.z = cz + dz/d * cornerSafe;
-    }
-  }
-  st.spd=sp;
-  /* Разворот доводим с ограничением скорости, а не ставим мгновенно:
-     мгновенная установка выглядит как телепорт, а на резкой смене
-     направления игрок успевает мгновение ехать спиной — это и включает
-     клип заднего хода. */
-  if(sp>0.5){
-    var tgt=Math.atan2(st.vz,st.vx);
-    var dy=tgt-st.yaw;
-    dy=Math.atan2(Math.sin(dy),Math.cos(dy));
-    st.yaw+=clamp(dy,-PLAYER_CFG.turnRate*dt,PLAYER_CFG.turnRate*dt);
-    st._back=(Math.cos(st.yaw)*st.vx+Math.sin(st.yaw)*st.vz) < -0.30*sp;
-  } else st._back=false;
-  st.stride+=dt*(2.5+sp*1.6);
-}
 function sim(dt){
-  if(state==='menu') return;
-  SIMT+=dt;
-  if(state==='over'){ stateT-=dt; return; }
-  if(state==='goal'||state==='face'){
-    stateT-=dt;
-    if(stateT<=0){
-      if(state==='goal'){ state='face'; stateT=1.0; placeFaceoff(0,0); }
-      else { state='play'; EV.emit('faceoff',{x:r2(puck.x), z:r2(puck.z)}); }
-    }
-    if(state==='goal') return;
+  simCfg();
+  var r=SIM.step(dt);
+  if(r>=1){
+    controlled = HS[HUMAN].ctrl;
+    chargeT    = HS[HUMAN].charge;
+    PRESS      = HS[HUMAN].press;
+    goalieCtl  = HS[HUMAN].goalieCtl;
   }
-
-  clock-=dt;
-  if(clock<=0){
-    clock=0;
-    state='over'; stateT=99;
-    puck.vx=0; puck.vz=0; puck.vy=0; puck.owner=null;
-    EV.emit('match:end',{score:score.slice(), reason:'time'});
-    showResult();
-    return;
-  }
-
-  /* --- удаления --- */
-  for(var pi=pen.length-1;pi>=0;pi--){
-    pen[pi].t-=dt;
-    if(pen[pi].t<=0){ var pb=pen[pi].p; pb.boxed=0;
-      pb.x=-attackDir(pen[pi].team)*BLUE_X; pb.z=(RW-2)*(Math.random()<0.5?1:-1);
-      pb.vx=0; pb.vz=0; pb.down=0; pb.os=0;
-      pen.splice(pi,1); }
-  }
-
-  /* --- ОТЛОЖЕННЫЙ ОФСАЙД (как в NHL на Xbox) и проброс --- */
-  if(state==='play'){
-    offT+=dt;
-    for(var t2=0;t2<2;t2++){
-      var dir2=attackDir(t2), pz=zoneOf(puck.x,dir2);
-      var arr2=onIce(t2), carrier=puck.owner, q2;
-      var mine = carrier ? (carrier.team===t2) : !!(lastTouch && lastTouch.team===t2);
-
-      /* «отметился»: нарушитель выехал за синюю — флаг снимается */
-      for(q2=0;q2<arr2.length;q2++)
-        if(arr2[q2].os && zoneOf(arr2[q2].x,dir2)!==1) arr2[q2].os=0;
-
-      /* 1. ВОЗНИКНОВЕНИЕ: шайба входит в чужую зону, а свои уже там */
-      if(pz===1 && prevZone[t2]!==1 && mine){
-        var armed=0;
-        for(q2=0;q2<arr2.length;q2++){
-          var pl=arr2[q2];
-          if(pl!==carrier && zoneOf(pl.x,dir2)===1){ pl.os=1; armed=1; }
-        }
-        if(armed && offWarn!==t2){ offWarn=t2; offT=0; SFX.swap(); }
-      }
-
-      /* 2. СБРОС: шайба вышла из зоны (пас/выкат назад) */
-      if(pz!==1){
-        for(q2=0;q2<arr2.length;q2++) arr2[q2].os=0;
-        if(offWarn===t2) offWarn=-1;
-      }
-
-      if(offWarn===t2){
-        var still=0, viol=null;
-        for(q2=0;q2<arr2.length;q2++) if(arr2[q2].os) still++;
-        /* 2b. СБРОС: все нарушители вышли из зоны */
-        if(!still) offWarn=-1;
-        else {
-          /* 3. ФИКСАЦИЯ: нарушитель тронул шайбу или поехал к воротам */
-          for(q2=0;q2<arr2.length;q2++){
-            var pv=arr2[q2];
-            if(!pv.os) continue;
-            var touched = (carrier===pv) ||
-                          (lastTouch===pv && Math.hypot(puck.x-pv.x,puck.z-pv.z)<1.3);
-            var deep = pv.x*dir2 > GOAL_X-2.2;
-            if(touched || deep){ viol=pv; break; }
-          }
-          if(viol){
-            offWarn=-1;
-            for(q2=0;q2<arr2.length;q2++) arr2[q2].os=0;
-            whistle('offside', dir2*4.5, puck.z>0?7:-7, t2);
-            break;
-          }
-        }
-      }
-      prevZone[t2]=pz;
-    }
-    if(icing.armed){
-      var dI=attackDir(icing.team);
-      if(puck.x*dI > GOAL_X+0.2){
-        icing.armed=false;
-        whistle('icing', -dI*20, puck.z>0?7:-7, icing.team);
-      }
-    }
-  }
-  if(pokeT>0) pokeT-=dt;
-  if(checkT>0) checkT-=dt;
-  if(HS[0].pokeT>0) HS[0].pokeT-=dt;
-  if(HS[1].pokeT>0) HS[1].pokeT-=dt;
-
-  /* --- игроки-люди (локальный и сетевой) --- */
-  /* автопилот: ввод игрока не читаем, его команду ведёт ИИ ниже */
-  humanTick(HUMAN, autoPilot()?NOIN:IN, autoPilot()?NOEDGE:EDGE, dt);
-  if(NET.on && NET.role==='host'){
-    var hsg=HS[1-HUMAN];
-    /* гость нажал пас/бросок, а у хоста его игрок ещё не подобрал шайбу (она у него почти
-       на клюшке) — придерживаем нажатие до 0.3 с: у гостя подбор уже случился, иначе нажатие
-       превратилось бы в смену игрока */
-    var gp=hsg.ctrl, PD=NETV.pend||(NETV.pend={A:0,B:0,X:0,Y:0,t:0,tapB:0});
-    if(gp && !puck.owner && (NEDGE.A||NEDGE.B||NEDGE.X||NEDGE.Y)){
-      var gse=stickEnd(gp);
-      if(Math.hypot(gse[0]-puck.x,gse[1]-puck.z)<2.2){
-        PD.A|=NEDGE.A; PD.B|=NEDGE.B; PD.X|=NEDGE.X; PD.Y|=NEDGE.Y; PD.tapB|=NETV.tapB; PD.t=0.3;
-        NEDGE.A=NEDGE.B=NEDGE.X=NEDGE.Y=false; NETV.tapB=false;
-      }
-    }
-    if(PD.t>0){
-      PD.t-=dt;
-      if(gp && puck.owner===gp){ NEDGE.A|=PD.A; NEDGE.B|=PD.B; NEDGE.X|=PD.X; NEDGE.Y|=PD.Y; NETV.tapB|=PD.tapB; PD.t=0; }
-      if(PD.t<=0){ PD.A=PD.B=PD.X=PD.Y=PD.tapB=0; PD.t=0; }
-    }
-    NEDGE.A=!!NEDGE.A; NEDGE.B=!!NEDGE.B; NEDGE.X=!!NEDGE.X; NEDGE.Y=!!NEDGE.Y;
-    if(NETV.tapB){ if(hsg.ctrl && puck.owner===hsg.ctrl) hsg.charge=Math.max(hsg.charge,1/60); NETV.tapB=false; }
-    humanTick(1-HUMAN, NIN, NEDGE, dt);
-    NEDGE.A=NEDGE.B=NEDGE.X=NEDGE.Y=NEDGE.LB=false;      /* фронт использован */
-  }
-  controlled = HS[HUMAN].ctrl;
-  chargeT    = HS[HUMAN].charge;
-  PRESS      = HS[HUMAN].press;
-  goalieCtl  = HS[HUMAN].goalieCtl;
-
-  /* --- шайба --- */
-  if(puck.owner){
-    var o=puck.owner;
-    puck.x=o.x+Math.cos(o.yaw)*0.95; puck.z=o.z+Math.sin(o.yaw)*0.95; puck.y=0.05;
-    puck.vx=0;puck.vz=0;puck.vy=0;
-  } else {
-    if(puck.free>0) puck.free-=dt;
-    /* точка до шага: створ проверяем отрезком, а не «попал ли кадр в полосу».
-       На 30 кадрах бросок 34 м/с пролетал за кадр 1.1 м — полоса ворот шире
-       не была, и шайба проходила сквозь сетку без гола. */
-    var px0=puck.x, py0=puck.y, pz0=puck.z;
-    puck.x+=puck.vx*dt; puck.z+=puck.vz*dt;
-    puck.y+=puck.vy*dt; puck.vy-=13*dt;
-    if(puck.y<0.05){ puck.y=0.05; puck.vy=(Math.abs(puck.vy)>1.4)? -puck.vy*0.32:0; }
-    puck.vx*=0.996; puck.vz*=0.996;
-
-    if(puck.z<-RW+0.35){puck.z=-RW+0.35;puck.vz=-puck.vz*0.72;SFX.stick();}
-    if(puck.z> RW-0.35){puck.z= RW-0.35;puck.vz=-puck.vz*0.72;SFX.stick();}
-    if(puck.x<-RL+0.35){puck.x=-RL+0.35;puck.vx=-puck.vx*0.72;SFX.stick();}
-    if(puck.x> RL-0.35){puck.x= RL-0.35;puck.vx=-puck.vx*0.72;SFX.stick();}
-    var hw=halfWidthAt(puck.x)-0.35;
-    if(Math.abs(puck.z)>hw && hw>0){ puck.z=Math.sign(puck.z)*hw; puck.vz=-puck.vz*0.72; SFX.stick(); }
-
-    /* штанги и перекладина */
-    for(var gp=0;gp<2;gp++){
-      var pdir=(gp===0?1:-1), pgx=pdir*GOAL_X;
-      var sp0=crossAt(px0,puck.x,pgx,pdir);
-      if(sp0>=0 && Math.hypot(puck.vx,puck.vz)>4){
-        var cz0=pz0+(puck.z-pz0)*sp0, cy0=py0+(puck.y-py0)*sp0;
-        var hitPost = (Math.abs(Math.abs(cz0)-0.92)<0.16 && cy0<1.28);
-        var hitBar  = (Math.abs(cz0)<0.98 && cy0>1.10 && cy0<1.34);
-        if(hitPost||hitBar){
-          /* ставим шайбу в точку удара, иначе она уже «внутри» и отскок мимо */
-          puck.x=pgx-pdir*0.05; puck.z=cz0; puck.y=Math.max(0.05,cy0);
-          EV.emit('post',{t:lastTouch?lastTouch.team:-1, p:lastTouch?pIdx(lastTouch):-1, bar:!!hitBar});
-          if(hitBar){ puck.vy=-Math.abs(puck.vy)-1.5; puck.vx=-puck.vx*0.55; }
-          else { puck.vz=-puck.vz*0.9 + (cz0>0?3.5:-3.5); puck.vx=-puck.vx*0.45; }
-          puck.free=0.25;
-        }
-      }
-    }
-
-    /* ворота */
-    for(var g=0;g<2;g++){
-      var dir=(g===0?1:-1), gx=dir*GOAL_X;
-      var sg=crossAt(px0,puck.x,gx,dir);
-      var czg=sg<0?0:pz0+(puck.z-pz0)*sg, cyg=sg<0?9:py0+(puck.y-py0)*sg;
-      if(sg>=0 && Math.abs(czg)<0.92 && cyg<1.2 && Math.hypot(puck.vx,puck.vz)>3){
-        var gk=goalieOf(g===0?1:0);
-        /* меряем от точки пересечения створа, а не от той, куда шайба уже улетела */
-        var saveDist=gk?Math.hypot(gk.x-(gx-dir*0.1),gk.z-czg):99;
-        if(saveDist<1.15 && Math.random()<0.55){
-          puck.x=gx-dir*0.35; puck.z=czg; puck.y=Math.max(0.05,cyg);
-          puck.vx=-puck.vx*0.5; puck.vz+=rnd(-4,4);
-          /* шайба шла в створ — это бросок в створ, даже если её не бросали, а отдавали пасом */
-          var lineShot = !!(LASTSHOT && LASTSHOT.p.team!==gk.team && SIMT-LASTSHOT.t<2.5);
-          LASTSHOT=null;             /* один бросок — не больше одного сейва */
-          LASTSAVE={t:gk.team, time:SIMT};
-          EV.emit('save',{g:pIdx(gk), t:gk.team, by:lastTouch?pIdx(lastTouch):-1, kind:'line', shot:1, noShot:lineShot?0:1});
-        } else {
-          var scorer = (g===0)?0:1;
-          score[scorer]++;
-          goalEvent(scorer, czg);
-          document.getElementById('s1').textContent=score[0];
-          document.getElementById('s2').textContent=score[1];
-          clearOnePenalty(scorer===0?1:0);
-          puck.vx=0;puck.vz=0;puck.vy=0;
-          state='goal'; stateT=1.5;
-          return;
-        }
-      }
-    }
-    /* подбор. Шайба достаётся тому, кто к ней ближе (в долях своей досягаемости).
-       Раньше её брал первый подходящий в порядке players[], а команда 0 идёт
-       первой — в спорных ситуациях она выигрывала всегда (в сети это хост). */
-    if(puck.free<=0 && puck.y<PLAYER_CFG.pickupHeight && Math.hypot(puck.vx,puck.vz)<PLAYER_CFG.pickupMaxSpeed){
-      var pick=null, pickK=1;
-      for(var i=0;i<players.length;i++){
-        var p=players[i];
-        if(p.down>0||p.boxed) continue;
-        var k;
-        if(p.goalie) k=Math.hypot(p.x-puck.x,p.z-puck.z)/PLAYER_CFG.pickupReachGoalie;   /* вратарь: по телу */
-        else k=Math.hypot(p.x+Math.cos(p.yaw)*0.95-puck.x, p.z+Math.sin(p.yaw)*0.95-puck.z)/PLAYER_CFG.pickupReachSkater; /* полевой: по концу клюшки */
-        /* ничья (например, на вбрасывании концы клюшек ровно на одинаковом
-           расстоянии) решается случаем, а не порядком в массиве */
-        k+=Math.random()*0.03;
-        if(k<pickK){ pickK=k; pick=p; }
-      }
-      if(pick && pick.goalie){
-        var p=pick;
-        /* сейвом считаем, только если это чужой бросок, а не любая шайба у вратаря */
-        var fromShot = !!(LASTSHOT && LASTSHOT.p.team!==p.team && SIMT-LASTSHOT.t<2.5);
-        puck.vx=rnd(-6,6); puck.vz=rnd(-6,6); puck.free=0.3; icing.armed=false;
-        if(fromShot){ LASTSHOT=null; LASTSAVE={t:p.team, time:SIMT}; }
-        EV.emit('save',{g:pIdx(p), t:p.team, by:lastTouch?pIdx(lastTouch):-1, kind:'body', shot:fromShot?1:0});
-      } else if(pick){
-        var prevT=lastTouch;
-        puck.owner=pick; lastTouch=pick; icing.armed=false;
-        pickupEvent(pick, prevT);
-      }
-    }
-  }
-
-  /* --- игроки ---
-     Порядок обхода чередуется каждый кадр. При постоянном порядке команда 0
-     (первая в players[]) в спорный кадр всегда действовала раньше: её защитник
-     успевал выбить шайбу до броска/паса владельца из команды 1, а её владелец —
-     сыграть до того, как до него дотянутся. */
-  SIMF=(SIMF+1)|0;
-  for(var k0=0;k0<players.length;k0++){
-    var k=(SIMF&1)?players.length-1-k0:k0;
-    var p=players[k];
-    if(p.boxed) continue;
-    if(p.goalie){
-      var hsg=HS[p.team];
-      var gHuman = (p===hsg.ctrl && hsg.goalieCtl) && ((p.team===HUMAN && !autoPilot()) || (NET.on && NET.role==='host' && p.team!==HUMAN));
-      if(gHuman && state==='play'){
-        var gin=(p.team===HUMAN)?IN:NIN;
-        var gw=toWorld(gin.mx,gin.mz,[0,0]);
-        var gsp=gin.RT?8.2:6.2;
-        p.vx=lerp(p.vx, gw[0]*gsp, Math.min(1,dt*9));
-        p.vz=lerp(p.vz, gw[1]*gsp, Math.min(1,dt*9));
-        p.x+=p.vx*dt; p.z+=p.vz*dt;
-        var gx0=p.dir*GOAL_X;
-        /* (была ещё строка clamp(p.x, gx0-dir*3.4, gx0+dir*0.35): при dir<0 границы
-           шли в обратном порядке, и вратарь команды 0 под управлением прыгал
-           между двумя точками. Правильные границы — строкой ниже) */
-        p.x=p.dir>0?clamp(p.x,GOAL_X-3.4,GOAL_X+0.35):clamp(p.x,-GOAL_X-0.35,-GOAL_X+3.4);
-        p.z=clamp(p.z,-3.0,3.0);
-        p.spd=Math.hypot(p.vx,p.vz);
-        /* Вратарь смотрит в поле, а не в свои ворота: его dir — это сторона,
-           которую он защищает, значит лицом он в противоположную. */
-        p.yaw=p.dir>0?Math.PI:0;
-      } else goalieLogic(p,dt);
-      continue;
-    }
-    if(p.down>0){
-      p.down-=dt;
-      p.x+=p.vx*dt; p.z+=p.vz*dt; p.vx*=0.90; p.vz*=0.90;
-      p.x=clamp(p.x,-RL+1,RL-1); p.z=clamp(p.z,-RW+1,RW-1);
-      continue;
-    }
-    var ax=0,az=0,maxs=PLAYER_CFG.maxSpeed,accel=PLAYER_CFG.accel;
-    var hsp = HS[p.team], humanP = (p===hsp.ctrl) && ((p.team===HUMAN && !autoPilot()) || (NET.on && NET.role==='host' && p.team!==HUMAN));
-    if(humanP && state==='play'){
-      var inp2 = (p.team===HUMAN)?IN:NIN;
-      var mi=humanMoveIntent(p, hsp, inp2);
-      ax=mi[0]; az=mi[1]; maxs=mi[2]; accel=mi[3];
-    } else {
-      var tx,tz;
-      var carrier = puck.owner;
-      var att = carrier && carrier.team===p.team;
-      var chaser = nearestOf(p.team, carrier?carrier.x:puck.x, carrier?carrier.z:puck.z);
-      if(NET.on && NET.role==='host' && p===HS[1-HUMAN].ctrl){ ax=0; az=0; }
-      var gx = p.dir*GOAL_X, ownGx = -p.dir*GOAL_X;
-      var foes = teamOf(p.team===0?1:0);
-
-      /* ---------- позиционная игра ----------
-         Роли: 0 левый крайний, 1 центр, 2 правый крайний, 3 и 4 защитники.
-         Раньше все, кроме владельца, шли к шайбе или «держали» случайного
-         соперника — отсюда и куча вокруг шайбы. Теперь у каждого своя зона,
-         защитники не лезут в чужой угол, а крайние открываются в свободной
-         полосе. В конце все цели разводятся друг от друга. */
-      var IS_D = (p.role>=3);
-      var LANE = IS_D ? (p.role===3?-5.2:5.2) : (p.role===0?-7.6:(p.role===2?7.6:0));
-      var TC=TACTIC[p.team];
-      var blueOwn = -p.dir*BLUE_X, blueOpp = p.dir*BLUE_X;
-
-      if(carrier===p){
-        var near=null, nd=1e9, f1;
-        for(f1=0;f1<foes.length;f1++){
-          var dq=Math.hypot(foes[f1].x-p.x,foes[f1].z-p.z);
-          if(dq<nd){nd=dq;near=foes[f1];}
-        }
-        tx = gx - p.dir*3.0;
-        tz = clamp(p.z*0.55, -8, 8);
-        /* защитник с шайбой не идёт на ворота сам — доводит до синей и ищет пас */
-        /* с направлением: у команды 1 (атака в −x) прежний clamp(tx,-RL+3,blueOpp-dir*0.5)
-           не останавливал защитника у синей, а гнал его к чужим воротам */
-        if(IS_D) tx = (p.dir>0) ? Math.min(tx, blueOpp-0.5) : Math.max(tx, blueOpp+0.5);
-        if(near && nd<3.6){
-          var ex=p.x-near.x, ez=p.z-near.z, eL=Math.hypot(ex,ez)||1;
-          tx += ex/eL*2.6; tz += ez/eL*5.2;
-        }
-      }
-      else if(att){
-        /* СВОЯ АТАКА */
-        if(IS_D){
-          /* защитники держат синюю линию: они последние сзади и страхуют отбор */
-          var hold = blueOpp - p.dir*1.4;
-          if(TC===2) hold = blueOpp - p.dir*7.0;      /* оборона: ниже */
-          else if(TC===1) hold = blueOpp - p.dir*0.4; /* атака: жмутся к линии */
-          tx = clamp(hold, -RL+3, RL-3);
-          /* но никогда впереди шайбы — иначе офсайд и дыра сзади */
-          tx = (p.dir>0) ? Math.min(tx, carrier.x-0.6) : Math.max(tx, carrier.x+0.6);
-          tz = clamp(LANE*0.85 + carrier.z*0.12, -RW+2.5, RW-2.5);
-        } else {
-          /* крайние и центр открываются впереди шайбы, каждый в своей полосе */
-          var dep = (p.role===1? 3.0 : 5.2);
-          if(TC===1) dep += 2.6; else if(TC===2) dep -= 3.0;
-          tx = clamp(carrier.x + p.dir*dep, -RL+3, RL-3);
-          tz = clamp(LANE + carrier.z*0.18, -RW+2.5, RW-2.5);
-          /* пока шайба не вошла в зону — ждём у синей, чтобы не встать в офсайд */
-          if((carrier.x - blueOpp)*p.dir < 0)
-            tx = (p.dir>0) ? Math.min(tx, blueOpp-1.2) : Math.max(tx, blueOpp+1.2);
-        }
-      }
-      else if(chaser===p){
-        /* единственный, кто идёт на шайбу, — с упреждением */
-        var tgt = carrier || puck;
-        tx = tgt.x + (carrier? carrier.vx*0.28 : 0);
-        tz = tgt.z + (carrier? carrier.vz*0.28 : 0);
-      }
-      else {
-        /* ОБОРОНА: между шайбой и своими воротами, каждый на своём месте */
-        var pz=puck.z, px=puck.x;
-        var deep = ((px - blueOwn)*p.dir < 0);        /* шайба в нашей зоне */
-        if(IS_D){
-          if(deep){
-            /* один закрывает пятак перед воротами, второй — ближний угол */
-            var slot = (Math.abs(pz)<3.5);
-            if((p.role===3) === (pz<0) || slot){
-              tx = ownGx + p.dir*2.4;                  /* пятак */
-              tz = clamp(pz*0.35, -2.2, 2.2);
-            } else {
-              tx = ownGx + p.dir*3.6;
-              tz = clamp(pz*0.9, -RW+3, RW-3);
-            }
-          } else {
-            /* шайба выше — отходим к своей синей и держим ширину */
-            /* границы по порядку для обеих сторон: у команды 1 прежний
-               clamp(v, ownGx+dir*2.5, blueOwn) шёл с min > max, и её защитники
-               всегда стояли у своих ворот вместо синей линии */
-            tx = clampR(px - p.dir*6.5, ownGx + p.dir*2.5, blueOwn);
-            tz = clamp(LANE*0.8 + pz*0.25, -RW+2.5, RW-2.5);
-          }
-          if(TC===1) tx = clamp(tx + p.dir*3.2, -RL+3, RL-3);   /* атака: выше */
-        } else {
-          /* нападающие перекрывают выход из зоны и точки на синей */
-          var back = (TC===1? 1.4 : (TC===2? 6.5 : 4.0));
-          tx = clamp(px - p.dir*back, -RL+3, RL-3);
-          tz = clamp(LANE*0.75 + pz*0.35, -RW+2.5, RW-2.5);
-          if(deep){
-            /* в своей зоне центр помогает у ворот, крайние стерегут точки */
-            if(p.role===1){ tx = ownGx + p.dir*5.0; tz = clamp(pz*0.5,-3,3); }
-            else          { tx = clamp(blueOwn - p.dir*0.5, -RL+3, RL-3); tz = LANE*0.9; }
-          }
-        }
-      }
-
-      /* Разведение: если цель совпала с целью более приоритетного партнёра,
-         отходим в сторону. Это и есть страховка от толпы вокруг шайбы. */
-      if(carrier!==p && chaser!==p){
-        if(carrier && carrier.team===p.team){
-          var cx=tx-carrier.x, cz=tz-carrier.z, cL=Math.hypot(cx,cz);
-          if(cL<5.0){
-            if(cL<0.001){ cx=p.dir; cz=1; cL=1; }
-            tx+=cx/cL*(5.0-cL); tz+=cz/cL*(5.0-cL);
-          }
-        }
-        var mates=teamOf(p.team);
-        for(var mi=0;mi<mates.length;mi++){
-          var m=mates[mi];
-          if(m===p || m.goalie) continue;
-          if(m.role>p.role) continue;                 /* уступает младший по роли */
-          var sx=tx-(m._tx===undefined?m.x:m._tx), sz=tz-(m._tz===undefined?m.z:m._tz);
-          var sL=Math.hypot(sx,sz);
-          if(sL<5.2){
-            if(sL<0.001){ sx=(p.role%2?1:-1); sz=1; sL=1; }
-            tx += sx/sL*(5.2-sL)*0.9;
-            tz += sz/sL*(5.2-sL)*0.9;
-          }
-        }
-        tx=clamp(tx,-RL+3,RL-3); tz=clamp(tz,-RW+2.5,RW-2.5);
-      }
-      /* адресат паса идёт навстречу шайбе, а не ждёт её на месте */
-      var LVp=aiLevel(p.team);
-      if(!carrier && LASTPASS && LASTPASS.to===p && LASTPASS.from.team===p.team && SIMT-LASTPASS.t<1.6 && LVp.meet>0){
-        tx=lerp(tx, puck.x+puck.vx*0.22, LVp.meet); tz=lerp(tz, puck.z+puck.vz*0.22, LVp.meet);
-      }
-      /* добивание: после броска партнёра нападающие без шайбы едут на пятак */
-      else if(LVp.crash && !IS_D && carrier!==p && LASTSHOT && LASTSHOT.p.team===p.team && LASTSHOT.p!==p &&
-              SIMT-LASTSHOT.t<1.8 && (!carrier || carrier.team!==p.team)){
-        tx = gx - p.dir*2.0; tz = (p.role===0?-1.6:(p.role===2?1.6:0));
-      }
-      p._tx=tx; p._tz=tz;
-      /* отложенный офсайд: нарушитель немедленно выкатывается за синюю линию */
-      if(p.os){
-        tx = p.dir*(BLUE_X-1.8);
-        tz = clamp(p.z, -RW+2.5, RW-2.5);
-      } else if(offWarn===p.team && carrier===p){
-        /* владелец шайбы отводит её назад, чтобы снять офсайд */
-        tx = p.dir*(BLUE_X-2.2);
-        tz = clamp(p.z, -RW+2.5, RW-2.5);
-      }
-
-      var dx=tx-p.x, dz=tz-p.z, L=Math.hypot(dx,dz)||1;
-      ax=dx/L; az=dz/L;
-      if(L<1.2){ax*=L;az*=L;}
-      maxs = att?PLAYER_CFG.aiAttackMaxSpeed:PLAYER_CFG.aiBaseMaxSpeed;
-      if(chaser===p && !att) maxs=PLAYER_CFG.aiChaseMaxSpeed;
-      if(TACTIC[p.team]===1) maxs+=PLAYER_CFG.aiTacticAttackBonus;
-      if(p.os) maxs=PLAYER_CFG.aiOffsidesMaxSpeed;
-
-      p._cd=(p._cd||0)-dt;
-      if(carrier===p){
-        aiCarrier(p, dt, foes);
-      }
-      else if(carrier && carrier.team!==p.team && p._cd<=0){
-        var dc=Math.hypot(carrier.x-p.x,carrier.z-p.z);
-        if(dc<1.5){
-          p._cd=0.55;
-          if(Math.random()<0.55){
-            puck.owner=null; puck.free=0.3;
-            var aa=Math.atan2(puck.z-p.z,puck.x-p.x);
-            puck.vx=Math.cos(aa)*6.5; puck.vz=Math.sin(aa)*6.5;
-            lastTouch=p;
-            EV.emit('poke',{p:pIdx(p), t:p.team, from:pIdx(carrier)});
-          }
-        } else if(dc<1.9 && p.spd>5.0 && Math.random()<0.30){
-          p._cd=1.2;
-          carrier.down=1.3;
-          var ab=Math.atan2(carrier.z-p.z,carrier.x-p.x);
-          carrier.vx=Math.cos(ab)*8; carrier.vz=Math.sin(ab)*8;
-          puck.owner=null; puck.free=0.4;
-          puck.vx=Math.cos(ab)*5; puck.vz=Math.sin(ab)*5;
-          lastTouch=p;
-          EV.emit('hit',{p:pIdx(p), t:p.team, v:pIdx(carrier), vt:carrier.team, clean:true, x:r2(carrier.x), z:r2(carrier.z), hard:0});
-        }
-      }
-    }
-    humanMoveIntegrate(p, ax, az, maxs, accel, dt);
-    var sp=p.spd;
-    if(sp>5.6&&Math.random()<0.32*QC().spray) addSpray(p);
-    for(var q=0;q<players.length;q++){
-      if(q===k) continue;
-      var o2=players[q];
-      /* удалённый игрок не рисуется — и толкаться им нельзя: он оставался
-         невидимой стенкой ровно там, где схватил штраф */
-      if(o2.boxed) continue;
-      var ox=p.x-o2.x, oz=p.z-o2.z, od=Math.hypot(ox,oz);
-      if(od>0.01&&od<1.2){ p.x+=ox/od*(1.2-od)*0.5; p.z+=oz/od*(1.2-od)*0.5; }
-    }
-  }
-
-  /* --- запись для повтора --- */
-
+  if(r<2) return;
   camUpdate(dt);
-
   /* --- спрей --- */
   for(var s=spray.length-1;s>=0;s--){
     var sp2=spray[s];
@@ -2943,6 +1865,8 @@ function sim(dt){
     if(sp2.life<=0) spray.splice(s,1);
   }
 }
+/* смена игрока (по умолчанию — своего) */
+function switchPlayer(team){ SIM.switchPlayer(team===undefined?HUMAN:team); }
 
 function camUpdate(dt){
   if(CAMLOCK) return;
@@ -3048,14 +1972,7 @@ function camUpdate(dt){
   if(cam.shake > 0) cam.shake = Math.max(0, cam.shake - dt * 30);
 }
 
-/* ---------- разметка ---------- */
-function halfWidthAt(x){
-  var r=CORNER, ax=Math.abs(x);
-  if(ax<=RL-r) return RW;
-  var d=ax-(RL-r);
-  if(d>=r) return 0;
-  return (RW-r)+Math.sqrt(Math.max(0,r*r-d*d));
-}
+/* разметка: halfWidthAt — из shared/sim.js */
 
 /* ---------- трибуны ---------- */
 
@@ -6288,7 +5205,7 @@ window.__hk={hs:function(){return HS;},net:function(){return NET;},setCam:functi
                    return {exp:EXPOSURE,sun:SUNCOL[0],amb:AMBK,shadow:SHADOW.on,ssize:SHADOW.size,
                            qshadow:QC().shadow,env:!!TEX.envGL}; },
   tapSeen:function(){var v=_tapSeen;_tapSeen=false;return v;},
-  passes:function(){return _passN;},
+  passes:function(){return SIM.passN[HUMAN];},
   edgeA:function(){return _edgeA;},
   /* объединённое состояние действий: экран + клавиатура + геймпад */
   act:function(){return {A:!!IN._A,B:!!IN._B,X:!!IN._X,Y:!!IN._Y,RT:!!IN.RT};},
