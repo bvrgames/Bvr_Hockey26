@@ -28,7 +28,8 @@ export function fakeTelegram({ fullscreen = true, safe = {}, content = {}, lang 
                      setItem:function(k,v,cb){ store[k]=String(v); if(cb) cb(null,true); } } }; })()};`;
 }
 
-export async function openGame(name, { w = 1280, h = 720, headed = false, tg = null, mobile = false, dpr = 1 } = {}) {
+// noRoute: no request interception (Playwright's routing disables the HTTP cache — load tests need the cache)
+export async function openGame(name, { w = 1280, h = 720, headed = false, tg = null, mobile = false, dpr = 1, noRoute = false } = {}) {
   const engine = ENGINES[name];
   if (!engine) throw new Error(`unknown browser "${name}" (chromium | webkit)`);
   const browser = await engine.launch({ headless: !headed, args: ARGS[name] });
@@ -44,7 +45,7 @@ export async function openGame(name, { w = 1280, h = 720, headed = false, tg = n
   });
   page.on('pageerror', (e) => logs.push({ type: 'pageerror', text: `${e.message}\n${(e.stack || '').split('\n').slice(0, 5).join('\n')}` }));
   page.on('requestfailed', (r) => logs.push({ type: 'requestfailed', text: `${r.url()} ${r.failure()?.errorText || ''}` }));
-  await page.route(/telegram\.org\/js\/telegram-web-app\.js/, (r) => r.fulfill({ contentType: 'text/javascript', body: tg || '/* telegram stub */' }));
+  if (!noRoute) await page.route(/telegram\.org\/js\/telegram-web-app\.js/, (r) => r.fulfill({ contentType: 'text/javascript', body: tg || '/* telegram stub */' }));
   return { browser, context, page, logs };
 }
 

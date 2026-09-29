@@ -19,6 +19,8 @@
     "smoke:quality": "node tools/smoke-quality.mjs && node tools/smoke-quality.mjs --browser webkit",
     "smoke:lag": "node tools/smoke-lag.mjs",
     "sim:node": "node tools/sim-node.mjs",
+    "load": "node tools/load.mjs",
+    "assets": "node tools/pack-assets.mjs",
     "smoke:server": "node tools/smoke-server.mjs && node tools/smoke-server.mjs --target mock --browser webkit",
     "room:proto": "node tools/room-proto.mjs && node tools/room-proto.mjs --target wrangler"
   },

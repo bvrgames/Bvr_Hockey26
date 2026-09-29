@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Insert the new skate_slide clip into HD_DATA.skater in index.html
+Insert the new skate_slide clip into HD_DATA.skater (assets/src/hd_data.json)
 - The anim buffer is interleaved: [q_clip1][h_clip1][q_clip2][h_clip2]...
 - We need to append [q_skate_slide][h_skate_slide] at the end
 """
@@ -27,42 +27,11 @@ print(f"New clip: {n_frames} frames, {duration:.3f}s, {num_bones} bones")
 print(f"  Quaternion bytes: {len(new_q_bytes)}")
 print(f"  Hips bytes: {len(new_hips_bytes)}")
 
-# ─── Read index.html ───
-with open('/Users/vadimbikmetov/Bvr_Hockey26/index.html', 'r') as f:
-    content = f.read()
-
-# Find HD_DATA
-hd_start = content.find('var HD_DATA=')
-if hd_start == -1:
-    raise ValueError("HD_DATA not found")
-
-# Find the skater object start
-skater_field_start = content.find('"skater":', hd_start)
-if skater_field_start == -1:
-    raise ValueError("skater not found")
-
-# Find the full skater object (matching braces)
-i = skater_field_start + 8  # after '"skater":'
-while content[i] in ': \t\n\r':
-    i += 1
-skater_obj_start = i
-depth = 0
-skater_json_str = ''
-while i < len(content):
-    skater_json_str += content[i]
-    if content[i] == '{':
-        depth += 1
-    elif content[i] == '}':
-        depth -= 1
-        if depth == 0:
-            skater_obj_end = i + 1
-            break
-    i += 1
-
-print(f"Skater object length: {len(skater_json_str)}")
-
-# Parse skater JSON
-skater = json.loads(skater_json_str)
+# ─── Read the game's models (assets/src/hd_data.json, published by tools/pack-assets.mjs) ───
+HD_SRC = '/Users/vadimbikmetov/Bvr_Hockey26/assets/src/hd_data.json'
+with open(HD_SRC, 'r') as f:
+    hd = json.load(f)
+skater = hd['skater']
 
 # ─── Current clips and offsets ───
 clips = skater['clips']
@@ -80,11 +49,7 @@ total_buffer = max(total_q_bytes, total_hips_bytes)
 print(f"\nTotal anim buffer: {total_buffer} bytes (max of q_end={total_q_bytes}, h_end={total_hips_bytes})")
 
 # ─── Decode current anim buffer ───
-anim_field_start = content.find('"anim":', hd_start)
-anim_value_start = content.find('"', anim_field_start + 7) + 1
-anim_value_end = content.find(',', anim_value_start)
-anim_b64 = content[anim_value_start:anim_value_end]
-anim_bytes = base64.b64decode(anim_b64)
+anim_bytes = base64.b64decode(skater['anim'])
 print(f"Anim buffer actual size: {len(anim_bytes)} bytes")
 
 # Verify
@@ -131,15 +96,11 @@ print(f"\nNew clip entry: {json.dumps({'skate_slide': clips['skate_slide']}, ind
 skater['clips'] = clips
 skater['anim'] = new_anim_b64
 
-# ─── Reconstruct index.html ───
-# Replace the skater object in the content
-new_skater_json = json.dumps(skater, separators=(',', ':'))
-new_content = content[:skater_field_start+9] + new_skater_json + content[skater_obj_end:]
+# ─── Write the models back ───
+hd['skater'] = skater
+with open(HD_SRC, 'w') as f:
+    json.dump(hd, f, separators=(',', ':'))
 
-# Write updated index.html
-with open('/Users/vadimbikmetov/Bvr_Hockey26/index.html', 'w') as f:
-    f.write(new_content)
-
-print("\n✓ index.html updated successfully!")
+print(f"\n✓ {HD_SRC} updated — now: node tools/pack-assets.mjs")
 print(f"  Added clip 'skate_slide' with {n_frames} frames ({duration:.3f}s)")
 print(f"  New anim buffer: {len(new_anim_bytes)} bytes")

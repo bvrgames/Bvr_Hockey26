@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Replace the existing 'skate_slide' clip bytes in a target file (either
-assets/hd_data_test.json or index.html's embedded HD_DATA) with freshly
+assets/hd_data_test.json and the game's assets/src/hd_data.json) with freshly
 converted data from assets/skate_slide_clip.json — WITHOUT double-appending.
 
 Since the clip's rot/hips byte lengths are unchanged (same frame count,
@@ -52,47 +52,20 @@ def update_hd_data_test_json():
     print(f"✓ Updated {path}")
 
 
-def update_index_html():
-    path = '/Users/vadimbikmetov/Bvr_Hockey26/index.html'
+def update_game_models():
+    # the game's models live in assets/src/hd_data.json (published by tools/pack-assets.mjs)
+    path = '/Users/vadimbikmetov/Bvr_Hockey26/assets/src/hd_data.json'
     with open(path) as f:
-        content = f.read()
-
-    hd_start = content.find('var HD_DATA=')
-    if hd_start == -1:
-        raise ValueError("HD_DATA not found")
-    skater_field_start = content.find('"skater":', hd_start)
-    if skater_field_start == -1:
-        raise ValueError("skater not found")
-
-    i = skater_field_start + 9
-    while content[i] in ': \t\n\r':
-        i += 1
-    depth = 0
-    skater_json_str = ''
-    while i < len(content):
-        skater_json_str += content[i]
-        if content[i] == '{':
-            depth += 1
-        elif content[i] == '}':
-            depth -= 1
-            if depth == 0:
-                skater_obj_end = i + 1
-                break
-        i += 1
-
-    skater = json.loads(skater_json_str)
-    if 'skate_slide' not in skater['clips']:
-        print(f"  (index.html has no skate_slide clip yet — skipping; run insert_clip.py first)")
+        d = json.load(f)
+    if 'skate_slide' not in d['skater']['clips']:
+        print(f"  ({path} has no skate_slide clip yet — skipping; run insert_clip.py first)")
         return
-    skater = replace_in_skater(skater)
-
-    new_skater_json = json.dumps(skater, separators=(',', ':'))
-    new_content = content[:skater_field_start+9] + new_skater_json + content[skater_obj_end:]
+    d['skater'] = replace_in_skater(d['skater'])
     with open(path, 'w') as f:
-        f.write(new_content)
-    print(f"✓ Updated {path}")
+        json.dump(d, f, separators=(',', ':'))
+    print(f"✓ Updated {path} — now: node tools/pack-assets.mjs")
 
 
 if __name__ == "__main__":
     update_hd_data_test_json()
-    update_index_html()
+    update_game_models()

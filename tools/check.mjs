@@ -42,6 +42,9 @@ for (const dir of ['tools', 'server', 'shared']) {
     (await import('node:fs')).writeFileSync(join(ROOT, 'index.html'), fixed); fails--; console.log('  fixed');
   }
 }
+// assets/dist and the manifest in index.html must match assets/src (tools/pack-assets.mjs)
+try { execFileSync(process.execPath, [join(ROOT, 'tools', 'pack-assets.mjs'), '--check'], { stdio: 'pipe' }); n++; }
+catch (e) { fails++; console.log(`tools/pack-assets.mjs --check:\n${e.stdout}${e.stderr}`); }
 try { execFileSync(process.execPath, [join(ROOT, 'tools', 'sim-node.mjs'), '--seeds', '1', '--len', '60'], { stdio: 'pipe' }); n++; }
 catch (e) { fails++; console.log(`tools/sim-node.mjs (shared/sim.js in Node):\n${e.stdout}${e.stderr}`); }
 console.log(fails ? `CHECK FAIL (${fails} of ${n})` : `syntax ok (${n} scripts)`);
