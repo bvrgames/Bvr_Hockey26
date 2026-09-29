@@ -841,7 +841,12 @@ function create(env){
           if(PD.t<=0){ PD.A=PD.B=PD.X=PD.Y=PD.tapB=0; PD.t=0; }
         }
         NE.A=!!NE.A; NE.B=!!NE.B; NE.X=!!NE.X; NE.Y=!!NE.Y;
-        if(RM.tapB){ if(hsg.ctrl && puck.owner===hsg.ctrl) hsg.charge=Math.max(hsg.charge,1/60); RM.tapB=false; }
+        /* B нажали и уже отпустили до этого шага (пакеты пришли пачкой — джиттер, переотправка): заряд не
+           начинался, и без этого бросок пропадал. Тот же короткий бросок, что и при tapB. */
+        if(NE.B && !CFG.inp[ht]._B && !(hsg.charge>0)) RM.tapB=true;
+        /* фронт B, ставший коротким броском, использован: иначе в том же шаге, уже без шайбы, он же
+           срабатывал как отбор (B без шайбы) — и игрок тут же забирал только что брошенную шайбу */
+        if(RM.tapB){ if(hsg.ctrl && puck.owner===hsg.ctrl){ hsg.charge=Math.max(hsg.charge,1/60); NE.B=false; } RM.tapB=false; }
       }
       humanTick(ht, CFG.inp[ht], NE, dt);
       if(RM){ NE.A=NE.B=NE.X=NE.Y=NE.LB=false; }      /* фронт использован */
