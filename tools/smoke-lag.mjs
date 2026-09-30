@@ -3,6 +3,7 @@
 // what is actually drawn (requestAnimationFrame), with the same measurements on the host as the no-network baseline.
 //   · move    — guest stick → own player moves ≥ 3 cm on the guest screen (and in the host's authoritative snapshot)
 //   · pass / shot — guest button → the puck leaves the player on the guest screen (> 0.5 m, no owner)
+//   · shot at goal — 12 m out, only the goalie: how far the drawn puck goes past the goal line, frames it jumps back
 //   · pickup  — guest's stick reaches a loose puck on the guest screen → the guest sees it owned (host decides)
 //   · jerks   — per-frame jumps against constant-velocity motion (> 3 cm): own player / others / puck, per second
 //   · snapshots — rate, interval jitter, size; inputs per second
@@ -105,6 +106,16 @@ window.__pickup = function () {                // guest skates into a loose puck
     if (tTouch >= 0 && tVis < 0 && d < 0.12) tVis = t - t0;
     if (pk.owner === me) return [tTouch, tVis < 0 ? t - t0 : tVis, t - t0];
   }, 3000).then(function (r) { return r === -1 ? [tTouch, tVis, -1] : r; });
+};
+window.__goalShot = function () {              // shot at the goal → [drawn puck past the goal line, m; frames it jumps back ≥ 25 cm]
+  var me = __hk.ctrl(); if (__hk.puck.owner !== me) return Promise.resolve(null);
+  var ad = __hk.ad(), gl = ad * BVRSim.GOAL_X, past = 0, back = 0, px = __hk.puck.x, t0 = performance.now();
+  __hk.press('B');
+  return __frames(function (t) {
+    var pk = __hk.puck; if (__hk.st() !== 'play') return 1;
+    past = Math.max(past, (pk.x - gl) * ad); if ((px - pk.x) * ad > 0.25) back++; px = pk.x;
+    if (t - t0 > 1500) return 1;
+  }, 2500).then(function () { return [+past.toFixed(2), back]; });
 };`;
 
 const BOT = `window.__bot = setInterval(function(){ var a = Math.random() * 6.283; __hk.move(Math.cos(a) * 0.9, Math.sin(a) * 0.9); }, 650);`;
@@ -256,6 +267,21 @@ for (const run of RUNS) {
       await G.evaluate('__hk.move(0,0)'); await G.waitForTimeout(600);
     }
     R.pickup = { waitMs: med(pk), visMs: med(pkv), lost: pk.filter((x) => x === -1).length, trials: pk.length, raw: pk, rawVis: pkv };
+
+    // --- shot at the goal: the guest stands 12 m out with the puck, only the goalie in the way. The guest's predicted
+    // flight must not pass through the goalie / net and then jump back when the snapshots show the save
+    const gs = [];
+    for (let i = 0; i < TRIALS; i++) {
+      await G.evaluate('__hk.move(0,0)');
+      await setup(function (hs, puck, pl) { var g = hs[1].ctrl; g.x = -14; g.z = [-2, 2, 0][Math.floor(Math.random() * 3)]; g.vx = g.vz = 0; g.yaw = Math.PI; puck.owner = g;
+        pl.forEach(function (o) { if (o !== g && !o.goalie && !o.boxed) { o.x = 20; o.vx = o.vz = 0; } }); });
+      const seen = await G.waitForFunction('__hk.puck.owner===__hk.ctrl() && Math.abs(__hk.ctrl().x+14)<1', null, { timeout: 3000 }).then(() => true, () => false);
+      await G.waitForTimeout(300);
+      const r = seen ? await G.evaluate('__goalShot()') : null;
+      if (r) gs.push(r);
+      await G.waitForTimeout(1200);
+    }
+    R.goalShot = { pastM: med(gs.map((r) => r[0] * 100)) / 100, back: med(gs.map((r) => r[1])), trials: gs.length, raw: gs };
     R.relay = { msgs: relay.stats.msgs, bytes: relay.stats.bytes, lost: relay.stats.lost };
     for (const [who, g] of Object.entries(sides)) {
       for (const e of g.logs.filter(isError)) R.errors.push(`${who} [${e.type}] ${e.text}`);
@@ -290,6 +316,7 @@ row('  … host releases it (guest sees), ms', (r) => r.shot && r.shot.confirm);
 row('pass / shot presses lost (of valid)', (r) => r.pass && `${r.pass.guestLost} ${r.shot.guestLost}`);
 row('pickup: touch → puck drawn on stick, ms', (r) => r.pickup && r.pickup.visMs);
 row('pickup: touch → host owns it, ms (never/n)', (r) => r.pickup && `${r.pickup.waitMs} (${r.pickup.lost}/${r.pickup.trials})`);
+row('shot at goal: drawn puck past goal line m / back', (r) => r.goalShot && `${r.goalShot.pastM} / ${r.goalShot.back}`);
 row('own player ahead of its snapshot: cm / ms', (r) => r.lead && `${r.lead.cm} / ${r.lead.ms}`);
 row('own player jerks >3 cm /s (mean cm)', (r) => r.jerkGuest && `${r.jerkGuest.own.perSec} (${r.jerkGuest.own.meanCm})`);
 row('  host own player jerks /s', (r) => r.jerkHost && r.jerkHost.own.perSec);

@@ -4647,10 +4647,33 @@ function launchPred(kind, arg, me){
   PUCKP={on:true, mode:'fly', t0:now, x:from[0], y:0.05, z:from[1], vx:vx, vy:vy, vz:vz, w:0};
   GACT.pred={kind:kind, t:now};
 }
-function puckBlend(){ if(PUCKP){ PUCKP.mode='blend'; PUCKP.w=0; } }
+/* сводка к снимкам: дольше при большом расхождении (0.15…0.3 с), чтобы не было рывка */
+function puckBlend(){ if(PUCKP){ PUCKP.mode='blend'; PUCKP.w=0;
+  PUCKP.bt=clamp(Math.hypot((PUCKP.x||0)-AUTHPK.x,(PUCKP.z||0)-AUTHPK.z)/20, 0.15, 0.3); } }
+/* предсказанный полёт не знает вратаря, ворот и клюшек: у ворот соперника и рядом с чужим игроком
+   исход решает сервер — там шайба не пролетает насквозь, а тормозит и ждёт снимков */
+function puckContested(P, me){
+  var gx=attackDir(HUMAN)*GOAL_X;
+  if((P.x-gx)*Math.sign(gx) > -3 && Math.abs(P.z) < 4.5) return true;
+  for(var i=0;i<players.length;i++){ var o=players[i];
+    if(o!==me && !o.boxed && Math.hypot(o.x-P.x, o.z-P.z) < 1.4) return true; }
+  return false;
+}
+function puckBlendStep(dt, auth, me){
+  PUCKP.w=Math.min(1, PUCKP.w+dt/(PUCKP.bt||0.15));
+  var w=PUCKP.w*PUCKP.w*(3-2*PUCKP.w);
+  var tx=AUTHPK.x, tz=AUTHPK.z;
+  if(auth===me && me){ var s2=stickEnd(me); tx=s2[0]; tz=s2[1]; }
+  puck.x=PUCKP.x+(tx-PUCKP.x)*w; puck.z=PUCKP.z+(tz-PUCKP.z)*w; puck.y=PUCKP.y+(AUTHPK.y-PUCKP.y)*w;
+  if(PUCKP.w>=1) PUCKP.on=false;
+}
 function netGuestActions(dt){
   var me=HS[HUMAN].ctrl, now=performance.now();
-  if(!me || state!=='play'){ GACT.chg=0; chargeT=0; if(PUCKP) PUCKP.on=false; return; }
+  if(!me || state!=='play'){ GACT.chg=0; chargeT=0;
+    /* гол / свисток, пока шайба летела по предсказанию: к снимкам — плавно, а не скачком */
+    if(PUCKP && PUCKP.on && PUCKP.mode!=='held'){ if(PUCKP.mode!=='blend') puckBlend(); puckBlendStep(dt, null, null); }
+    else if(PUCKP) PUCKP.on=false;
+    return; }
   var lagMs=(NETV.rtt||120)+NETV.D*1000+300;
   var auth=puck.owner;                                   /* владелец по последнему снимку */
   if(auth) GACT.looseT=0; else if(!GACT.looseT) GACT.looseT=now;
@@ -4687,16 +4710,19 @@ function netGuestActions(dt){
       var diverged = hostReleased && !auth && av>3 && pv>3 &&
                      (PUCKP.vx*AUTHPK.vx+PUCKP.vz*AUTHPK.vz)/(pv*av) < 0.8;       /* отскок, сейв */
       if((!hostReleased && age>lagMs) || (auth && auth!==me && age>(NETV.rtt||120)*0.5) || diverged || age>1400) puckBlend();
+      /* дальше предсказанию не верим: у ворот / чужого игрока, или сервер уже должен был подтвердить бросок */
+      else if(puckContested(PUCKP, me) || (!hostReleased && age>(NETV.rtt||120)+NETV.D*1000+100)) PUCKP.mode='wait';
       else { puck.x=PUCKP.x; puck.z=PUCKP.z; puck.y=PUCKP.y; }
     }
-    if(PUCKP.on && PUCKP.mode==='blend'){
-      PUCKP.w=Math.min(1, PUCKP.w+dt/0.15);
-      var w=PUCKP.w*PUCKP.w*(3-2*PUCKP.w);
-      var tx=AUTHPK.x, tz=AUTHPK.z;
-      if(auth===me){ var s2=stickEnd(me); tx=s2[0]; tz=s2[1]; }
-      puck.x=PUCKP.x+(tx-PUCKP.x)*w; puck.z=PUCKP.z+(tz-PUCKP.z)*w; puck.y=PUCKP.y+(AUTHPK.y-PUCKP.y)*w;
-      if(PUCKP.w>=1) PUCKP.on=false;
+    if(PUCKP.on && PUCKP.mode==='wait'){
+      /* тормозит (≈0.1 с до остановки), пока снимки сервера не догонят: тогда сводка к ним */
+      var fr=Math.exp(-dt/0.1); PUCKP.vx*=fr; PUCKP.vz*=fr; PUCKP.vy*=fr;
+      puckStep(PUCKP, dt);
+      var hr=auth!==me, caught=hr && (Math.hypot(PUCKP.x-AUTHPK.x, PUCKP.z-AUTHPK.z)<1.2 || age>(NETV.rtt||120)+NETV.D*1000+150);
+      if(caught || (auth && auth!==me) || (!hr && age>lagMs) || age>1400) puckBlend();
+      else { puck.x=PUCKP.x; puck.z=PUCKP.z; puck.y=PUCKP.y; }
     }
+    if(PUCKP.on && PUCKP.mode==='blend') puckBlendStep(dt, auth, me);
   }
   /* шайба своего игрока — на его (предсказанной) клюшке, а не позади на длину пинга */
   if(!(PUCKP && PUCKP.on) && auth===me){ var s3=stickEnd(me); puck.x=s3[0]; puck.z=s3[1]; puck.y=0.05; }
