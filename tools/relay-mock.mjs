@@ -44,22 +44,30 @@ export function startRelay(port = 8787, net = {}) {
     const m = /^\/room\/([A-Za-z0-9_-]{2,16})(?:\?(.*))?$/.exec(req.url || '');   // ?hint=… is for the real Worker
     if (!m) { ws.close(1008, 'bad path'); return; }
     const code = m[1].toUpperCase(), q = new URLSearchParams(m[2] || '');
-    const r = rooms.get(code) || { host: null, guest: null, srv: false, match: null, timer: null };
+    const r = rooms.get(code) || { host: null, guest: null, srv: false, match: null, timer: null, tok: { host: null, guest: null } };
     rooms.set(code, r);
+    // reconnect with ?re=<role>&tok=<tok>: the same slot back, like server/worker.js
+    const re = q.get('re'), back = (re === 'host' || re === 'guest') && !!r.tok[re] && q.get('tok') === r.tok[re] ? re : null;
     let slot;
-    if (!r.host) slot = 'host'; else if (!r.guest) slot = 'guest';
+    if (back) slot = back; else if (!r.host) slot = 'host'; else if (!r.guest) slot = 'guest';
     else { ws.send(JSON.stringify({ t: 'full' })); ws.close(1000, 'room full'); return; }
     const si = slot === 'host' ? 0 : 1, up = {};   // `up` — key for this player's uplink order
-    if (!r.host && !r.guest) {
+    const tick = () => { if (!r.timer) r.timer = setInterval(() => { if (!r.match || !r.match.tick()) { clearInterval(r.timer); r.timer = null; } }, 1000 / SIM_HZ); };
+    if (!r.host && !r.guest && !(back && r.match && r.match.running)) {
       r.srv = !net.noSrv && q.get('mode') === 'srv';
+      r.tok = { host: null, guest: null };
       if (r.timer) { clearInterval(r.timer); r.timer = null; }
       r.match = r.srv ? new MatchRoom((s, txt) => { const to = s === 0 ? r.host : r.guest; if (to) deliver(to, txt, false, linkOf(s)); }) : null;
     }
+    const old = r[slot];
     r[slot] = ws;
+    if (old) old.close(1000, 'replaced');
+    if (!back) r.tok[slot] = Math.random().toString(36).slice(2) + Date.now().toString(36);
     const diag = () => ({ doColo: 'LOCAL', doLoc: 'XX', hint: 'mock', created: r.created || (r.created = Date.now()), st: Date.now(),
       mode: r.srv ? 'server' : 'relay', conns: ['host', 'guest'].filter((k) => r[k]).map((k) => ({ slot: k, colo: 'LOCAL', country: 'XX' })) });
-    ws.send(JSON.stringify({ t: 'hello', role: slot, n: count(r), diag: diag(), srv: r.srv ? 1 : 0 }));
+    ws.send(JSON.stringify({ t: 'hello', role: slot, n: count(r), diag: diag(), srv: r.srv ? 1 : 0, tok: r.tok[slot], run: r.match && r.match.running ? 1 : 0 }));
     peers(r);
+    if (r.match) { r.match.join(si, !back); if (r.match.running) tick(); }
     ws.on('message', (data, isBinary) => {
       const txt = data.toString();
       // diagnostics are answered by the relay itself, like server/worker.js (with the emulated one-way lag both ways)
@@ -79,9 +87,7 @@ export function startRelay(port = 8787, net = {}) {
           let msg = null; try { msg = JSON.parse(txt); } catch {}
           if (r[slot] !== ws || !r.match) return;
           if (net.deadSrv && msg && msg.t === 'cfg') return;
-          if (r.match.onMessage(si, msg) && msg.t === 'cfg' && !r.timer) {
-            r.timer = setInterval(() => { if (!r.match || !r.match.tick() || (!r.host && !r.guest)) { clearInterval(r.timer); r.timer = null; } }, 1000 / SIM_HZ);
-          }
+          if (r.match.onMessage(si, msg) && msg.t === 'cfg') tick();
         });
         return;
       }

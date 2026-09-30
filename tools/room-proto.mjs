@@ -22,6 +22,7 @@ function player(q) {
   ws.on('message', (d) => {
     const m = JSON.parse(d.toString());
     if (m.t === 'hello') P.hello = m;
+    else if (m.t === 'full') P.full = true;
     else if (m.t === 'cfg') P.cfg.push(m);
     else if (m.t === 's') { P.snaps.push({ at: Date.now(), m }); if (m.e) for (const [n, e] of m.e) if (!P.ev.some((x) => x.seq === e.seq)) P.ev.push({ n, ...e }); }
   });
@@ -76,7 +77,42 @@ try {
   const lastD = G.snaps[G.snaps.length - 1].m.d;
   ok(lastD[6] === 4 && lastD[5] === 0, `final snapshot state ${lastD[6]} clock ${lastD[5]}`);
   console.log(`[${TARGET}] snapshots host ${H.snaps.length} guest ${G.snaps.length} · events ${G.ev.length} (${[...new Set(G.ev.map((e) => e.n))].join(', ')}) · final ${lastD[3]}:${lastD[4]} · ${((Date.now() - t0) / 1000).toFixed(1)} s`);
-  H.ws.close(); G.ws.close();
+
+  // ---- lost players (phase 3.5) ----
+  const wOf = (P) => P.snaps[P.snaps.length - 1].m.w | 0;
+  H.send({ t: 'cfg', a: 0, b: 1, min: 2, id: 'aaaabbbbccccddddeeeeffff' });
+  let q2 = q + 10;
+  const feed = (P) => setInterval(() => P.send({ t: 'i', m: [0, 0], b: 0, q: ++q2, c: [1, 0, 1, 0, 0], tc: 0 }), 33);
+  let ivH = feed(H), ivG = feed(G);
+  await wait(1500);
+  ok(wOf(H) === 0, `both play, w=${wOf(H)}`);
+  // silent guest (socket open, no input): away after 2 s, back with the first input
+  clearInterval(ivG); await wait(2600);
+  ok(wOf(H) === 2 && wOf(G) === 2, `silent guest: w host ${wOf(H)} guest ${wOf(G)} (want 2)`);
+  ivG = feed(G); await wait(400);
+  ok(wOf(H) === 0, `guest sends input again: w=${wOf(H)}`);
+  // a stranger with a wrong key cannot push a connected player out of the slot
+  const X = await player('?re=host&tok=wrong'); await wait(300);
+  ok(X.full && !X.hello, `wrong key in a full room must get "full": ${JSON.stringify(X.hello)}`);
+  // closed socket: away at once; the right key returns into the same slot
+  clearInterval(ivG); G.ws.close(); await wait(500);
+  ok(wOf(H) === 2, `guest socket closed: w=${wOf(H)}`);
+  const G2 = await player(`?mode=srv&re=guest&tok=${G.hello.tok}`); await wait(500);
+  ok(G2.hello && G2.hello.role === 'guest' && G2.hello.run === 1 && G2.hello.tok === G.hello.tok, `returning guest hello ${JSON.stringify(G2.hello)}`);
+  ok(G2.cfg.length === 1 && G2.cfg[0].id === 'aaaabbbbccccddddeeeeffff', `returning guest must get the running cfg: ${JSON.stringify(G2.cfg)}`);
+  ok(G2.snaps.length > 5 && wOf(G2) === 2, `returning guest gets snapshots, still away until it sends input: ${G2.snaps.length}, w=${G2.snaps.length && wOf(G2)}`);
+  ivG = feed(G2); await wait(400);
+  ok(wOf(H) === 0, `guest returned: w=${wOf(H)}`);
+  // both sockets gone: the match keeps running for a while, the host returns into it
+  clearInterval(ivH); clearInterval(ivG);
+  const clkA = H.snaps[H.snaps.length - 1].m.d[5];
+  H.ws.close(); G2.ws.close(); await wait(3000);
+  const H2 = await player(`?mode=srv&re=host&tok=${H.hello.tok}`); await wait(600);
+  ok(H2.hello && H2.hello.role === 'host' && H2.hello.run === 1, `host returns to the empty room: ${JSON.stringify(H2.hello)}`);
+  ok(H2.cfg.length === 1 && H2.cfg[0].id === 'aaaabbbbccccddddeeeeffff' && H2.snaps.length > 5, `host returns: cfg ${H2.cfg.length}, snapshots ${H2.snaps.length}`);
+  if (H2.snaps.length) ok(wOf(H2) === 3 && H2.snaps[H2.snaps.length - 1].m.d[5] < clkA, `empty room: w=${wOf(H2)}, clock ${clkA} → ${H2.snaps[H2.snaps.length - 1].m.d[5]}`);
+  console.log(`[${TARGET}] lost players: wrong key / silent / closed / return / empty room checked`);
+  H2.ws.close();
 } catch (e) {
   fails.push('runner error: ' + e.message.split('\n').slice(0, 8).join('\n'));
 } finally {

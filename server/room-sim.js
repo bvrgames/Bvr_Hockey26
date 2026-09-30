@@ -16,12 +16,20 @@
  *                                       tactic tc
  *   server → both
  *     {t:'cfg', a, b, min, id}          the match (re)starts
- *     {t:'s', d, k, a, v, e?}           snapshot, same layout as the host's (index.html netSnap); a = the last input
- *                                       packet of THIS recipient the simulation has used, k = server time (ms)
+ *     {t:'s', d, k, a, v, e?, w?}       snapshot, same layout as the host's (index.html netSnap); a = the last input
+ *                                       packet of THIS recipient the simulation has used, k = server time (ms),
+ *                                       w = who is away (bits: 1 slot 0, 2 slot 1; 4 / 8 — away for over 30 s)
+ *
+ * Lost players (phase 3.5): a player is "away" when the socket is gone or no input came for AWAY_MS. The AI plays
+ * that team (the same AI as the autopilot of a solo match) and the match goes on; the first input after the return
+ * gives the team back. Away for more than GONE_MS is recorded (bits 4 / 8), the match is still played out against
+ * the AI — the player who stayed keeps the match and its result. With both players gone for GONE_MS the match stops.
+ * A returning player gets the current cfg again (join) and then snapshots as usual.
  */
 import BVRSim from '../shared/sim.mjs';
 
 export const SIM_HZ = 60, SNAP_EVERY = 2;          // 60 Hz simulation, snapshot every 2nd step = 30 Hz
+export const AWAY_MS = 2000, GONE_MS = 30000;
 const NETWORKED = { faceoff: 1, pass: 1, 'pass:recv': 1, shot: 1, save: 1, post: 1, goal: 1,
                     hit: 1, penalty: 1, stoppage: 1, poke: 1, pickup: 1, 'match:end': 1 };
 const STC = { play: 0, face: 1, goal: 2, replay: 3, over: 4, menu: 5 };
@@ -32,7 +40,8 @@ const r2 = (v) => Math.round(v * 100) / 100, r1 = (v) => Math.round(v * 10) / 10
 function mkPort() {
   return { inp: { mx: 0, mz: 0, _A: false, _B: false, _X: false, _Y: false, RT: false, _LB: false },
            edge: { A: false, B: false, X: false, Y: false, LB: false },
-           tapB: false, pend: null, lastCnt: [0, 0, 0, 0, 0], inQ: 0, npv: {} };
+           tapB: false, pend: null, lastCnt: [0, 0, 0, 0, 0], inQ: 0, npv: {},
+           conn: false, lastIn: 0, away: false, awayAt: 0, left: false };
 }
 
 export class MatchRoom {
@@ -68,8 +77,33 @@ export class MatchRoom {
     return false;
   }
 
+  // the AI takes the team of a lost player / gives it back
+  setAway(t, on) {
+    const P = this.port[t], C = this.sim.control;
+    if (P.away === on) return;
+    P.away = on;
+    if (on) { P.awayAt = this.now(); this.clearInput(t); }
+    C.hum[t] = !on; C.inp[t] = on ? this.sim.NOIN : P.inp; C.edge[t] = on ? this.sim.NOEDGE : P.edge; C.rem[t] = on ? null : P;
+  }
+
+  clearInput(t) {
+    const P = this.port[t], I = P.inp, E = P.edge;
+    I.mx = I.mz = 0; I._A = I._B = I._X = I._Y = I.RT = I._LB = false;
+    E.A = E.B = E.X = E.Y = E.LB = false; P.tapB = false; P.pend = null; P.npv = {};
+  }
+
+  // a socket for this slot is open. fresh = a new page (its packet and press counters start from zero again)
+  join(t, fresh) {
+    const P = this.port[t];
+    P.conn = true;
+    if (fresh) { P.lastCnt = [0, 0, 0, 0, 0]; P.inQ = 0; }
+    if (this.running && this.cfg) this.send(t, JSON.stringify(this.cfg));
+  }
+
   input(t, m) {
     const P = this.port[t], I = P.inp, E = P.edge;
+    P.conn = true; P.lastIn = this.now();
+    if (P.away) this.setAway(t, false);
     const mx = Array.isArray(m.m) ? +m.m[0] : 0, mz = Array.isArray(m.m) ? +m.m[1] : 0;
     const L = Math.hypot(mx, mz) || 0;
     // a stick is at most 1 long; anything else (NaN, a crafted packet) is clamped
@@ -101,7 +135,7 @@ export class MatchRoom {
     S.reset(true);
     S.TACTIC[0] = 0; S.TACTIC[1] = 0; S.gkRush[0] = false; S.gkRush[1] = false;
     S.state = 'face'; S.stateT = 0.9;
-    for (const P of this.port) { P.edge.A = P.edge.B = P.edge.X = P.edge.Y = P.edge.LB = false; P.tapB = false; P.pend = null; }
+    for (let t = 0; t < 2; t++) { this.clearInput(t); this.setAway(t, false); this.port[t].left = false; this.port[t].lastIn = this.now(); }
     this.evq.length = 0;
     const txt = JSON.stringify(this.cfg);
     this.send(0, txt); this.send(1, txt);
@@ -116,6 +150,14 @@ export class MatchRoom {
     this.acc += Math.max(0, now - this.last) / 1000; this.last = now;
     let n = Math.floor(this.acc * SIM_HZ);
     if (n > 6) { n = 6; this.acc = 0; } else this.acc -= n / SIM_HZ;
+    if (S.state !== 'over') {                        // after the end nobody sends input
+      for (let t = 0; t < 2; t++) {
+        const P = this.port[t];
+        if (!P.away && (!P.conn || now - P.lastIn > AWAY_MS)) this.setAway(t, true);
+        if (P.away && !P.left && now - P.awayAt > GONE_MS) P.left = true;
+      }
+      if (this.port[0].left && this.port[1].left) { this.running = false; return false; }   // nobody left to play for
+    }
     for (let i = 0; i < n; i++) {
       const t0 = Date.now();
       S.control.first = this.steps & 1;              // who acts first in a contested step alternates: no side wins ties
@@ -148,15 +190,17 @@ export class MatchRoom {
       for (const q of this.evq) q.left--;
       this.evq = this.evq.filter((q) => q.left > 0);
     }
-    const head = '{"t":"s","d":' + JSON.stringify(d) + ',"k":' + this.now() + ',"v":' + JSON.stringify(v) + ev + ',"a":';
+    const Q = this.port, w = (Q[0].away ? 1 : 0) | (Q[1].away ? 2 : 0) | (Q[0].left ? 4 : 0) | (Q[1].left ? 8 : 0);
+    const head = '{"t":"s","d":' + JSON.stringify(d) + ',"k":' + this.now() + ',"v":' + JSON.stringify(v) + ev + (w ? ',"w":' + w : '') + ',"a":';
     this.send(0, head + this.port[0].inQ + '}');
     this.send(1, head + this.port[1].inQ + '}');
     this.stat.snaps++;
   }
 
-  // a player left: forget their held buttons (their skater just coasts), keep the match going
+  // the socket of this slot closed: the AI plays for the player from the next step, the match goes on
   leave(slot) {
-    const P = this.port[slot], I = P.inp;
-    I.mx = I.mz = 0; I._A = I._B = I._X = I._Y = I.RT = I._LB = false;
+    this.port[slot].conn = false;
+    this.clearInput(slot);
+    if (this.running && this.sim.state !== 'over') this.setAway(slot, true);
   }
 }

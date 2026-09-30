@@ -166,6 +166,11 @@
   #tacbadge{position:absolute;right:10px;bottom:10px;z-index:6;font-size:10px;font-weight:800;
     letter-spacing:.09em;color:rgba(255,255,255,.42);pointer-events:none;text-transform:uppercase}
   body.portrait #toast{bottom:auto;top:78px}
+  /* обрыв связи в сетевом матче: «переподключение…» / «соперник переподключается…» */
+  #netban{position:absolute;left:50%;transform:translateX(-50%);top:56px;z-index:8;
+    padding:6px 14px;border-radius:9px;background:rgba(30,20,6,.9);
+    border:1px solid rgba(255,190,80,.5);color:#ffd48a;font-size:12px;font-weight:800;
+    letter-spacing:.05em;opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap}
 
   #bPause{position:absolute;pointer-events:auto;z-index:7;width:34px;height:34px;border-radius:9px;
     border:1.5px solid rgba(255,255,255,.28);background:rgba(14,18,28,.5);
@@ -218,6 +223,7 @@
     <div id="msgbox"><div id="msg"></div><div id="sub"></div></div>
   </div>
   <div id="toast"></div>
+  <div id="netban"></div>
   <div id="tacbadge"></div>
   <div id="legend" class="padhint"></div>
   <div id="power"><i></i></div>
@@ -797,6 +803,7 @@ function layoutTop(){
   var toast=document.getElementById('toast');
   if(PORTRAIT){ toast.style.top=Math.round(tbY+34)+'px'; toast.style.bottom='auto'; }
   else { toast.style.top='auto'; toast.style.bottom=Math.round(SA.b+14)+'px'; }
+  var nb=document.getElementById('netban'); if(nb) nb.style.top=Math.round(tbY+(PORTRAIT?70:44))+'px';
   /* легенда геймпада — под паузой */
   var lg=document.getElementById('legend');
   lg.style.top=Math.round(pB+6)+'px'; lg.style.right=Math.round(SA.r+10)+'px';
@@ -909,6 +916,7 @@ ru:{
   ad1:'ЗДЕСЬ МОГЛА БЫТЬ', ad2:'ВАША РЕКЛАМА',
   badAddr:'адрес сервера неверный', noConnect:'не удалось подключиться к серверу',
   inRoom:'в комнате', room:'комната', youHost:'ты хост', youGuest:'ты гость', lost:'связь потеряна', srvDown:'сервер не начал матч — играем через хоста',
+  rcSelf:'переподключение…', rcOpp:'соперник переподключается…', oppGone:'соперник не вернулся — за него играет ИИ',
   linkFriend:'ссылка другу:', shareText:'Го катать в BVR Hockey — комната',
   needSrv:'впиши адрес сервера', needCode:'впиши код комнаты',
   noWebgl:'WebGL недоступен.<br>Обнови браузер или включи аппаратное ускорение.',
@@ -950,6 +958,7 @@ en:{
   ad1:'YOUR BRAND', ad2:'COULD BE HERE',
   badAddr:'invalid server address', noConnect:'could not connect to the server',
   inRoom:'in room', room:'room', youHost:'you are the host', youGuest:'you are the guest', lost:'connection lost', srvDown:'server did not start the match — host mode',
+  rcSelf:'reconnecting…', rcOpp:'opponent is reconnecting…', oppGone:'opponent did not return — the AI plays for them',
   linkFriend:'link for a friend:', shareText:"Let's play BVR Hockey — room",
   needSrv:'enter the server address', needCode:'enter the room code',
   noWebgl:'WebGL is not available.<br>Update your browser or turn on hardware acceleration.',
@@ -991,6 +1000,7 @@ id:{
   ad1:'MEREK ANDA', ad2:'BISA DI SINI',
   badAddr:'alamat server tidak valid', noConnect:'tidak bisa terhubung ke server',
   inRoom:'di ruang', room:'ruang', youHost:'kamu host', youGuest:'kamu tamu', lost:'koneksi terputus', srvDown:'server tidak memulai — mode host',
+  rcSelf:'menyambung ulang…', rcOpp:'lawan menyambung ulang…', oppGone:'lawan tidak kembali — AI menggantikannya',
   linkFriend:'tautan untuk teman:', shareText:'Ayo main BVR Hockey — ruang',
   needSrv:'masukkan alamat server', needCode:'masukkan kode ruang',
   noWebgl:'WebGL tidak tersedia.<br>Perbarui browser atau aktifkan akselerasi perangkat keras.',
@@ -4230,12 +4240,16 @@ function randCode(){
   for(var i=0;i<4;i++) r+=A[(Math.random()*A.length)|0];
   return r;
 }
-function netConnect(url, code, cb){
+/* re — возврат в ту же комнату после обрыва (серверный режим): тот же слот по ключу из hello */
+function netConnect(url, code, cb, re){
   try{ if(NET.ws) NET.ws.close(); }catch(e){}
-  NET.code=code; NET.url=url; NET.peer=false; NET.role=null; NET.srv=false;
-  clearTimeout(NET.srvT);
+  if(!re){
+    NET.code=code; NET.url=url; NET.peer=false; NET.role=null; NET.srv=false; NET.tok=null;
+    if(NET.rc){ clearTimeout(NET.rc.timer); NET.rc=null; netBanner(); }
+    clearTimeout(NET.srvT);
+    netStatus(T('connecting'));
+  }
   var base=url.replace(/^http/,'ws').replace(/\/+$/,'');
-  netStatus(T('connecting'));
   var ws;
   /* Подсказка региона для НОВОЙ комнаты (Durable Object). Замер фазы 3.0 из Индонезии, по 10 комнат:
      apac-se — Сингапур 8/10 (RTT до DO от ~42 мс), apac — Сингапур/Гонконг/Токио, без подсказки —
@@ -4246,20 +4260,27 @@ function netConnect(url, code, cb){
      mode=host — хост-схема: вручную (?net=host) или после того, как сервер не начал матч (NET.noSrv). */
   var wantSrv=TEST.srv && !NET.noSrv;
   var qs=[]; if(hq) qs.push('hint='+encodeURIComponent(hq)); qs.push(wantSrv?'mode=srv':'mode=host');
+  if(re) qs.push('re='+NET.role, 'tok='+encodeURIComponent(NET.tok));
   try{ ws=new WebSocket(base+'/room/'+code+(qs.length?'?'+qs.join('&'):'')); }
   catch(e){ netStatus(T('badAddr')); return; }
   NET.ws=ws;
-  var opened=false;
+  var opened=false, greeted=false;
   setTimeout(function(){
-    if(!opened && NET.ws===ws){
-      netStatus(T('noConnect'));
-    }
-  },5000);
-  ws.onopen=function(){ opened=true; netStatus(T('inRoom')+' '+code); };
-  ws.onerror=function(){ netStatus(T('netErr')); };
-  ws.onclose=function(){ if(NET.ws===ws && NET.on) netStatus(T('lost')); };
+    if(NET.ws!==ws) return;
+    /* возврат: попытка без hello за 4 с не удалась — следующая */
+    if(re){ if(!greeted){ NET.ws=null; try{ ws.close(); }catch(e){} netLost(); } }
+    else if(!opened) netStatus(T('noConnect'));
+  }, re?4000:5000);
+  ws.onopen=function(){ opened=true; if(!re) netStatus(T('inRoom')+' '+code); };
+  ws.onerror=function(){ if(!re) netStatus(T('netErr')); };
+  ws.onclose=function(){
+    if(NET.ws!==ws) return;
+    if(netCanRejoin()){ NET.ws=null; netLost(); }
+    else if(NET.on) netStatus(T('lost'));
+  };
   ws.onmessage=function(ev){
     var m; try{ m=JSON.parse(ev.data); }catch(e){ return; }
+    NET.lastRx=performance.now();
     /* сетевая диагностика (фаза 3.0): ответы Durable Object и пинг соперника через релей */
     if(m.t==='pog'){ ndgPong(m); return; }
     if(m.t==='dgr'){ ndgDiag(m); return; }
@@ -4275,22 +4296,30 @@ function netConnect(url, code, cb){
         setTimeout(function(){ if(!NET.ws) netConnect(url, code, cb); }, 700);
         return;
       }
+      greeted=true;
+      /* вернулись, а комната уже другая (сервер её забыл, матч кончился без нас) — возвращаться некуда */
+      if(re && (m.role!==NET.role || !m.srv || (netInMatch() && !m.run))){ netGiveUp(); return; }
+      NET.tok=m.tok||null;
       NET.role=m.role; NET.on=true; NET.srv=!!m.srv;
       HUMAN = (m.role==='host')?0:1;
       NET.peer = m.n>1;
       netStatus(T('room')+' '+code+' · '+(m.role==='host' ? T('youHost') : T('youGuest'))+(NET.srv?' · server':''));
       if(cb) cb();
+      if(re) netRejoined();
     }
-    else if(m.t==='full'){ NET.on=false; netStatus(T('roomFull')); }
+    else if(m.t==='full'){ if(re){ netGiveUp(); return; } NET.on=false; netStatus(T('roomFull')); }
     else if(m.t==='fb'){ netSrvFallback(m.k, true); }
     else if(m.t==='peer'){
       NET.peer = m.n>1;
       netStatus(NET.peer?T('peerIn'):T('waiting'));
       netFbStart();
-      if(!NET.peer && state!=='menu'){ flash(T('peerOut'),'',2.2); }
+      /* серверный режим: матч идёт дальше (за соперника — ИИ), надпись — по снимкам (netAway) */
+      if(!NET.peer && state!=='menu' && !NET.srv){ flash(T('peerOut'),'',2.2); }
     }
     else if(m.t==='cfg' && netFollow()){
       clearTimeout(NET.srvT);
+      /* после возврата сервер напоминает cfg идущего матча — он у нас уже идёт, продолжаем по снимкам */
+      if(m.id && m.id===MATCH.id && netInMatch()) return;
       /* матч начал другой, а модели ещё качаются: играем, экран загрузки — пока их нет */
       if(!PLAYERS.done && !PLAYERS.failed){ loadingShow(true); playersReady(function(){ loadingShow(false); }); }
       TEAM[0]=CLUBS[m.a]; TEAM[1]=CLUBS[m.b];
@@ -4307,13 +4336,80 @@ function netConnect(url, code, cb){
       audioInit();
       matchStart(m.id||newMatchId(), m.a, m.b);
     }
-    else if(m.t==='s' && netFollow()){ NETDBG.sRecv++; netRecvSnap(m); }
+    else if(m.t==='s' && netFollow()){ NETDBG.sRecv++; if(NET.srv) netAway(m.w|0); netRecvSnap(m); }
     else if(m.t==='i' && netHost()){ NETDBG.iRecv++; netRecvInput(m); }
   };
 }
 function netSend(o){
   if(NET.ws && NET.ws.readyState===1){ try{ NET.ws.send(JSON.stringify(o)); }catch(e){} }
 }
+/* ---------- обрывы связи в серверном режиме (фаза 3.5) ----------
+   Матч считает сервер, поэтому обрыв его не останавливает: за пропавшего играет ИИ (server/room-sim.js),
+   соперник видит «соперник переподключается…». Клиент сам входит в ту же комнату заново — попытки с
+   паузами 0.4…3 с, всего ~30 с — и продолжает с текущего состояния из снимков. Обрыв — это закрытый
+   сокет или 3 с без единого сообщения посреди матча (мобильная сеть часто «молчит», не закрывая сокет).
+   Не вернулся за 30 с: у него — «связь потеряна» и меню, итог с result:'left'; у соперника матч
+   доигрывается против ИИ до конца. В match:summary у обоих — поле disconnect. */
+var RC_LIMIT_MS=30000, RC_STALL_MS=3000;
+function netInMatch(){ return state!=='menu' && state!=='over'; }
+function netCanRejoin(){ return NET.on && NET.srv && !!NET.tok; }
+function netLost(){
+  if(!NET.rc){
+    NET.rc={t0:performance.now(), n:0, timer:0};
+    if(netInMatch() && NET.dc) NET.dc.self++;
+    netStatus(T('rcSelf')); netBanner();
+  }
+  var rc=NET.rc;
+  if(performance.now()-rc.t0>=RC_LIMIT_MS){ netGiveUp(); return; }
+  rc.n++;
+  clearTimeout(rc.timer);
+  rc.timer=setTimeout(function(){
+    if(NET.rc!==rc) return;
+    if(performance.now()-rc.t0>=RC_LIMIT_MS){ netGiveUp(); return; }
+    if(Date.now()<(NET.blockUntil||0)){ netLost(); return; }     /* тест (__hk.netDrop): сети пока нет */
+    netConnect(NET.url, NET.code, null, true);
+  }, Math.min(3000, 400*rc.n));
+}
+function netRejoined(){
+  if(NET.rc){ clearTimeout(NET.rc.timer); NET.rc=null; }
+  /* путь до сервера мог стать другим — оценку часов и буфер снимков собираем заново */
+  NETV.buf.length=0; NETV.offWin.length=0; NETV.jit.length=0; NETV.off=null; NETV.sentT={};
+  PRED_LOG.length=0; NET.a=null; NET.b=null; NET.stallF=0;
+  netBanner();
+}
+function netGiveUp(){
+  if(NET.rc){ clearTimeout(NET.rc.timer); NET.rc=null; }
+  var w=NET.ws; NET.ws=null; try{ if(w) w.close(); }catch(e){}
+  var inM=netInMatch();
+  NET.on=false; NET.peer=false; NET.role=null; NET.tok=null;
+  if(inM){
+    if(NET.dc) NET.dc.selfLeft=true;
+    if(!MATCH.summary){ MATCH.summary=buildSummary(score); EV.emit('match:summary', MATCH.summary); }
+    state='over';                                   /* итог уже построен — это не match:abort */
+    backToMenu();
+    toast(T('lost'),3);
+  }
+  netStatus(T('lost')); netBanner();
+}
+/* w из снимка сервера: кто сейчас без связи (1 — слот 0, 2 — слот 1) и кто не вернулся за 30 с (4, 8) */
+function netAway(w){
+  if(w===(NET.w||0)) return;
+  var ob=HUMAN===0?2:1, lb=HUMAN===0?8:4;
+  if(NET.dc){ if(w&ob) NET.dc.opp=true; if(w&lb) NET.dc.oppLeft=true; }
+  if((w&lb) && !((NET.w||0)&lb)) NET.goneT=performance.now()+5000;
+  NET.w=w; netBanner();
+}
+function netBanner(){
+  var el=document.getElementById('netban'); if(!el) return;
+  var txt='';
+  if(NET.rc) txt=T('rcSelf');
+  else if(NET.on && NET.srv && netInMatch()){
+    var ob=HUMAN===0?2:1, lb=HUMAN===0?8:4, w=NET.w||0;
+    if(w&ob){ if(!(w&lb)) txt=T('rcOpp'); else if(performance.now()<(NET.goneT||0)) txt=T('oppGone'); }
+  }
+  if(el._t!==txt){ el._t=txt; if(txt) el.textContent=txt; el.style.opacity=txt?1:0; }
+}
+
 /* Серверный режим, запасной выход: хост отправил cfg, а сервер матч не начал (cfg обратно не пришёл за 4 с).
    Оба выходят из комнаты и входят заново уже в хост-схему (mode=host; режим пустой комнаты задаёт первый
    вошедший), матч начинает тот, кто оказался хостом. kind: 'go' — старт из меню, 'again' — реванш. */
@@ -4729,7 +4825,7 @@ function frameStepInner(dt){
     var f=Math.round(fN/fT);
     fpsAvg=fpsAvg*0.6+f*0.4;
     if(PERF.on) PERF.roll=true;
-    layoutTop();
+    layoutTop(); netBanner();
     document.getElementById('fps').textContent=f+' fps'+(padConnected?' · '+T('gamepad').toLowerCase():'')+' · '+T(['qLow','qMid','qHigh'][QLEVEL]);
     fT=0;fN=0;
     qualityTick(RT.ms>0 ? 1000/RT.ms : fpsAvg);
@@ -4770,6 +4866,10 @@ function frameStepInner(dt){
 
   if(netFollow()){
     var _tn=pfNow();
+    /* сокет открыт, но молчит 3 с (и это не пауза самой вкладки: 30 кадров подряд) — считаем обрывом */
+    if(netCanRejoin() && !NET.rc && NET.ws && performance.now()-(NET.lastRx||0)>RC_STALL_MS){
+      if((NET.stallF=(NET.stallF||0)+1)>30){ var sw=NET.ws; NET.ws=null; NET.stallF=0; try{ sw.close(); }catch(e){} netLost(); }
+    } else NET.stallF=0;
     netApply();
     netPredictGuest(dt);
     netGuestActions(dt); /* пас/бросок/подбор гостя — сразу, шайба своего — на своей клюшке */
@@ -5242,16 +5342,22 @@ function matchStart(id, clubA, clubB){
   MATCH.team=HUMAN; MATCH.clubs=[clubA,clubB]; MATCH.len=Math.round(clock);
   MATCH.played=0; MATCH.startedAt=Date.now(); MATCH.summary=null; MATCH.sent=false;
   MATCH.difficulty = NET.on ? null : DIFF;   /* в сетевом матче соперник — человек */
+  NET.dc={self:0, selfLeft:false, opp:false, oppLeft:false}; NET.w=0; netBanner();
   statsReset();
   EV.emit('match:start',{id:id, mode:MATCH.mode, role:MATCH.role, team:HUMAN, len:MATCH.len, clubs:MATCH.clubs.slice(), difficulty:MATCH.difficulty});
 }
 function buildSummary(sc){
   var me=MATCH.team, res = sc[me]>sc[1-me]?'win':(sc[me]<sc[1-me]?'loss':'draw');
+  /* обрывы связи в сетевом матче: self — сколько раз переподключался сам, opp — пропадал ли соперник,
+     selfLeft / oppLeft — не вернулся за 30 с (у не вернувшегося result:'left', счёт — на момент обрыва) */
+  var dc=(MATCH.mode==='online' && NET.dc && (NET.dc.self||NET.dc.selfLeft||NET.dc.opp)) ?
+    {self:NET.dc.self, selfLeft:NET.dc.selfLeft, opp:NET.dc.opp, oppLeft:NET.dc.oppLeft} : null;
+  if(dc && dc.selfLeft) res='left';
   var pl=[];
   for(var k in STATS.players){ var q=STATS.players[k]; pl.push({t:q.t, num:q.num, g:q.g, a:q.a, s:q.s, h:q.h}); }
   return {v:1, id:MATCH.id, client:CLIENT_VER, mode:MATCH.mode, role:MATCH.role, net:MATCH.net||null, team:me, difficulty:MATCH.difficulty,
           clubs:MATCH.clubs.slice(), len:MATCH.len, played:Math.round(MATCH.played),
-          startedAt:MATCH.startedAt, endedAt:Date.now(), score:sc.slice(), result:res,
+          startedAt:MATCH.startedAt, endedAt:Date.now(), score:sc.slice(), result:res, disconnect:dc,
           teams:[STATS.teams[0], STATS.teams[1]], players:pl, faceoffs:STATS.faceoffs, events:STATS.events,
           test:!!(TEST.autostart||TEST.autopilot||TEST.seed)};
 }
@@ -5436,6 +5542,8 @@ window.__hk={hs:function(){return HS;},net:function(){return NET;},setCam:functi
   benchSprings:function(lv,n){ var q=QC(), old=q.springs; q.springs=lv; n=n||240; var t0=performance.now(); for(var i=0;i<n;i++){ RDT=1/60; render(); } var dt=(performance.now()-t0)/n; q.springs=old; return +dt.toFixed(3); }, tgBtnW:TG_BTN_W, tgCloseW:function(){ return tgCloseW(); }, safe:function(){ return {sa:safeInsets(), band:tgButtonsBand(), portrait:PORTRAIT}; },
   /* хост: отправить снимок сейчас (с ожидающими событиями) — для тестов после freeze */
   netSnap:function(){ if(netHost()) netSnap(); },
+  /* тест обрыва: закрыть сокет и sec секунд «не иметь сети» (попытки вернуться не проходят) */
+  netDrop:function(sec){ NET.blockUntil=Date.now()+(sec||0)*1000; var w=NET.ws; if(!w || !netCanRejoin()) return; NET.ws=null; try{ w.close(); }catch(e){} netLost(); },
   boot:function(){ return BOOT; },
   /* разбивка времени кадра (последние 0.5 с) — tools/perf.mjs; on — включить замеры без ?debug */
   perf:function(on){ if(on!==undefined) PERF.on=!!on; return PERF.out; },

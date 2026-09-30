@@ -5,6 +5,10 @@
 // Checks: the room really is in server mode on both sides, the host does not simulate (it follows snapshots), bus
 // events reach both, both players' statistics (built only from server events) are equal, match:end / match:summary with
 // the same score on both, a rematch from the host restarts the match on both, no page errors.
+// Lost connection (phase 3.5): the guest's socket is cut for 5 s — the host sees "opponent is reconnecting", the
+// server marks the guest away (the AI plays), the guest comes back into the same match by itself and its input
+// reaches the server again; then for 40 s — the guest gives up after ~30 s (menu, summary result "left"), the host
+// plays the match out against the AI and its summary carries disconnect.oppLeft.
 // usage: node tools/smoke-server.mjs [--target wrangler|mock] [--browser chromium|webkit] [--real 15] [--headed]
 import { fileURLToPath } from 'node:url';
 import { startServer } from './serve.mjs';
@@ -84,6 +88,53 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const H3 = await snap(host), G3 = await snap(guest);
     if (H3.m.id === H2.m.id || G3.m.id !== H3.m.id) fails.push(`rematch ids: ${H2.m.id} → host ${H3.m.id}, guest ${G3.m.id}`);
     else console.log('  rematch: ok, new match id on both sides');
+
+    // ---- lost connection: a 75-second match, the guest's socket is cut for 5 s and then for 40 s ----
+    const DID = 'dc0123456789abcdef012345';
+    await host.page.evaluate(`__hk.net().ws.send(JSON.stringify({t:'cfg',a:1,b:2,min:1.25,id:'${DID}'}))`);
+    for (const [who, g] of sides) await g.page.waitForFunction(`__hk.match().id==="${DID}"`, null, { timeout: 5000 }).catch(() => fails.push(`${who}: no cfg for the disconnect match`));
+    await host.page.evaluate(BOT); await guest.page.evaluate(BOT);
+    await host.page.waitForTimeout(3000);
+    const ban = (g) => g.page.evaluate('(function(){ var e=document.getElementById("netban"); return +getComputedStyle(e).opacity>0.5 || e.style.opacity==="1" ? e.textContent : ""; })()');
+    const tDrop = Date.now();
+    await guest.page.evaluate('__hk.netDrop(5)');
+    await host.page.waitForFunction('(__hk.net().w&2)===2', null, { timeout: 4000 }).catch(() => fails.push('5 s drop: the host never saw the guest as away (w bit 2)'));
+    await host.page.waitForTimeout(700);
+    const hb = await ban(host), gb = await ban(guest);
+    if (!/переподключается|reconnecting|menyambung/.test(hb)) fails.push(`5 s drop: host banner "${hb}"`);
+    if (!/переподключение|reconnecting|menyambung/.test(gb)) fails.push(`5 s drop: guest banner "${gb}" ` + await guest.page.evaluate('(function(){var e=document.getElementById("netban"),n=__hk.net();return JSON.stringify({rc:!!n.rc,on:n.on,tok:!!n.tok,txt:e.textContent,op:e.style.opacity,cs:getComputedStyle(e).opacity,st:__hk.st(),status:n.status})})()'));
+    const clk0 = await host.page.evaluate('__hk.snap().clock');
+    await guest.page.waitForFunction('!__hk.net().rc && __hk.net().ws && __hk.net().ws.readyState===1', null, { timeout: 15000 }).catch(() => fails.push('5 s drop: the guest did not reconnect in 15 s'));
+    const tBack = ((Date.now() - tDrop) / 1000).toFixed(1);
+    // the away bit clears only when the guest's input reaches the server again
+    await host.page.waitForFunction('(__hk.net().w&2)===0', null, { timeout: 5000 }).catch(() => fails.push('5 s drop: the guest is still away for the server after reconnecting'));
+    await host.page.waitForTimeout(1500);
+    const A = await snap(host), B = await snap(guest);
+    if (await ban(host) || await ban(guest)) fails.push(`5 s drop: banners still shown after the return: host "${await ban(host)}" guest "${await ban(guest)}"`);
+    if (B.m.id !== DID || B.s.state === 'menu') fails.push(`5 s drop: guest is not in the same match (${B.m.id}, ${B.s.state})`);
+    if (!(B.ni.buf > 0)) fails.push('5 s drop: guest has no fresh snapshots after the return');
+    if (Math.abs(A.s.clock - B.s.clock) > 1.5) fails.push(`5 s drop: clocks differ after the return: host ${A.s.clock} guest ${B.s.clock}`);
+    if (!(A.s.clock < clk0)) fails.push(`5 s drop: the match stood still while the guest was away (${clk0} → ${A.s.clock})`);
+    if (A.s.score.join() !== B.s.score.join()) fails.push(`5 s drop: score host ${A.s.score} guest ${B.s.score}`);
+    console.log(`  5 s drop: guest back after ${tBack} s, same match, clock host ${A.s.clock} / guest ${B.s.clock}`);
+
+    const tDrop2 = Date.now();
+    await guest.page.evaluate('__hk.netDrop(40)');
+    await guest.page.waitForFunction('__hk.st()==="menu"', null, { timeout: 40000 }).catch(() => fails.push('40 s drop: the guest did not give up in 40 s'));
+    const tGive = (Date.now() - tDrop2) / 1000;
+    if (tGive < 28) fails.push(`40 s drop: the guest gave up after only ${tGive.toFixed(1)} s`);
+    const G4 = await snap(guest);
+    if (!G4.m.summary || G4.m.summary.result !== 'left' || !G4.m.summary.disconnect || !G4.m.summary.disconnect.selfLeft) fails.push(`40 s drop: guest summary ${JSON.stringify(G4.m.summary && { r: G4.m.summary.result, d: G4.m.summary.disconnect })}`);
+    await host.page.waitForFunction('(__hk.net().w&8)===8 || __hk.st()==="over"', null, { timeout: 8000 }).catch(() => fails.push('40 s drop: the server never marked the guest as gone (w bit 8)'));
+    const H4 = await snap(host);
+    if (H4.s.state === 'menu') fails.push('40 s drop: the host was thrown out of the match');
+    await host.page.waitForFunction('__hk.match().summary', null, { timeout: 90000 }).catch(() => fails.push('40 s drop: the host match was not played out to the end'));
+    const H5 = await snap(host), d5 = H5.m.summary && H5.m.summary.disconnect;
+    if (!d5 || !d5.opp || !d5.oppLeft || d5.selfLeft) fails.push(`40 s drop: host summary disconnect ${JSON.stringify(d5)}`);
+    if (H5.m.summary && !['win', 'loss', 'draw'].includes(H5.m.summary.result)) fails.push(`40 s drop: host result ${H5.m.summary.result}`);
+    console.log(`  40 s drop: guest gave up after ${tGive.toFixed(1)} s (result ${G4.m.summary && G4.m.summary.result}), host played on against the AI: ${H5.m.summary && H5.m.summary.result} ${H5.m.summary && H5.m.summary.score.join(':')}, disconnect ${JSON.stringify(d5)}`);
+    await host.page.evaluate('clearInterval(window.__smk)'); await guest.page.evaluate('clearInterval(window.__smk)');
+
     for (const [who, g] of sides) {
       for (const e of g.logs.filter(isError)) fails.push(`${who} [${e.type}] ${e.text}`);
       for (const e of await g.page.evaluate('__hk.errors()')) fails.push(`${who} [window] ${e}`);

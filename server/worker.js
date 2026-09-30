@@ -12,7 +12,9 @@
  *                        object is created for the first time (default: apac-se; the game sends apac-se itself)
  *
  *   server -> client:
- *     {t:'hello', role:'host'|'guest', n:<peerCount 1|2>, diag}   sent once, right after connect
+ *     {t:'hello', role:'host'|'guest', n:<peerCount 1|2>, diag, srv, tok, run}   sent once, right after connect
+ *                        tok — this player's key to the slot; reconnecting with ?re=<role>&tok=<tok> gives the same
+ *                        slot back (and replaces a socket the server still thinks is alive); run — a server match is on
  *     {t:'full'}                                            room already has host+guest
  *     {t:'peer', n:<peerCount 0|1|2>}                        peer count changed (join/leave)
  *     {t:'cfg', a, b, min}     relayed verbatim, host -> guest (team picks + match length)
@@ -34,7 +36,9 @@
  *   Server mode (phase 3.2, ?mode=srv from the player who opens an empty room; hello then carries srv:1 and the
  *   second player follows it): the Durable Object itself runs the match — shared/sim.js through server/room-sim.js,
  *   60 Hz steps, 30 Hz snapshots to both. 'cfg' (from the host) and 'i' (from both) are consumed here; the rest
- *   (opponent ping pp/pq) is still relayed. See room-sim.js for the message formats.
+ *   (opponent ping pp/pq) is still relayed. See room-sim.js for the message formats. A player who drops is played
+ *   by the AI until they come back (same slot through ?re=&tok=); the match keeps running with nobody connected
+ *   for up to 30 s, so both can return.
  *
  * One Durable Object instance per room code (env.ROOMS.idFromName(code)),
  * so state (who is host/guest) lives with the room, not the Worker.
@@ -58,6 +62,7 @@ export class Room {
     this.srv = false;     // server mode: set by whoever opens the empty room
     this.match = null;    // MatchRoom while in server mode
     this.timer = null;
+    this.tok = { host: null, guest: null };   // slot keys for reconnecting
   }
 
   sendSlot(slot, txt) {
@@ -69,7 +74,7 @@ export class Room {
   startTicking() {
     if (this.timer) return;
     this.timer = setInterval(() => {
-      if (!this.match || !this.match.tick() || (!this.host && !this.guest)) { clearInterval(this.timer); this.timer = null; }
+      if (!this.match || !this.match.tick()) { clearInterval(this.timer); this.timer = null; }
     }, 1000 / SIM_HZ);
   }
 
@@ -108,20 +113,30 @@ export class Room {
     const [client, server] = Object.values(pair);
     server.accept();
     // the room's mode is chosen by whoever opens it empty (the second player follows the room)
-    if (!this.host && !this.guest) {
-      this.srv = new URL(request.url).searchParams.get('mode') === 'srv';
+    const q = new URL(request.url).searchParams;
+    const re = q.get('re'), back = (re === 'host' || re === 'guest') && !!this.tok[re] && q.get('tok') === this.tok[re] ? re : null;
+    // (a returning player keeps the running match even if the room is empty at the moment)
+    if (!this.host && !this.guest && !(back && this.match && this.match.running)) {
+      this.srv = q.get('mode') === 'srv';
+      this.tok = { host: null, guest: null };
       if (this.timer) { clearInterval(this.timer); this.timer = null; }
       this.match = this.srv ? new MatchRoom((slot, txt) => this.sendSlot(slot, txt)) : null;
     }
-    this.handleSocket(server, { colo: request.headers.get('X-Edge-Colo') || '?', country: request.headers.get('X-Edge-Country') || '?' });
+    this.handleSocket(server, { colo: request.headers.get('X-Edge-Colo') || '?', country: request.headers.get('X-Edge-Country') || '?' }, this.tok[back] ? back : null);
 
     return new Response(null, { status: 101, webSocket: client });
   }
 
-  handleSocket(ws, where) {
+  handleSocket(ws, where, back) {
     let slot; // 'host' | 'guest'
 
-    if (!this.host) {
+    if (back) {
+      // the same player again: the old socket (if the server has not noticed it died) is replaced
+      slot = back;
+      const old = this[slot];
+      this[slot] = { ws, ...where };
+      if (old) { try { old.ws.close(1000, 'replaced'); } catch (e) {} }
+    } else if (!this.host) {
       slot = 'host';
       this.host = { ws, ...where };
     } else if (!this.guest) {
@@ -134,10 +149,13 @@ export class Room {
       return;
     }
 
+    if (!back) this.tok[slot] = crypto.randomUUID().replace(/-/g, '');
     try {
-      ws.send(JSON.stringify({ t: 'hello', role: slot, n: this.peerCount(), diag: this.diag(), srv: this.srv ? 1 : 0 }));
+      ws.send(JSON.stringify({ t: 'hello', role: slot, n: this.peerCount(), diag: this.diag(), srv: this.srv ? 1 : 0,
+                               tok: this.tok[slot], run: this.match && this.match.running ? 1 : 0 }));
     } catch (e) {}
     this.broadcastPeerCount();
+    if (this.match) { this.match.join(slot === 'host' ? 0 : 1, !back); if (this.match.running) this.startTicking(); }
 
     ws.addEventListener('message', (event) => {
       const from = slot === 'host' ? this.host : this.guest;
@@ -162,8 +180,9 @@ export class Room {
     });
 
     const onLeave = () => {
-      if (slot === 'host' && this.host && this.host.ws === ws) this.host = null;
-      if (slot === 'guest' && this.guest && this.guest.ws === ws) this.guest = null;
+      try { ws.close(1000, 'bye'); } catch (e) {}       // finish the closing handshake: the client's onclose fires at once
+      if (!this[slot] || this[slot].ws !== ws) return;   // already replaced by the same player's new socket
+      this[slot] = null;
       if (this.match) this.match.leave(slot === 'host' ? 0 : 1);
       this.broadcastPeerCount();
     };
