@@ -1,0 +1,519 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>BVR Hockey 26 — макет меню</title>
+<!-- Макет этапа 1 (docs/MENU_PLAN.md). Не часть игры: заготовка вида и раскладки.
+     ?s=main|mode|prep|prepfriend|friend|train|lesson|lessondone|rules|controls|settings|pause
+     &lang=ru|en|id  &st/sl/sr/sb — зона устройства, &ct — полоса кнопок Telegram (как в игре), &tg=0 — вне Telegram -->
+<style>
+@font-face{font-family:'BVR Sport';font-style:italic;font-weight:800;font-display:swap;
+  src:url(fonts/fira-sans-extra-condensed-cyrillic-800-italic.woff2) format('woff2');
+  unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116}
+@font-face{font-family:'BVR Sport';font-style:italic;font-weight:800;font-display:swap;
+  src:url(fonts/fira-sans-extra-condensed-latin-800-italic.woff2) format('woff2');
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+20AC,U+2122,U+2212,U+FEFF,U+FFFD}
+:root{
+  --st:0px; --sl:0px; --sr:0px; --sb:0px; --ct:0px;
+  --top:calc(var(--st) + var(--ct));
+  --bg0:#040b16; --bg1:#0a1c33; --ice0:#123356; --ice1:#2a6690;
+  --txt:#f2f7ff; --dim:#9fb3c9; --mute:#6f86a1;
+  --gold:#ffd166; --gold2:#f0a92e; --cyan:#8fd8ff; --mag:#c325d8; --blu:#2585ff;
+  --sport:'BVR Sport','Arial Narrow',system-ui,sans-serif;
+  --ui:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--bg0);color:var(--txt);font-family:var(--ui);overflow:hidden;-webkit-font-smoothing:antialiased}
+
+/* ---------- зимний фон: ночная арена, лёд, сугробы, снег ---------- */
+.bg{position:fixed;inset:0;overflow:hidden;
+  background:
+    radial-gradient(120% 60% at 70% -10%, rgba(120,190,255,.28), transparent 60%),
+    radial-gradient(60% 40% at 15% 0%, rgba(195,37,216,.18), transparent 70%),
+    linear-gradient(180deg,var(--bg1) 0%, var(--bg0) 55%)}
+.bg .ice{position:absolute;left:-10%;right:-10%;bottom:-2%;height:48%;
+  transform:perspective(600px) rotateX(58deg);transform-origin:50% 100%;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 11%, rgba(255,255,255,.035) 11% 11.3%),
+    linear-gradient(90deg, transparent 47%, rgba(220,40,60,.45) 47% 48.2%, transparent 48.2%),
+    linear-gradient(90deg, transparent 30%, rgba(40,110,230,.4) 30% 31%, transparent 31% 64%, rgba(40,110,230,.4) 64% 65%, transparent 65%),
+    radial-gradient(50% 70% at 50% 100%, rgba(170,220,255,.55), transparent 70%),
+    linear-gradient(180deg, var(--ice0), var(--ice1))}
+.bg .ice::after{content:'';position:absolute;inset:0;
+  background:repeating-linear-gradient(115deg, transparent 0 18px, rgba(255,255,255,.05) 18px 19px, transparent 19px 47px),
+             repeating-linear-gradient(64deg, transparent 0 31px, rgba(255,255,255,.04) 31px 32px, transparent 32px 70px)}
+.bg .lights{position:absolute;left:0;right:0;top:6%;height:18%;
+  background:radial-gradient(closest-side,rgba(255,255,255,.55),transparent) 12% 40%/60px 60px no-repeat,
+             radial-gradient(closest-side,rgba(255,255,255,.45),transparent) 38% 20%/48px 48px no-repeat,
+             radial-gradient(closest-side,rgba(255,255,255,.5),transparent) 64% 30%/56px 56px no-repeat,
+             radial-gradient(closest-side,rgba(255,255,255,.45),transparent) 88% 45%/52px 52px no-repeat;filter:blur(1px)}
+.bg .drift{position:absolute;bottom:-40px;width:60%;height:120px;border-radius:50%;
+  background:radial-gradient(closest-side,rgba(235,246,255,.95),rgba(200,225,245,.55) 60%,transparent);filter:blur(6px)}
+.bg .drift.l{left:-22%}.bg .drift.r{right:-24%;bottom:-54px}
+.bg .frost{position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(40% 30% at 0% 100%,rgba(225,240,255,.35),transparent 70%),
+             radial-gradient(35% 28% at 100% 100%,rgba(225,240,255,.32),transparent 70%),
+             radial-gradient(30% 22% at 100% 0%,rgba(225,240,255,.12),transparent 70%)}
+.bg .shade{position:absolute;inset:0;background:linear-gradient(90deg,rgba(3,8,16,.82) 0%,rgba(3,8,16,.45) 42%,rgba(3,8,16,0) 65%)}
+.bg.game{background:#0b1320 url(game-bg.jpg) center/cover}
+.bg.lessonbg{background:#0b1320 url(lesson-bg.jpg) center/cover}
+.bg.game .shade{background:rgba(4,9,18,.72);backdrop-filter:blur(3px)}
+.snow{position:fixed;inset:0;pointer-events:none}
+.snow i{position:absolute;top:-10px;border-radius:50%;background:#fff;opacity:.8;animation:fall linear infinite}
+@keyframes fall{to{transform:translate3d(var(--dx),110vh,0)}}
+
+/* ---------- каркас экрана ---------- */
+.scr{position:fixed;inset:0;display:grid;gap:6px 18px;
+  padding:calc(var(--top) + 8px) calc(var(--sr) + 18px) calc(var(--sb) + 10px) calc(var(--sl) + 18px);
+  grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto;
+  grid-template-areas:"head head" "left right" "foot foot"}
+.head{grid-area:head;display:flex;align-items:flex-end;gap:14px;min-width:0}
+.left{grid-area:left;min-height:0;display:flex;flex-direction:column;justify-content:center;min-width:0}
+.right{grid-area:right;min-height:0;display:flex;align-items:center;justify-content:center;min-width:0}
+.foot{grid-area:foot;display:flex;align-items:flex-end;justify-content:space-between;gap:12px;min-width:0}
+
+.brand{font:800 italic 34px/0.95 var(--sport);letter-spacing:.01em;text-transform:uppercase;white-space:nowrap;
+  text-shadow:0 2px 0 rgba(0,0,0,.35),0 0 24px rgba(37,133,255,.35)}
+.brand b{color:var(--gold);font-weight:800}
+.brand::after{content:'';display:block;height:3px;width:62%;margin-top:4px;
+  background:linear-gradient(90deg,var(--gold),var(--mag) 45%,transparent)}
+.brand.sm{font-size:15px;opacity:.85;text-shadow:none}.brand.sm::after{display:none}
+.crumb{display:flex;flex-direction:column;gap:2px;min-width:0}
+.title{font:800 italic 30px/1 var(--sport);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.back{display:flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:12px;flex:none;
+  background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);font:800 22px/1 var(--ui);color:#fff}
+.pill{font:800 italic 13px/1 var(--sport);text-transform:uppercase;letter-spacing:.04em;padding:6px 10px;border-radius:999px;
+  background:rgba(143,216,255,.14);color:var(--cyan);border:1px solid rgba(143,216,255,.3);white-space:nowrap}
+
+/* ---------- вертикальное меню ---------- */
+.menu{display:flex;flex-direction:column;gap:2px}
+.mi{position:relative;padding:5px 0 5px 4px;font:800 italic 29px/1.05 var(--sport);text-transform:uppercase;color:rgba(214,228,244,.66);
+  white-space:nowrap}
+.mi .d{display:block;font:600 12px/1.25 var(--ui);letter-spacing:.02em;text-transform:none;color:var(--dim);margin-top:2px;
+  white-space:normal;max-width:34em}
+.mi:not(.on) .d{display:none}
+.mi.on{color:#fff}
+.mi.on::before{content:'';position:absolute;z-index:-1;top:0;bottom:0;left:calc(-1 * (var(--sl) + 18px));right:-30%;
+  background:linear-gradient(90deg,var(--gold) 0 5px,rgba(37,133,255,.95) 5px,rgba(37,133,255,.55) 38%,rgba(195,37,216,.18) 70%,transparent);
+  clip-path:polygon(0 0,100% 0,calc(100% - 22px) 100%,0 100%)}
+.mi.on::after{content:'›';position:absolute;right:-6px;top:50%;transform:translateY(-55%);font:800 30px/1 var(--ui);color:var(--gold)}
+.mi.off{opacity:.45}
+.menu.sm .mi{font-size:24px}
+.lst{position:relative;overflow-y:auto;-webkit-mask-image:linear-gradient(180deg,transparent 0,#000 18px,#000 calc(100% - 18px),transparent);mask-image:linear-gradient(180deg,transparent 0,#000 18px,#000 calc(100% - 18px),transparent);padding-top:6px;padding-bottom:10px;overflow-x:hidden;max-height:100%;scrollbar-width:none;padding-right:2px}.lst::-webkit-scrollbar{display:none}
+.left.top{justify-content:flex-start}
+
+/* ---------- карточки, строки настроек, кнопки ---------- */
+.glass{background:linear-gradient(180deg,rgba(18,40,70,.78),rgba(8,20,38,.82));border:1px solid rgba(143,216,255,.18);border-radius:14px;
+  box-shadow:0 10px 30px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.08)}
+.logo{width:min(52vh,40vw);max-width:300px;aspect-ratio:1;filter:drop-shadow(0 10px 40px rgba(120,60,255,.45));opacity:.97}
+.row{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:10px;position:relative}
+.row .k{flex:1;font:800 italic 17px/1.1 var(--sport);text-transform:uppercase;color:var(--dim);white-space:nowrap}
+.row .v{display:flex;align-items:center;gap:8px;font:800 italic 18px/1 var(--sport);text-transform:uppercase;white-space:nowrap}
+.row .v .ar{color:var(--gold);font:800 18px/1 var(--ui);opacity:.9}
+.row.on{background:linear-gradient(90deg,rgba(37,133,255,.55),rgba(37,133,255,.12) 70%,transparent);box-shadow:inset 4px 0 0 var(--gold)}
+.row.on .k{color:#fff}
+.tog{width:44px;height:24px;border-radius:12px;background:rgba(255,255,255,.18);position:relative;flex:none}
+.tog::after{content:'';position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#cfd8e3}
+.tog.on{background:linear-gradient(90deg,var(--blu),var(--cyan))}.tog.on::after{left:23px;background:#fff}
+.bar{width:120px;height:8px;border-radius:4px;background:rgba(255,255,255,.15);position:relative;flex:none}
+.bar i{position:absolute;left:0;top:0;bottom:0;border-radius:4px;background:linear-gradient(90deg,var(--blu),var(--cyan))}
+.bar i::after{content:'';position:absolute;right:-7px;top:-5px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 0 0 3px rgba(37,133,255,.5)}
+.btn{display:flex;align-items:center;justify-content:center;gap:10px;height:46px;padding:0 22px;border-radius:12px;
+  font:800 italic 21px/1 var(--sport);text-transform:uppercase;color:#241703;white-space:nowrap;
+  background:linear-gradient(180deg,var(--gold),var(--gold2));box-shadow:0 6px 20px rgba(240,169,46,.35),inset 0 1px 0 rgba(255,255,255,.5)}
+.btn.ghost{background:rgba(255,255,255,.1);color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.2)}
+.btn.focus{outline:3px solid #fff;outline-offset:2px}
+
+/* ---------- подвал: сейчас играет + подсказки ---------- */
+.np{display:flex;align-items:center;gap:10px;padding:7px 14px 7px 10px;border-radius:12px;min-width:0;max-width:52%;
+  background:linear-gradient(90deg,rgba(6,14,28,.85),rgba(6,14,28,.55));border-left:3px solid var(--mag)}
+.eq{display:flex;align-items:flex-end;gap:2px;height:18px;flex:none}
+.eq i{width:3px;border-radius:1px;background:linear-gradient(180deg,var(--cyan),var(--blu));animation:eq 1s ease-in-out infinite alternate}
+.eq i:nth-child(1){height:40%}.eq i:nth-child(2){height:90%;animation-delay:-.4s}.eq i:nth-child(3){height:60%;animation-delay:-.7s}.eq i:nth-child(4){height:75%;animation-delay:-.2s}
+@keyframes eq{to{transform:scaleY(.35)}}
+.np .tx{min-width:0;display:flex;flex-direction:column;gap:1px}
+.np .lb{font:700 9px/1 var(--ui);letter-spacing:.16em;text-transform:uppercase;color:var(--mute)}
+.np .tr{font:800 italic 15px/1.1 var(--sport);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.np .al{font:600 11px/1.2 var(--ui);color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hints{display:flex;gap:14px;align-items:center;flex:none}
+.h{display:flex;align-items:center;gap:6px;font:800 italic 14px/1 var(--sport);text-transform:uppercase;color:var(--dim);white-space:nowrap}
+.gb{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;
+  font:800 12px/1 var(--ui);font-style:normal;color:#0a1420}
+.gb.a{background:#5ad07f}.gb.b{background:#e8736f}.gb.x{background:#7fb0ff}.gb.y{background:#ffd166}
+.gb.rt{background:#9aa6b8;border-radius:6px;width:auto;padding:0 5px}.gb.lb{background:#b9c4d6;border-radius:6px;width:auto;padding:0 5px}
+.kc{display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:22px;padding:0 6px;border-radius:5px;
+  font:700 11px/1 var(--ui);color:#0a1420;background:#dfe7f1;box-shadow:inset 0 -2px 0 rgba(0,0,0,.25)}
+
+/* ---------- подготовка матча ---------- */
+.prep{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:16px;align-items:center;height:100%}
+.teams{display:flex;align-items:center;justify-content:center;gap:6px}
+.tc{position:relative;width:min(150px,20vw);padding:10px 8px 12px;text-align:center;border-radius:14px}
+.tc .lbl{font:700 10px/1 var(--ui);letter-spacing:.16em;color:var(--mute);text-transform:uppercase}
+.tc .nm{font:800 italic 20px/1 var(--sport);text-transform:uppercase;margin-top:6px}
+.tc .sw{display:flex;justify-content:center;gap:5px;margin-top:7px}.tc .sw i{width:12px;height:12px;border-radius:50%;box-shadow:0 0 0 1px rgba(255,255,255,.35)}
+.tc .nav{position:absolute;top:44%;left:-4px;right:-4px;display:flex;justify-content:space-between;font:800 26px/1 var(--ui);color:var(--gold)}
+.tc.on{box-shadow:0 0 0 2px var(--gold),0 10px 30px rgba(0,0,0,.35)}
+.tc svg{width:74%;height:auto;margin-top:6px;filter:drop-shadow(0 6px 10px rgba(0,0,0,.45))}
+.vs{font:800 italic 30px/1 var(--sport);color:var(--gold);text-shadow:0 0 18px rgba(255,209,102,.5);padding:0 2px}
+.opts{display:flex;flex-direction:column;gap:6px}
+.note{font:600 12px/1.35 var(--ui);color:var(--dim)}
+
+/* ---------- комната ---------- */
+.room{padding:16px 18px;width:min(360px,100%);display:flex;flex-direction:column;gap:10px}
+.code{font:800 italic 54px/1 var(--sport);letter-spacing:.14em;color:#fff;text-shadow:0 0 22px rgba(143,216,255,.45)}
+.wait{display:flex;align-items:center;gap:8px;font:700 13px/1.2 var(--ui);color:var(--cyan)}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--cyan);box-shadow:0 0 0 0 rgba(143,216,255,.7);animation:pulse 1.4s infinite}
+@keyframes pulse{70%{box-shadow:0 0 0 10px rgba(143,216,255,0)}}
+
+/* ---------- тренировка ---------- */
+.les{display:flex;align-items:center;gap:10px;padding:5px 10px 5px 4px;position:relative;border-radius:8px}
+.les .n{width:22px;font:800 italic 15px/1 var(--sport);color:var(--mute);text-align:right}
+.les .t{flex:1;font:800 italic 18px/1.1 var(--sport);text-transform:uppercase;color:rgba(214,228,244,.75);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.les.on{background:linear-gradient(90deg,rgba(37,133,255,.6),rgba(37,133,255,.15) 75%,transparent);box-shadow:inset 4px 0 0 var(--gold)}
+.les.on .t{color:#fff}.les.ok .t::after{content:' ✓';color:#5ad07f}
+.md{width:16px;height:16px;border-radius:50%;flex:none;box-shadow:inset 0 -2px 0 rgba(0,0,0,.25),0 0 0 1px rgba(255,255,255,.25)}
+.md.g{background:radial-gradient(circle at 35% 30%,#fff3b0,#f2b92c 55%,#a8740c)}
+.md.s{background:radial-gradient(circle at 35% 30%,#ffffff,#c3ccd8 55%,#7d8796)}
+.md.b{background:radial-gradient(circle at 35% 30%,#ffd9b0,#c9803c 55%,#80471a)}
+.md.e{background:rgba(255,255,255,.08);box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.25)}
+.medals{display:flex;gap:4px}
+.card{padding:14px 16px;width:100%;max-width:380px;display:flex;flex-direction:column;gap:8px}
+.card h3{font:800 italic 22px/1.05 var(--sport);text-transform:uppercase}
+.card .task{font:600 13px/1.4 var(--ui);color:#dbe6f3}
+.card .goal{display:flex;flex-direction:column;gap:5px;font:600 12px/1.3 var(--ui);color:var(--dim)}
+.card .goal div{display:flex;align-items:center;gap:8px}
+.best{font:800 italic 14px/1 var(--sport);text-transform:uppercase;color:var(--gold)}
+
+/* ---------- урок (поверх матча) ---------- */
+.hud-task{position:fixed;top:calc(var(--top) + 8px);left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:4px;
+  padding:8px 18px 9px;border-radius:12px;background:rgba(6,14,28,.82);border:1px solid rgba(143,216,255,.25);max-width:62vw;text-align:center}
+.hud-task .ln{font:800 italic 12px/1 var(--sport);letter-spacing:.08em;color:var(--cyan);text-transform:uppercase}
+.hud-task .tk{font:800 italic 19px/1.1 var(--sport);text-transform:uppercase}
+.hud-cnt{position:fixed;top:calc(var(--top) + 8px);left:calc(var(--sl) + 18px);display:flex;flex-direction:column;gap:4px;padding:8px 12px;border-radius:12px;background:rgba(6,14,28,.82)}
+.hud-cnt b{font:800 italic 26px/1 var(--sport)}.hud-cnt span{font:700 10px/1 var(--ui);letter-spacing:.14em;color:var(--mute);text-transform:uppercase}
+.hud-tip{position:fixed;left:50%;bottom:calc(var(--sb) + 14px);transform:translateX(-50%);display:flex;align-items:center;gap:10px;
+  padding:9px 16px;border-radius:999px;background:rgba(6,14,28,.85);border:1px solid rgba(255,209,102,.4);font:800 italic 16px/1 var(--sport);text-transform:uppercase;white-space:nowrap}
+.hud-med{position:fixed;top:calc(var(--top) + 8px);right:calc(var(--sr) + 70px);display:flex;flex-direction:column;gap:4px;padding:8px 12px;border-radius:12px;background:rgba(6,14,28,.82);font:700 11px/1.2 var(--ui);color:var(--dim)}
+.hud-med div{display:flex;align-items:center;gap:6px}
+.target{position:fixed;width:34px;height:34px;border-radius:50%;border:3px solid #fff;box-shadow:0 0 0 4px rgba(232,115,111,.8),0 0 16px rgba(255,80,80,.7);background:radial-gradient(circle,#e8736f 0 30%,transparent 32%)}
+.target.hit{box-shadow:0 0 0 4px rgba(90,208,127,.9),0 0 16px rgba(90,208,127,.8);background:radial-gradient(circle,#5ad07f 0 30%,transparent 32%)}
+.done{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+.done .card{max-width:420px;align-items:center;text-align:center;gap:10px;padding:20px 24px}
+.done .big{font:800 italic 40px/1 var(--sport);color:#5ad07f;text-transform:uppercase}
+.bigmd{width:74px;height:74px}
+.stat3{display:flex;gap:18px}.stat3 div{display:flex;flex-direction:column;gap:3px}.stat3 b{font:800 italic 24px/1 var(--sport)}.stat3 span{font:700 10px/1 var(--ui);letter-spacing:.12em;color:var(--mute);text-transform:uppercase}
+
+/* ---------- правила и управление ---------- */
+.tabs{display:flex;gap:6px}
+.tab{padding:8px 14px;border-radius:10px;font:800 italic 16px/1 var(--sport);text-transform:uppercase;color:var(--dim);background:rgba(255,255,255,.06);white-space:nowrap}
+.tab.on{color:#241703;background:linear-gradient(180deg,var(--gold),var(--gold2))}
+.rules{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px;align-content:start;overflow:hidden;height:100%}
+.rule{padding:10px 12px;display:flex;gap:10px;align-items:flex-start}
+.rule svg{flex:none;width:50px;height:34px}
+.rule h4{font:800 italic 16px/1 var(--sport);text-transform:uppercase;margin-bottom:4px}
+.rule p{font:600 11.5px/1.35 var(--ui);color:var(--dim)}
+.rule.on{box-shadow:0 0 0 2px var(--gold)}
+.dev{display:flex;gap:6px}
+.scheme{position:relative;width:100%;height:100%;min-height:150px}
+.scheme svg{width:100%;height:100%}
+
+/* ---------- пауза ---------- */
+.score{display:flex;align-items:center;gap:10px;padding:8px 14px;border-radius:12px;background:rgba(6,14,28,.85);font:800 italic 22px/1 var(--sport)}
+.score .c{width:10px;height:22px;border-radius:3px}.score .t{font-size:14px;color:var(--gold);margin-left:6px}
+
+/* ---------- низкая горизонталь (телефон боком): всё компактнее ---------- */
+@media (orientation:landscape) and (max-height:460px){
+  .scr{gap:4px 18px}
+  .brand{font-size:28px}.brand::after{margin-top:3px;height:2px}
+  .title{font-size:25px}
+  .mi{font-size:clamp(19px,6.2vh,27px);padding:3px 0 3px 4px}
+  .mi .d{font-size:11px;margin-top:1px}
+  .menu{margin-top:4px}
+  .np{padding:5px 12px 5px 9px}.np .tr{font-size:14px}
+  .row{padding:5px 12px}.row .k{font-size:15px}.row .v{font-size:16px}
+  .btn{height:40px;font-size:19px}
+  .les{padding:3px 10px 3px 4px}.les .t{font-size:16px}
+  .card{padding:10px 14px;gap:6px}.card h3{font-size:19px}.card .task{font-size:12px}
+  .tc{padding:7px 6px 9px}.tc svg{width:62%;margin-top:3px}.tc .nm{font-size:17px;margin-top:3px}
+}
+/* ---------- вертикаль ---------- */
+@media (orientation:portrait){
+  .scr{grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr) auto;gap:10px;
+    grid-template-areas:"head" "right" "left" "foot";padding-left:calc(var(--sl) + 16px);padding-right:calc(var(--sr) + 16px)}
+  .brand{font-size:36px}
+  .head{flex-wrap:wrap;row-gap:8px}.head .tabs{margin-left:0 !important}
+  .logo{width:min(46vw,210px)}
+  .left{justify-content:flex-start}
+  .mi{font-size:30px;padding:7px 0 7px 4px}
+  .mi.on::before{right:-18px}
+  .foot{flex-direction:column;align-items:stretch;gap:10px}
+  .np{max-width:none}
+  .hints{justify-content:flex-end}
+  .prep{grid-template-columns:1fr;align-content:start}
+  .tc{width:40vw}
+  .scr.lesson,.scr.pausep{grid-template-rows:auto minmax(0,1fr) auto}
+  .rules{grid-template-columns:1fr}
+  .right.hide-p{display:none}
+}
+.rot{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;text-align:center;padding:0 30px}
+.rot .ph{width:70px;height:120px;border:4px solid #fff;border-radius:14px;animation:rot 2.4s ease-in-out infinite}
+@keyframes rot{40%,60%{transform:rotate(-90deg)}}
+.rot .tx{font:800 italic 26px/1.1 var(--sport);text-transform:uppercase}
+.rot .sb{font:600 14px/1.4 var(--ui);color:var(--dim)}
+</style>
+</head>
+<body>
+<div class="bg" id="bg"><div class="lights"></div><div class="ice"></div><div class="drift l"></div><div class="drift r"></div><div class="frost"></div><div class="shade"></div></div>
+<div class="snow" id="snow"></div>
+<div id="app"></div>
+<script>
+(function(){
+'use strict';
+var q=new URLSearchParams(location.search);
+var S=q.get('s')||'main', L=q.get('lang')||'ru', TG=q.get('tg')!=='0';
+var root=document.documentElement.style;
+['st','sl','sr','sb','ct'].forEach(function(k){ if(q.has(k)) root.setProperty('--'+k, (+q.get(k)||0)+'px'); });
+var PORT=matchMedia('(orientation:portrait)').matches;
+
+/* ---------- тексты: RU / EN / ID ---------- */
+var STR={
+ru:{quick:'Быстрый матч', quickD:'Красные — Зелёные · нормальная · 3 мин', mode:'Режим игры', modeD:'Против компьютера или с другом',
+  train:'Тренировка', trainD:'10 уроков и свободный лёд · медали', rules:'Правила', rulesD:'Управление и правила хоккея',
+  settings:'Настройки', settingsD:'Язык, графика, звук, вибрация',
+  select:'Выбрать', back:'Назад', change:'Изменить', np:'Сейчас играет', artist:'Исполнитель', album:'Альбом',
+  vsAI:'Против компьютера', vsAID:'Ты и твоя команда против ИИ · 3 уровня сложности',
+  friend:'С другом', friendD:'Приглашение в чат Telegram · матч считает сервер',
+  prep:'Подготовка матча', my:'Твоя команда', opp:'Соперник', red:'Красные', green:'Зелёные',
+  diff:'Сложность', normal:'Нормальная', len:'Длина матча', min3:'3 мин', start:'Начать матч', tac:'Тактика', tacStd:'Стандарт',
+  guestSees:'Друг видит твой выбор и ждёт старта', friendReady:'Друг в комнате',
+  create:'Создать комнату', createD:'Код и ссылка-приглашение для друга', join:'Войти по коду', joinD:'Код из приглашения друга',
+  room:'Комната', waiting:'Ждём друга…', invite:'Отправить приглашение', roomNote:'Друг откроет игру по ссылке и сразу попадёт в комнату. Связь пропала — вернём в тот же матч.',
+  medals:'Медали', free:'Свободная тренировка', freeD:'Лёд без соперников — пробуй всё', startLesson:'Начать урок', bestRes:'Лучшее', notYet:'ещё не пройден',
+  done:'Выполнено', bronze:'Бронза', silver:'Серебро', gold:'Золото', retry:'Ещё раз', next:'Дальше', time:'Время', acc:'Точность', hits:'Попадания',
+  lessonN:'Урок', ctrl:'Управление', hockey:'Правила хоккея', touch:'Экран', kbd:'Клавиатура', pad:'Геймпад',
+  withPuck:'С шайбой', noPuck:'В обороне', stickL:'Левая половина экрана — джойстик',
+  lang:'Язык', langV:'Русский', gfx:'Графика', auto:'Авто', fps:'Показ FPS', music:'Музыка', sfx:'Звуки', vib:'Вибрация',
+  gfxD:'Авто — игра сама держит 60 кадров: снижает качество на слабом телефоне.',
+  resume:'Продолжить', menu:'Главное меню', paused:'Пауза', period:'Матч',
+  rotate:'Поверни телефон', rotateD:'Матч и уроки — в горизонтали. Меню работает и так.'},
+en:{quick:'Quick match', quickD:'Red — Green · normal · 3 min', mode:'Game mode', modeD:'Against the computer or a friend',
+  train:'Training', trainD:'10 lessons and free skate · medals', rules:'Rules', rulesD:'Controls and hockey rules',
+  settings:'Settings', settingsD:'Language, graphics, sound, vibration',
+  select:'Select', back:'Back', change:'Change', np:'Now playing', artist:'Artist', album:'Album',
+  vsAI:'Vs computer', vsAID:'You and your team against the AI · 3 difficulty levels',
+  friend:'With a friend', friendD:'Invite in a Telegram chat · the server runs the match',
+  prep:'Match setup', my:'Your team', opp:'Opponent', red:'Red', green:'Green',
+  diff:'Difficulty', normal:'Normal', len:'Match length', min3:'3 min', start:'Start match', tac:'Tactics', tacStd:'Balanced',
+  guestSees:'Your friend sees your choice and waits', friendReady:'Friend joined',
+  create:'Create a room', createD:'Code and invite link for a friend', join:'Join with a code', joinD:"Code from your friend's invite",
+  room:'Room', waiting:'Waiting for a friend…', invite:'Send invite', roomNote:'Your friend opens the game from the link and lands in the room. Lost connection? You return to the same match.',
+  medals:'Medals', free:'Free skate', freeD:'Empty ice — try everything', startLesson:'Start lesson', bestRes:'Best', notYet:'not done yet',
+  done:'Complete', bronze:'Bronze', silver:'Silver', gold:'Gold', retry:'Retry', next:'Next', time:'Time', acc:'Accuracy', hits:'Hits',
+  lessonN:'Lesson', ctrl:'Controls', hockey:'Hockey rules', touch:'Touch', kbd:'Keyboard', pad:'Gamepad',
+  withPuck:'With the puck', noPuck:'Defending', stickL:'Left half of the screen is the stick',
+  lang:'Language', langV:'English', gfx:'Graphics', auto:'Auto', fps:'Show FPS', music:'Music', sfx:'Sounds', vib:'Vibration',
+  gfxD:'Auto keeps 60 fps: the game lowers quality on a slow phone.',
+  resume:'Resume', menu:'Main menu', paused:'Paused', period:'Match',
+  rotate:'Turn your phone', rotateD:'Matches and lessons are played sideways. Menus work either way.'},
+id:{quick:'Main cepat', quickD:'Merah — Hijau · normal · 3 mnt', mode:'Mode permainan', modeD:'Lawan komputer atau teman',
+  train:'Latihan', trainD:'10 pelajaran dan es bebas · medali', rules:'Aturan', rulesD:'Kontrol dan aturan hoki',
+  settings:'Pengaturan', settingsD:'Bahasa, grafis, suara, getar',
+  select:'Pilih', back:'Kembali', change:'Ubah', np:'Sedang diputar', artist:'Artis', album:'Album',
+  vsAI:'Lawan komputer', vsAID:'Kamu dan timmu melawan AI · 3 tingkat kesulitan',
+  friend:'Dengan teman', friendD:'Undang di chat Telegram · server menjalankan laga',
+  prep:'Persiapan laga', my:'Timmu', opp:'Lawan', red:'Merah', green:'Hijau',
+  diff:'Kesulitan', normal:'Normal', len:'Durasi laga', min3:'3 mnt', start:'Mulai laga', tac:'Taktik', tacStd:'Seimbang',
+  guestSees:'Temanmu melihat pilihanmu dan menunggu', friendReady:'Teman sudah masuk',
+  create:'Buat ruang', createD:'Kode dan tautan undangan untuk teman', join:'Masuk dengan kode', joinD:'Kode dari undangan teman',
+  room:'Ruang', waiting:'Menunggu teman…', invite:'Kirim undangan', roomNote:'Temanmu membuka game dari tautan dan langsung masuk ruang. Koneksi putus? Kamu kembali ke laga yang sama.',
+  medals:'Medali', free:'Latihan bebas', freeD:'Es kosong — coba semuanya', startLesson:'Mulai pelajaran', bestRes:'Terbaik', notYet:'belum selesai',
+  done:'Selesai', bronze:'Perunggu', silver:'Perak', gold:'Emas', retry:'Ulangi', next:'Lanjut', time:'Waktu', acc:'Akurasi', hits:'Kena',
+  lessonN:'Pelajaran', ctrl:'Kontrol', hockey:'Aturan hoki', touch:'Layar', kbd:'Keyboard', pad:'Gamepad',
+  withPuck:'Pegang keping', noPuck:'Bertahan', stickL:'Separuh kiri layar adalah stik',
+  lang:'Bahasa', langV:'Indonesia', gfx:'Grafis', auto:'Otomatis', fps:'Tampilkan FPS', music:'Musik', sfx:'Suara', vib:'Getar',
+  gfxD:'Otomatis menjaga 60 fps: kualitas turun di ponsel yang lambat.',
+  resume:'Lanjutkan', menu:'Menu utama', paused:'Jeda', period:'Laga',
+  rotate:'Putar ponselmu', rotateD:'Laga dan pelajaran dimainkan mendatar. Menu bisa di posisi apa pun.'}
+};
+function T(k){ return (STR[L]&&STR[L][k])||STR.ru[k]||k; }
+
+/* 10 уроков (docs/MENU_PLAN.md): название, кнопка, задача, условие, медали */
+var LESSONS={
+ru:[['Катание и ускорение','RT','Проедь слаломом через 6 ворот-флажков до финиша.','все 6 ворот',['≤ 30 с','≤ 22 с','≤ 16 с']],
+  ['Пас','A','Отдай 5 пасов партнёрам в кругах.','5 точных пасов',['5 пасов','≤ 1 промах, ≤ 25 с','без промахов, ≤ 18 с']],
+  ['Пас в разрез','Y','Партнёр уходит в отрыв — отдай пас на ход 4 раза.','4 паса приняты на ходу',['4 из 8','4 из 6','4 из 4']],
+  ['Навес','X','Перебрось шайбу через клюшку защитника к партнёру.','3 паса над клюшкой',['3 из 8','3 из 5','3 из 3']],
+  ['Бросок с зарядом','B','Держи B — заряд, отпусти — бросок. Попади в мишени в углах ворот.','3 попадания из 8',['3 из 8','5 из 8','7 из 8']],
+  ['Отбор и силовой','B · X','Соперник ведёт шайбу. Отбери её клюшкой (B) или силовым (X).','3 отбора',['3 отбора','≤ 40 с','≤ 25 с']],
+  ['Смена игрока','A · LB','Шайба катится к одному из партнёров — переключись и подбери её.','5 подборов',['5 подборов','в среднем ≤ 1,2 с','в среднем ≤ 0,8 с']],
+  ['Игра вратарём','Y','Держи Y — вратарь выходит на прорыв. Не пропусти.','4 сейва из 8',['4 сейва','6 сейвов','7 сейвов']],
+  ['Тактика','✚','Меняй тактику крестовиной по ситуации на льду.','3 смены вовремя',['3 из 3','каждая ≤ 3 с','каждая ≤ 1,5 с']],
+  ['Итог: атака 2 на 1','все','Ты и партнёр против защитника и вратаря — 5 атак.','1 гол',['1 гол','2 гола','3 гола']]],
+en:[['Skating and sprint','RT','Slalom through 6 flag gates to the finish.','all 6 gates',['≤ 30 s','≤ 22 s','≤ 16 s']],
+  ['Pass','A','Make 5 passes to teammates standing in circles.','5 clean passes',['5 passes','≤ 1 miss, ≤ 25 s','no misses, ≤ 18 s']],
+  ['Through pass','Y','A teammate breaks away — lead him with a pass 4 times.','4 passes taken in stride',['4 of 8','4 of 6','4 of 4']],
+  ['Lob pass','X',"Lift the puck over the defender's stick to a teammate.",'3 passes over the stick',['3 of 8','3 of 5','3 of 3']],
+  ['Charged shot','B','Hold B to charge, release to shoot. Hit the targets in the corners.','3 hits of 8',['3 of 8','5 of 8','7 of 8']],
+  ['Poke and body check','B · X','An opponent carries the puck. Take it with a poke (B) or a check (X).','3 takeaways',['3 takeaways','≤ 40 s','≤ 25 s']],
+  ['Switch player','A · LB','The puck slides to a teammate — switch and pick it up.','5 pick-ups',['5 pick-ups','avg ≤ 1.2 s','avg ≤ 0.8 s']],
+  ['Goalie play','Y','Hold Y — the goalie charges the breakaway. Keep it out.','4 saves of 8',['4 saves','6 saves','7 saves']],
+  ['Tactics','✚','Switch team tactics with the D-pad as play changes.','3 timely switches',['3 of 3','each ≤ 3 s','each ≤ 1.5 s']],
+  ['Final: 2-on-1 rush','all','You and a teammate against a defender and the goalie — 5 rushes.','1 goal',['1 goal','2 goals','3 goals']]],
+id:[['Meluncur dan lari','RT','Slalom lewati 6 gerbang bendera sampai finis.','semua 6 gerbang',['≤ 30 d','≤ 22 d','≤ 16 d']],
+  ['Umpan','A','Berikan 5 umpan ke rekan di dalam lingkaran.','5 umpan tepat',['5 umpan','≤ 1 gagal, ≤ 25 d','tanpa gagal, ≤ 18 d']],
+  ['Umpan terobosan','Y','Rekan lepas dari lawan — umpan ke depannya 4 kali.','4 umpan diterima sambil lari',['4 dari 8','4 dari 6','4 dari 4']],
+  ['Umpan lambung','X','Angkat keping melewati tongkat bek ke rekanmu.','3 umpan lewat atas',['3 dari 8','3 dari 5','3 dari 3']],
+  ['Tembakan bertenaga','B','Tahan B untuk mengisi, lepas untuk menembak. Kenai sasaran di sudut gawang.','3 kena dari 8',['3 dari 8','5 dari 8','7 dari 8']],
+  ['Rebut dan benturan','B · X','Lawan membawa keping. Rebut dengan tongkat (B) atau benturan (X).','3 rebutan',['3 rebutan','≤ 40 d','≤ 25 d']],
+  ['Ganti pemain','A · LB','Keping meluncur ke rekan — ganti pemain dan ambil kepingnya.','5 ambilan',['5 ambilan','rata-rata ≤ 1,2 d','rata-rata ≤ 0,8 d']],
+  ['Main sebagai kiper','Y','Tahan Y — kiper maju menghadang. Jangan kebobolan.','4 penyelamatan dari 8',['4 selamat','6 selamat','7 selamat']],
+  ['Taktik','✚','Ganti taktik tim dengan D-pad sesuai situasi.','3 kali tepat waktu',['3 dari 3','masing-masing ≤ 3 d','masing-masing ≤ 1,5 d']],
+  ['Final: serangan 2 lawan 1','semua','Kamu dan rekan melawan bek dan kiper — 5 serangan.','1 gol',['1 gol','2 gol','3 gol']]]
+};
+var LS=LESSONS[L]||LESSONS.ru, MEDAL=['g','s','g','b','s','e','e','e','e','e'];
+
+var CLUB={red:['#c8354a','#8d2233','#e8eaee'], green:['#1f7a52','#14513a','#e8eaee']};
+function jersey(c,num){ return '<svg viewBox="0 0 100 100"><path d="M30 12 L42 8 Q50 16 58 8 L70 12 L92 28 L82 44 L72 38 L72 92 L28 92 L28 38 L18 44 L8 28 Z" fill="'+c[0]+'" stroke="rgba(0,0,0,.35)" stroke-width="2"/>'+
+  '<path d="M28 66 H72 V74 H28 Z M8 28 L18 44 L22 41 L12 26 Z M92 28 L82 44 L78 41 L88 26 Z" fill="'+c[2]+'" opacity=".9"/>'+
+  '<path d="M28 74 H72 V80 H28 Z" fill="'+c[1]+'"/><text x="50" y="58" text-anchor="middle" font-family="BVR Sport,Arial Narrow" font-style="italic" font-weight="800" font-size="26" fill="'+c[2]+'">'+num+'</text></svg>'; }
+function gb(k){ var c={A:'a',B:'b',X:'x',Y:'y',RT:'rt',LB:'lb'}[k]; return c?'<i class="gb '+c+'">'+k+'</i>':'<i class="gb lb">'+k+'</i>'; }
+function hints(back,extra){ return '<div class="hints">'+(extra||'')+'<span class="h">'+gb('A')+T('select')+'</span>'+(back?'<span class="h">'+gb('B')+T('back')+'</span>':'')+'</div>'; }
+function np(){ return '<div class="np"><div class="eq"><i></i><i></i><i></i><i></i></div><div class="tx"><span class="lb">'+T('np')+'</span>'+
+  '<span class="tr">Ice Cold</span><span class="al">'+T('artist')+' · '+T('album')+'</span></div></div>'; }
+function head(title,extra){
+  return '<div class="head">'+(TG?'':'<div class="back">‹</div>')+'<div class="crumb"><div class="brand sm">BVR Hockey <b>26</b></div><div class="title">'+title+'</div></div>'+(extra||'')+'</div>'; }
+function mi(t,d,on,cls){ return '<div class="mi'+(on?' on':'')+(cls?' '+cls:'')+'">'+t+(d?'<span class="d">'+d+'</span>':'')+'</div>'; }
+function row(k,v,on){ return '<div class="row'+(on?' on':'')+'"><span class="k">'+k+'</span><span class="v">'+v+'</span></div>'; }
+function arr(v){ return '<span class="ar">‹</span>'+v+'<span class="ar">›</span>'; }
+
+var html='', app=document.getElementById('app'), bg=document.getElementById('bg');
+function scr(inner,cls){ html='<div class="scr '+(cls||'')+'">'+inner+'</div>'; }
+
+var V={
+main:function(){ scr('<div class="head"><div class="brand">BVR Hockey <b>26</b></div></div>'+
+  '<div class="left"><div class="menu">'+mi(T('quick'),T('quickD'),1)+mi(T('mode'),T('modeD'))+mi(T('train'),T('trainD'))+mi(T('rules'),T('rulesD'))+mi(T('settings'),T('settingsD'))+'</div></div>'+
+  '<div class="right"><img class="logo" src="../../assets/src/logo.png" alt=""></div>'+
+  '<div class="foot">'+np()+hints(false)+'</div>'); },
+mode:function(){ scr(head(T('mode'))+
+  '<div class="left"><div class="menu">'+mi(T('vsAI'),T('vsAID'),1)+mi(T('friend'),T('friendD'))+'</div></div>'+
+  '<div class="right"><div class="teams" style="transform:scale(1.05)"><div class="tc glass">'+jersey(CLUB.red,'9')+'<div class="nm">'+T('red')+'</div></div><div class="vs">VS</div>'+
+  '<div class="tc glass">'+jersey(['#3a4a60','#26303f','#8fd8ff'],'AI')+'<div class="nm">CPU</div></div></div></div>'+
+  '<div class="foot">'+np()+hints(true)+'</div>'); },
+prep:function(fr){ var teams='<div class="teams"><div class="tc glass on"><div class="lbl">'+T('my')+'</div>'+jersey(CLUB.red,'9')+'<div class="nm">'+T('red')+'</div>'+
+    '<div class="sw"><i style="background:#c8354a"></i><i style="background:#2b62c8"></i><i style="background:#e0a92a"></i><i style="background:#1f7a52"></i></div><div class="nav"><span>‹</span><span>›</span></div></div>'+
+    '<div class="vs">VS</div><div class="tc glass"><div class="lbl">'+T('opp')+'</div>'+jersey(CLUB.green,'17')+'<div class="nm">'+T('green')+'</div>'+
+    '<div class="sw"><i style="background:#c8354a"></i><i style="background:#2b62c8"></i><i style="background:#e0a92a"></i><i style="background:#1f7a52"></i></div></div></div>';
+  var opts='<div class="opts">'+(fr?'':row(T('diff'),arr(T('normal'))))+row(T('len'),arr(T('min3')))+row(T('tac'),arr(T('tacStd')))+
+    (fr?'<div class="wait" style="padding:4px 12px"><span class="dot" style="background:#5ad07f"></span>'+T('friendReady')+' · @friend</div><div class="note" style="padding:0 12px">'+T('guestSees')+'</div>':'')+
+    '<div class="btn" style="margin-top:6px">'+T('start')+'</div></div>';
+  scr(head(T('prep'),'<span class="pill">'+(fr?T('friend'):T('vsAI'))+'</span>')+
+    '<div class="left" style="grid-column:1/3"><div class="prep">'+teams+opts+'</div></div>'+
+    '<div class="foot">'+np()+hints(true,'<span class="h"><i class="gb lb">◀▶</i>'+T('change')+'</span>')+'</div>'); },
+prepfriend:function(){ V.prep(1); },
+friend:function(){ scr(head(T('friend'))+
+  '<div class="left"><div class="menu">'+mi(T('create'),T('createD'),1)+mi(T('join'),T('joinD'))+'</div></div>'+
+  '<div class="right"><div class="room glass"><div class="lbl" style="font:700 10px/1 var(--ui);letter-spacing:.16em;color:var(--mute);text-transform:uppercase">'+T('room')+'</div>'+
+  '<div class="code">K7QX</div><div class="wait"><span class="dot"></span>'+T('waiting')+'</div><div class="btn">'+T('invite')+'</div><div class="note">'+T('roomNote')+'</div></div></div>'+
+  '<div class="foot">'+np()+hints(true)+'</div>'); },
+train:function(){ var list=''; for(var i=0;i<LS.length;i++){ var m=MEDAL[i];
+    list+='<div class="les'+(i===4?' on':'')+(m!=='e'?' ok':'')+'"><span class="n">'+(i+1)+'</span><span class="t">'+LS[i][0]+'</span><span class="md '+m+'"></span></div>'; }
+  list+='<div class="les"><span class="n">∞</span><span class="t">'+T('free')+'</span></div>';
+  var s=LS[4];
+  var card='<div class="card glass"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><h3>'+T('lessonN')+' 5 · '+s[0]+'</h3>'+gb(s[1])+'</div>'+
+    '<div class="task">'+s[2]+'</div><div class="goal"><div>✓ '+T('done')+': '+s[3]+'</div>'+
+    '<div><span class="md b"></span>'+T('bronze')+': '+s[4][0]+'</div><div><span class="md s"></span>'+T('silver')+': '+s[4][1]+'</div><div><span class="md g"></span>'+T('gold')+': '+s[4][2]+'</div></div>'+
+    '<div class="best">'+T('bestRes')+': 5 / 8 · '+T('silver')+'</div><div class="btn">'+T('startLesson')+'</div></div>';
+  scr(head(T('train'),'<span class="pill">'+T('medals')+' 7 / 30</span>')+
+    '<div class="left top"><div class="lst" id="lst">'+list+'</div></div><div class="right">'+card+'</div>'+
+    '<div class="foot">'+np()+hints(true)+'</div>'); },
+lesson:function(){ if(PORT) return V.rotate(); bg.className='bg lessonbg'; bg.innerHTML='';
+  var s=LS[4];
+  html='<div class="hud-cnt"><span>'+T('hits')+'</span><b>2 / 8</b><span>0:24</span></div>'+
+    '<div class="hud-task"><span class="ln">'+T('lessonN')+' 5 · '+s[0]+'</span><span class="tk">'+s[2].split('.').slice(-2).join('.').trim()+'</span></div>'+
+    '<div class="hud-med"><div><span class="md b"></span>3</div><div><span class="md s"></span>5</div><div><span class="md g"></span>7</div></div>'+
+    '<div class="target hit" style="left:calc(82.4% - 13px);top:calc(32% - 13px);width:26px;height:26px"></div><div class="target" style="left:calc(85.6% - 13px);top:calc(46% - 13px);width:26px;height:26px"></div>'+
+    '<div class="hud-tip">'+gb('B')+' '+(L==='ru'?'Держи — заряд, отпусти — бросок':L==='en'?'Hold to charge, release to shoot':'Tahan untuk mengisi, lepas untuk menembak')+'</div>'; },
+lessondone:function(){ if(PORT) return V.rotate(); bg.className='bg game'; bg.innerHTML='<div class="shade"></div>';
+  var s=LS[4];
+  html='<div class="done"><div class="card glass"><div class="ln" style="font:800 italic 13px/1 var(--sport);color:var(--cyan);letter-spacing:.08em;text-transform:uppercase">'+T('lessonN')+' 5 · '+s[0]+'</div>'+
+    '<div class="big">✓ '+T('done')+'</div><span class="md s bigmd"></span><div class="best" style="font-size:20px">'+T('silver')+'</div>'+
+    '<div class="stat3"><div><b>5 / 8</b><span>'+T('hits')+'</span></div><div><b>63%</b><span>'+T('acc')+'</span></div><div><b>0:41</b><span>'+T('time')+'</span></div></div>'+
+    '<div class="note">'+T('gold')+': '+s[4][2]+'</div><div style="display:flex;gap:10px"><div class="btn ghost">'+T('retry')+'</div><div class="btn">'+T('next')+'</div></div></div></div>'; },
+rules:function(){ var R={ru:[['Офсайд','Нельзя въезжать в зону соперника раньше шайбы. Загорелось «офсайд» — выйди за синюю линию, и игра пойдёт дальше. Тронешь шайбу в зоне — свисток и вбрасывание.'],
+      ['Проброс','Бросил шайбу из своей половины за линию ворот соперника, и её никто не тронул — вбрасывание у твоих ворот.'],
+      ['Удаления','Силовой сзади или в игрока без шайбы — 2 минуты: команда играет вчетвером.'],
+      ['Вбрасывание','После гола, офсайда и остановки. Кто первым коснётся шайбы — тот владеет.'],
+      ['Длина матча','1 или 3 минуты чистого времени. Ничья — значит ничья.'],
+      ['Гол','Шайба целиком пересекла линию ворот. Вратарь может отбить или накрыть её.']],
+    en:[['Offside','Do not enter the attacking zone ahead of the puck. When OFFSIDE lights up, skate back over the blue line and play goes on. Touch the puck in the zone — whistle and a faceoff.'],
+      ['Icing','Shot from your own half over the goal line and nobody touched it — faceoff at your end.'],
+      ['Penalties','A check from behind or on a player without the puck — 2 minutes, your team plays with four.'],
+      ['Faceoff','After a goal, offside or stoppage. The first to touch the puck owns it.'],
+      ['Match length','1 or 3 minutes of play. A draw is a draw.'],
+      ['Goal','The whole puck crossed the goal line. The goalie can save or cover it.']],
+    id:[['Offside','Jangan masuk zona lawan sebelum keping. Saat OFFSIDE menyala, keluar lewat garis biru dan permainan lanjut. Sentuh keping di zona — peluit dan face-off.'],
+      ['Icing','Keping dari separuh lapanganmu melewati garis gawang lawan tanpa disentuh — face-off di dekat gawangmu.'],
+      ['Penalti','Benturan dari belakang atau ke pemain tanpa keping — 2 menit, timmu main berempat.'],
+      ['Face-off','Setelah gol, offside, atau penghentian. Yang pertama menyentuh keping menguasainya.'],
+      ['Durasi laga','1 atau 3 menit permainan. Seri tetap seri.'],
+      ['Gol','Seluruh keping melewati garis gawang. Kiper bisa menepis atau menangkapnya.']]}[L]||[];
+  var ic=['<svg viewBox="0 0 50 34"><rect x="1" y="1" width="48" height="32" rx="8" fill="#1b4466"/><rect x="30" y="1" width="3" height="32" fill="#2b62c8"/><circle cx="40" cy="17" r="4" fill="#fff"/><circle cx="24" cy="12" r="3" fill="#ffd166"/></svg>',
+    '<svg viewBox="0 0 50 34"><rect x="1" y="1" width="48" height="32" rx="8" fill="#1b4466"/><rect x="24" y="1" width="2" height="32" fill="#c8354a"/><rect x="44" y="1" width="1.5" height="32" fill="#c8354a"/><path d="M8 17 H46" stroke="#fff" stroke-dasharray="3 3"/></svg>',
+    '<svg viewBox="0 0 50 34"><rect x="1" y="1" width="48" height="32" rx="8" fill="#1b4466"/><text x="25" y="23" text-anchor="middle" font-size="17" font-weight="800" fill="#ffd166" font-family="Arial">2:00</text></svg>',
+    '<svg viewBox="0 0 50 34"><rect x="1" y="1" width="48" height="32" rx="8" fill="#1b4466"/><circle cx="25" cy="17" r="10" fill="none" stroke="#c8354a" stroke-width="2"/><circle cx="25" cy="17" r="3" fill="#fff"/></svg>',
+    '<svg viewBox="0 0 50 34"><rect x="1" y="1" width="48" height="32" rx="8" fill="#1b4466"/><circle cx="25" cy="17" r="10" fill="none" stroke="#fff" stroke-width="2"/><path d="M25 10 V17 L30 20" stroke="#ffd166" stroke-width="2.5" fill="none"/></svg>',
+    '<svg viewBox="0 0 50 34"><rect x="1" y="1" width="48" height="32" rx="8" fill="#1b4466"/><path d="M14 8 H36 V26 H14" fill="none" stroke="#c8354a" stroke-width="2.5"/><circle cx="26" cy="17" r="3.5" fill="#fff"/></svg>'];
+  var items=''; R.forEach(function(r,i){ items+=mi(r[0],'',i===0); });
+  var big=ic[0].replace('viewBox="0 0 50 34"','viewBox="0 0 50 34" style="height:min(24vh,120px);width:auto;max-width:100%"');
+  var card='<div class="card glass" style="align-items:flex-start">'+big+'<h3>'+R[0][0]+'</h3><div class="task">'+R[0][1]+'</div></div>';
+  scr(head(T('rules'),'<div class="tabs" style="margin-left:auto"><span class="tab">'+T('ctrl')+'</span><span class="tab on">'+T('hockey')+'</span></div>')+
+    '<div class="left"><div class="menu sm">'+items+'</div></div><div class="right">'+card+'</div>'+
+    '<div class="foot">'+np()+hints(true,'<span class="h"><i class="gb lb">LB</i><i class="gb lb">RB</i>'+(L==='ru'?'Вкладки':L==='en'?'Tabs':'Tab')+'</span>')+'</div>'); },
+controls:function(){
+  var lab={ru:{A:['пас','смена · держать — прессинг'],B:['бросок, держи — сильнее','отбор клюшкой'],X:['навес','силовой'],Y:['пас в разрез','держать — выход вратаря'],RT:['ускорение','ускорение']},
+    en:{A:['pass','switch · hold to press'],B:['shot, hold for power','poke check'],X:['lob pass','body check'],Y:['through pass','hold — goalie charges'],RT:['sprint','sprint']},
+    id:{A:['umpan','ganti · tahan untuk menekan'],B:['tembak, tahan lebih kuat','rebut tongkat'],X:['umpan lambung','benturan'],Y:['umpan terobosan','tahan — kiper maju'],RT:['lari cepat','lari cepat']}}[L];
+  var bt=[['Y',548,78,'#ffd166'],['X',498,128,'#7fb0ff'],['B',598,128,'#e8736f'],['A',548,178,'#5ad07f']];
+  var svg='<svg viewBox="140 10 440 240"><rect x="150" y="20" width="420" height="220" rx="30" fill="#0e2238" stroke="#8fd8ff" stroke-opacity=".5" stroke-width="3"/>'+
+    '<rect x="166" y="36" width="388" height="188" rx="16" fill="#123356"/>'+
+    '<circle cx="250" cy="160" r="46" fill="rgba(255,255,255,.08)" stroke="#fff" stroke-opacity=".5" stroke-width="2" stroke-dasharray="6 5"/><circle cx="262" cy="150" r="18" fill="rgba(255,255,255,.35)"/>'+
+    '<text x="262" y="92" text-anchor="middle" font-size="9" font-weight="700" fill="#9fb3c9" font-family="system-ui">'+T('stickL')+'</text>'+
+    '<rect x="516" y="46" width="26" height="26" rx="7" fill="rgba(255,255,255,.2)"/><rect x="524" y="53" width="3" height="12" fill="#fff"/><rect x="531" y="53" width="3" height="12" fill="#fff"/>';
+  bt.forEach(function(b){ svg+='<circle cx="'+(b[1]-120)+'" cy="'+(b[2]+10)+'" r="21" fill="'+b[3]+'" opacity=".9"/><text x="'+(b[1]-120)+'" y="'+(b[2]+16)+'" text-anchor="middle" font-size="16" font-weight="800" fill="#0a1420" font-family="system-ui">'+b[0]+'</text>'; });
+  svg+='<rect x="400" y="46" width="56" height="24" rx="8" fill="#9aa6b8"/><text x="428" y="63" text-anchor="middle" font-size="13" font-weight="800" fill="#0a1420" font-family="system-ui">RT</text></svg>';
+  var tbl='<div class="opts" style="gap:3px">'+'<div class="row" style="padding:2px 12px"><span class="k" style="flex:0 0 44px"></span><span class="k" style="color:var(--cyan)">'+T('withPuck')+'</span><span class="k" style="color:var(--cyan)">'+T('noPuck')+'</span></div>';
+  ['A','B','X','Y','RT'].forEach(function(k){ tbl+='<div class="row" style="padding:3px 12px"><span style="flex:0 0 44px">'+gb(k)+'</span><span class="note" style="flex:1;color:#dbe6f3">'+lab[k][0]+'</span><span class="note" style="flex:1">'+lab[k][1]+'</span></div>'; });
+  tbl+='</div>';
+  scr(head(T('rules'),'<div class="tabs" style="margin-left:auto"><span class="tab on">'+T('ctrl')+'</span><span class="tab">'+T('hockey')+'</span></div>')+
+    '<div class="left"><div class="dev" style="margin-bottom:8px"><span class="tab on">'+T('touch')+'</span><span class="tab">'+T('kbd')+'</span><span class="tab">'+T('pad')+'</span></div><div class="scheme">'+svg+'</div></div>'+
+    '<div class="right">'+tbl+'</div>'+
+    '<div class="foot">'+np()+hints(true,'<span class="h"><i class="gb lb">LB</i><i class="gb lb">RB</i>'+(L==='ru'?'Вкладки':L==='en'?'Tabs':'Tab')+'</span>')+'</div>'); },
+settings:function(){
+  var rows=row(T('lang'),arr(T('langV')))+row(T('gfx'),arr(T('auto')),1)+row(T('fps'),'<span class="tog"></span>')+
+    row(T('music'),'<span class="bar"><i style="width:70%"></i></span>')+row(T('sfx'),'<span class="bar"><i style="width:85%"></i></span>')+row(T('vib'),'<span class="tog on"></span>');
+  var info='<div class="card glass"><h3>'+T('gfx')+'</h3><div class="task">'+T('gfxD')+'</div>'+
+    '<div class="tabs"><span class="tab on">'+T('auto')+'</span><span class="tab">'+(L==='ru'?'Низк.':L==='en'?'Low':'Rendah')+'</span><span class="tab">'+(L==='ru'?'Сред.':L==='en'?'Med.':'Sedang')+'</span><span class="tab">'+(L==='ru'?'Выс.':L==='en'?'High':'Tinggi')+'</span></div></div>';
+  scr(head(T('settings'))+'<div class="left"><div class="opts">'+rows+'</div></div><div class="right hide-p">'+info+'</div>'+
+    '<div class="foot">'+np()+hints(true,'<span class="h"><i class="gb lb">◀▶</i>'+T('change')+'</span>')+'</div>'); },
+pause:function(){ bg.className='bg game'; bg.innerHTML='<div class="shade"></div>'; document.getElementById('snow').innerHTML='';
+  scr('<div class="head"><div class="crumb"><div class="brand sm">BVR Hockey <b>26</b></div><div class="title">'+T('paused')+'</div></div></div>'+
+    '<div class="left"><div class="menu">'+mi(T('resume'),'',1)+mi(T('ctrl'))+mi(T('settings'),(L==='ru'?'Звук и вибрация':L==='en'?'Sound and vibration':'Suara dan getar'))+mi(T('menu'))+'</div></div>'+
+    '<div class="right"><div class="score"><span class="c" style="background:#c8354a"></span>'+(L==='ru'?'КРС':L==='en'?'RED':'MRH')+' 1 : 0 '+(L==='ru'?'ЗЕЛ':L==='en'?'GRN':'HJU')+'<span class="c" style="background:#1f7a52"></span><span class="t">'+T('period')+' · 1:42</span></div></div>'+
+    '<div class="foot"><span></span>'+hints(true)+'</div>','pausep'); },
+rotate:function(){ html='<div class="rot"><div class="ph"></div><div class="tx">'+T('rotate')+'</div><div class="sb">'+T('rotateD')+'</div><div class="brand" style="font-size:22px">BVR Hockey <b>26</b></div></div>'; }
+};
+(V[S]||V.main)();
+app.innerHTML=html;
+var sel=document.querySelector('.lst .on'); if(sel){ var ls=document.getElementById('lst'); ls.scrollTop=sel.offsetTop-ls.clientHeight/2+sel.offsetHeight/2; }
+
+/* снег: только в меню (не в паузе и не в уроке) */
+if(bg.className==='bg'){ var sn=document.getElementById('snow'), h='';
+  for(var i=0;i<70;i++){ var r=1+Math.random()*2.6, d=6+Math.random()*9;
+    h+='<i style="left:'+(Math.random()*100).toFixed(1)+'%;width:'+r.toFixed(1)+'px;height:'+r.toFixed(1)+'px;opacity:'+(0.35+Math.random()*0.55).toFixed(2)+
+      ';--dx:'+(Math.random()*60-30).toFixed(0)+'px;animation-duration:'+d.toFixed(1)+'s;animation-delay:-'+(Math.random()*d).toFixed(1)+'s"></i>'; }
+  sn.innerHTML=h; }
+})();
+</script>
+</body>
+</html>
