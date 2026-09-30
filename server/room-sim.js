@@ -167,13 +167,15 @@ export class MatchRoom {
       const dt = Date.now() - t0; if (dt > this.stat.maxStepMs) this.stat.maxStepMs = dt;
       // after the end: 6 snapshots a second for 5 s, so both see the final state and match:end, then stop
       const every = S.state === 'over' ? 10 : SNAP_EVERY;
-      if (this.steps % every === 0) this.snapshot();
+      // stamped with the moment of this step, not the send time: the timer fires unevenly (0…6 steps a tick), and a
+      // send-time stamp shifts states in time and hides server stalls from the client's jitter estimate
+      if (this.steps % every === 0) this.snapshot(Math.round(now - (this.acc + (n - 1 - i) / SIM_HZ) * 1000));
       if (S.state === 'over' && this.overT > 5) { this.running = false; return false; }
     }
     return true;
   }
 
-  snapshot() {
+  snapshot(k = this.now()) {
     const S = this.sim, P = S.players, HS = S.HS, pk = S.puck;
     const d = [r2(pk.x), r2(pk.y), r2(pk.z), S.score[0], S.score[1], Math.round(S.clock * 10) / 10, STC[S.state] || 0,
                P.indexOf(HS[0].ctrl), P.indexOf(HS[1].ctrl), S.gkRush[0] ? 1 : 0, S.gkRush[1] ? 1 : 0,
@@ -191,7 +193,7 @@ export class MatchRoom {
       this.evq = this.evq.filter((q) => q.left > 0);
     }
     const Q = this.port, w = (Q[0].away ? 1 : 0) | (Q[1].away ? 2 : 0) | (Q[0].left ? 4 : 0) | (Q[1].left ? 8 : 0);
-    const head = '{"t":"s","d":' + JSON.stringify(d) + ',"k":' + this.now() + ',"v":' + JSON.stringify(v) + ev + (w ? ',"w":' + w : '') + ',"a":';
+    const head = '{"t":"s","d":' + JSON.stringify(d) + ',"k":' + k + ',"v":' + JSON.stringify(v) + ev + (w ? ',"w":' + w : '') + ',"a":';
     this.send(0, head + this.port[0].inQ + '}');
     this.send(1, head + this.port[1].inQ + '}');
     this.stat.snaps++;
