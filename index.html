@@ -366,20 +366,22 @@ var TEST=(function(){
          side:q.get('side')==='1'?1:0, debug:q.has('debug')};
   /* Внутри Telegram к ссылке мини-приложения ?debug не допишешь — отладка включается стартовым
      параметром: t.me/bvr_games_bot/hockeytg?startapp=dbg (или dbg_КОД — сразу в комнату) */
-  /* startapp: префиксы dbg_ (отладка) и srv_ (матч считает сервер) в любом порядке, дальше — код комнаты:
-     dbg, srv, dbg_КОД, srv_КОД, srv_dbg_КОД */
+  /* startapp: префиксы dbg_ (отладка) и host_ (матч считает телефон хоста — запасная схема) в любом порядке,
+     дальше — код комнаты: dbg, host, dbg_КОД, host_КОД, host_dbg_КОД. Старый префикс srv_ принимается и ничего
+     не меняет: серверная схема и так по умолчанию (фаза 3.5). */
   t.startParam=function(sp){
-    var o={dbg:false, srv:false, room:''}, m;
+    var o={dbg:false, srv:false, host:false, room:''}, m;
     sp=String(sp||'');
-    while((m=/^(dbg|srv)(?:_|$)/i.exec(sp))){ o[m[1].toLowerCase()]=true; sp=sp.slice(m[0].length); }
+    while((m=/^(dbg|srv|host)(?:_|$)/i.exec(sp))){ o[m[1].toLowerCase()]=true; sp=sp.slice(m[0].length); }
     o.room=sp; return o;
   };
   var sp0=null;
   try{ sp0=window.Telegram && Telegram.WebApp && Telegram.WebApp.initDataUnsafe && Telegram.WebApp.initDataUnsafe.start_param; }catch(e){}
   t.sp=t.startParam(sp0);
   if(t.sp.dbg) t.debug=true;
-  /* ?net=server / startapp=srv… — сетевой матч считает сервер (фаза 3.2), иначе — хост (по умолчанию) */
-  t.srv = q.get('net')==='server' || t.sp.srv;
+  /* Сетевой матч считает сервер (по умолчанию, фаза 3.5). ?net=host / startapp=host… — хост-схема вручную.
+     Решает тот, кто открывает комнату; если сервер серверного режима не знает или молчит — хост-схема сама. */
+  t.srv = !(q.get('net')==='host' || t.sp.host);
   /* ?debug — показать отладочные индикаторы (класс .dbg): скорость, FPS, сеть */
   if(t.debug) document.body.classList.add('debug');
   if(t.seed){
@@ -906,7 +908,7 @@ ru:{
   fsHint:'Нажми — на весь экран', srvHint:'https://имя.workers.dev', docTitle:'BVR Hockey — Лига 5 на 5',
   ad1:'ЗДЕСЬ МОГЛА БЫТЬ', ad2:'ВАША РЕКЛАМА',
   badAddr:'адрес сервера неверный', noConnect:'не удалось подключиться к серверу',
-  inRoom:'в комнате', room:'комната', youHost:'ты хост', youGuest:'ты гость', lost:'связь потеряна',
+  inRoom:'в комнате', room:'комната', youHost:'ты хост', youGuest:'ты гость', lost:'связь потеряна', srvDown:'сервер не начал матч — играем через хоста',
   linkFriend:'ссылка другу:', shareText:'Го катать в BVR Hockey — комната',
   needSrv:'впиши адрес сервера', needCode:'впиши код комнаты',
   noWebgl:'WebGL недоступен.<br>Обнови браузер или включи аппаратное ускорение.',
@@ -947,7 +949,7 @@ en:{
   fsHint:'Tap for full screen', srvHint:'https://name.workers.dev', docTitle:'BVR Hockey — League 5 on 5',
   ad1:'YOUR BRAND', ad2:'COULD BE HERE',
   badAddr:'invalid server address', noConnect:'could not connect to the server',
-  inRoom:'in room', room:'room', youHost:'you are the host', youGuest:'you are the guest', lost:'connection lost',
+  inRoom:'in room', room:'room', youHost:'you are the host', youGuest:'you are the guest', lost:'connection lost', srvDown:'server did not start the match — host mode',
   linkFriend:'link for a friend:', shareText:"Let's play BVR Hockey — room",
   needSrv:'enter the server address', needCode:'enter the room code',
   noWebgl:'WebGL is not available.<br>Update your browser or turn on hardware acceleration.',
@@ -988,7 +990,7 @@ id:{
   fsHint:'Ketuk untuk layar penuh', srvHint:'https://nama.workers.dev', docTitle:'BVR Hockey — Liga 5 lawan 5',
   ad1:'MEREK ANDA', ad2:'BISA DI SINI',
   badAddr:'alamat server tidak valid', noConnect:'tidak bisa terhubung ke server',
-  inRoom:'di ruang', room:'ruang', youHost:'kamu host', youGuest:'kamu tamu', lost:'koneksi terputus',
+  inRoom:'di ruang', room:'ruang', youHost:'kamu host', youGuest:'kamu tamu', lost:'koneksi terputus', srvDown:'server tidak memulai — mode host',
   linkFriend:'tautan untuk teman:', shareText:'Ayo main BVR Hockey — ruang',
   needSrv:'masukkan alamat server', needCode:'masukkan kode ruang',
   noWebgl:'WebGL tidak tersedia.<br>Perbarui browser atau aktifkan akselerasi perangkat keras.',
@@ -4231,6 +4233,7 @@ function randCode(){
 function netConnect(url, code, cb){
   try{ if(NET.ws) NET.ws.close(); }catch(e){}
   NET.code=code; NET.url=url; NET.peer=false; NET.role=null; NET.srv=false;
+  clearTimeout(NET.srvT);
   var base=url.replace(/^http/,'ws').replace(/\/+$/,'');
   netStatus(T('connecting'));
   var ws;
@@ -4238,9 +4241,11 @@ function netConnect(url, code, cb){
      apac-se — Сингапур 8/10 (RTT до DO от ~42 мс), apac — Сингапур/Гонконг/Токио, без подсказки —
      иногда Милан (провайдер уводит в Марсель). ?hint=… в ссылке — для повторных сравнений. */
   var hq=(new URLSearchParams(location.search)).get('hint')||'apac-se';
-  /* mode=srv — просьба, чтобы матч считал сервер; решает тот, кто открывает пустую комнату,
-     второй игрок узнаёт режим из hello (srv:1). Старый Worker её не знает — тогда матч по-старому, у хоста. */
-  var qs=[]; if(hq) qs.push('hint='+encodeURIComponent(hq)); if(TEST.srv) qs.push('mode=srv');
+  /* mode=srv — просьба, чтобы матч считал сервер (по умолчанию); решает тот, кто открывает пустую комнату,
+     второй игрок узнаёт режим из hello (srv:1). Старый Worker её не знает — тогда матч по-старому, у хоста.
+     mode=host — хост-схема: вручную (?net=host) или после того, как сервер не начал матч (NET.noSrv). */
+  var wantSrv=TEST.srv && !NET.noSrv;
+  var qs=[]; if(hq) qs.push('hint='+encodeURIComponent(hq)); qs.push(wantSrv?'mode=srv':'mode=host');
   try{ ws=new WebSocket(base+'/room/'+code+(qs.length?'?'+qs.join('&'):'')); }
   catch(e){ netStatus(T('badAddr')); return; }
   NET.ws=ws;
@@ -4252,7 +4257,7 @@ function netConnect(url, code, cb){
   },5000);
   ws.onopen=function(){ opened=true; netStatus(T('inRoom')+' '+code); };
   ws.onerror=function(){ netStatus(T('netErr')); };
-  ws.onclose=function(){ if(NET.on) netStatus(T('lost')); };
+  ws.onclose=function(){ if(NET.ws===ws && NET.on) netStatus(T('lost')); };
   ws.onmessage=function(ev){
     var m; try{ m=JSON.parse(ev.data); }catch(e){ return; }
     /* сетевая диагностика (фаза 3.0): ответы Durable Object и пинг соперника через релей */
@@ -4263,6 +4268,13 @@ function netConnect(url, code, cb){
     if(m.t==='png'||m.t==='dg') return;              /* старый Worker переслал бы их сопернику */
     if(m.t==='hello' && m.diag){ NDG={pings:[],opp:[],n:0,diag:null,stOff:null}; ndgDiag(m.diag); }
     if(m.t==='hello'){
+      /* после отказа сервера комната должна открыться заново в хост-схеме; она ещё серверная, пока из неё
+         не вышел второй — выходим и пробуем ещё раз */
+      if(NET.noSrv && m.srv && (NET.fbTry=(NET.fbTry||0)+1)<=6){
+        NET.ws=null; try{ ws.close(); }catch(e){}
+        setTimeout(function(){ if(!NET.ws) netConnect(url, code, cb); }, 700);
+        return;
+      }
       NET.role=m.role; NET.on=true; NET.srv=!!m.srv;
       HUMAN = (m.role==='host')?0:1;
       NET.peer = m.n>1;
@@ -4270,12 +4282,15 @@ function netConnect(url, code, cb){
       if(cb) cb();
     }
     else if(m.t==='full'){ NET.on=false; netStatus(T('roomFull')); }
+    else if(m.t==='fb'){ netSrvFallback(m.k, true); }
     else if(m.t==='peer'){
       NET.peer = m.n>1;
       netStatus(NET.peer?T('peerIn'):T('waiting'));
+      netFbStart();
       if(!NET.peer && state!=='menu'){ flash(T('peerOut'),'',2.2); }
     }
     else if(m.t==='cfg' && netFollow()){
+      clearTimeout(NET.srvT);
       /* матч начал другой, а модели ещё качаются: играем, экран загрузки — пока их нет */
       if(!PLAYERS.done && !PLAYERS.failed){ loadingShow(true); playersReady(function(){ loadingShow(false); }); }
       TEAM[0]=CLUBS[m.a]; TEAM[1]=CLUBS[m.b];
@@ -4298,6 +4313,32 @@ function netConnect(url, code, cb){
 }
 function netSend(o){
   if(NET.ws && NET.ws.readyState===1){ try{ NET.ws.send(JSON.stringify(o)); }catch(e){} }
+}
+/* Серверный режим, запасной выход: хост отправил cfg, а сервер матч не начал (cfg обратно не пришёл за 4 с).
+   Оба выходят из комнаты и входят заново уже в хост-схему (mode=host; режим пустой комнаты задаёт первый
+   вошедший), матч начинает тот, кто оказался хостом. kind: 'go' — старт из меню, 'again' — реванш. */
+var SRV_START_MS=4000;
+function netSrvWatch(kind){
+  clearTimeout(NET.srvT);
+  NET.srvT=setTimeout(function(){ if(NET.on && NET.srv) netSrvFallback(kind, false); }, SRV_START_MS);
+}
+function netSrvFallback(kind, fromPeer){
+  if(NET.noSrv) return;
+  clearTimeout(NET.srvT);
+  if(!fromPeer) netSend({t:'fb',k:kind});          /* сопернику (релей пересылает всё, чего не знает) */
+  NET.noSrv=true; NET.fbTry=0; NET.fbKind=(kind==='again')?'again':'go';
+  var url=NET.url, code=NET.code, old=NET.ws;
+  NET.ws=null; NET.on=false; NET.peer=false;
+  try{ if(old) old.close(); }catch(e){}
+  netStatus(T('srvDown'));
+  /* кто заметил — входит первым и становится хостом; второй — чуть позже */
+  setTimeout(function(){ if(!NET.ws) netConnect(url, code, netFbStart); }, fromPeer?1500:500);
+}
+function netFbStart(){
+  if(!NET.fbKind || !NET.on || NET.srv || NET.role!=='host' || !NET.peer) return;
+  var k=NET.fbKind; NET.fbKind=null;
+  if(k==='again' && state!=='menu') startMatchAgain();
+  else document.getElementById('go').click();
 }
 
 /* --- хост: снимок состояния --- */
@@ -4966,9 +5007,9 @@ function shareLink(code){
      режима бота, в отличие от switchInlineQuery). Вне Telegram (тест в
      обычном браузере) — прежнее поведение: прямая веб-ссылка в буфер. */
   /* в отладке приглашение тоже с отладкой, чтобы панель сети была у обоих */
-  /* серверный режим — тоже в приглашении (комнату и так ведёт сервер, но у друга будет та же пометка) */
-  var deepLink='https://t.me/bvr_games_bot/hockeytg?startapp='+(NET.srv?'srv_':'')+(TEST.debug?'dbg_':'')+code;
-  var webLink=location.origin+location.pathname+'?room='+code+'&srv='+encodeURIComponent(srvEl.value.trim())+(NET.srv?'&net=server':'');
+  /* режим комнаты друг узнает от сервера; пометка хост-схемы нужна, только если её выбрали вручную */
+  var deepLink='https://t.me/bvr_games_bot/hockeytg?startapp='+(TEST.srv?'':'host_')+(TEST.debug?'dbg_':'')+code;
+  var webLink=location.origin+location.pathname+'?room='+code+'&srv='+encodeURIComponent(srvEl.value.trim())+(TEST.srv?'':'&net=host');
   var shown=TG?deepLink:webLink;
   document.getElementById('netlink').textContent=T('linkFriend')+' '+shown;
   if(TG && TG.openTelegramLink){
@@ -5024,7 +5065,7 @@ document.getElementById('bJoin').addEventListener('click',function(){
   });
   var _tg=_tgl;
   if(!room && _tg && _tg.initDataUnsafe && _tg.initDataUnsafe.start_param){
-    /* dbg_ / srv_ — отладка и серверный режим (см. TEST выше); код комнаты — после префиксов */
+    /* dbg_ / host_ — отладка и хост-схема (см. TEST выше); код комнаты — после префиксов */
     var sp=TEST.startParam(_tg.initDataUnsafe.start_param).room;
     if(/^[A-Za-z0-9_-]{2,16}$/.test(sp)) room=sp;
   }
@@ -5050,7 +5091,7 @@ document.getElementById('go').addEventListener('click',function(){
     if(!NET.on || NET.role!=='host' || !NET.peer) return;
     netSend({t:'cfg',a:selMy,b:selOp,min:MODES[selMode].m,id:mid});
     /* серверный режим: матч начнёт сервер — его cfg придёт обоим, как гостю */
-    if(NET.srv) return;
+    if(NET.srv){ netSrvWatch('go'); return; }
   } else { NET.on=false; HUMAN=TEST.side; }
   TEAM[0]=CLUBS[selMy]; TEAM[1]=CLUBS[selOp];
   buildTeamMeshes();
@@ -5077,7 +5118,7 @@ function startMatchAgain(){
   if(NET.on && NET.role==='host'){
     if(!NET.peer) return;
     netSend({t:'cfg',a:MATCH.clubs[0],b:MATCH.clubs[1],min:MATCH_MIN,id:mid});
-    if(NET.srv) return;              /* серверный режим: реванш начнёт сервер (cfg придёт обоим) */
+    if(NET.srv){ netSrvWatch('again'); return; }   /* серверный режим: реванш начнёт сервер (cfg придёт обоим) */
   }
   hideResult(); setPaused(false);
   score[0]=0; score[1]=0; clock=MATCH_MIN*60; pen.length=0;

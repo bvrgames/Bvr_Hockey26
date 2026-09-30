@@ -7,6 +7,8 @@
 // so RTT to the server = 2 × lag; per-player links via startRelay(port, { per: [{lag,jitter,loss}, {…}] }).
 // WebSocket runs over TCP, so a "lost" packet is not dropped: it arrives after a retransmission (+RTO) and everything
 // sent after it waits behind it and then arrives in a burst — exactly how packet loss looks to a WebSocket game.
+// Fallback tests: startRelay(port, { noSrv: true }) — an old Worker that does not know ?mode=srv (always relays);
+// { deadSrv: true } — a server-mode room whose match never starts (cfg is swallowed).
 // usage: node tools/relay-mock.mjs [port=8787] [--lag 40 --jitter 15 --loss 1]
 //        import { startRelay } from './relay-mock.mjs'; startRelay(port, { lag, jitter, loss, per }) → wss (+ wss.stats)
 import { WebSocketServer } from 'ws';
@@ -49,7 +51,7 @@ export function startRelay(port = 8787, net = {}) {
     else { ws.send(JSON.stringify({ t: 'full' })); ws.close(1000, 'room full'); return; }
     const si = slot === 'host' ? 0 : 1, up = {};   // `up` — key for this player's uplink order
     if (!r.host && !r.guest) {
-      r.srv = q.get('mode') === 'srv';
+      r.srv = !net.noSrv && q.get('mode') === 'srv';
       if (r.timer) { clearInterval(r.timer); r.timer = null; }
       r.match = r.srv ? new MatchRoom((s, txt) => { const to = s === 0 ? r.host : r.guest; if (to) deliver(to, txt, false, linkOf(s)); }) : null;
     }
@@ -76,6 +78,7 @@ export function startRelay(port = 8787, net = {}) {
         later(up, linkOf(si), () => {
           let msg = null; try { msg = JSON.parse(txt); } catch {}
           if (r[slot] !== ws || !r.match) return;
+          if (net.deadSrv && msg && msg.t === 'cfg') return;
           if (r.match.onMessage(si, msg) && msg.t === 'cfg' && !r.timer) {
             r.timer = setInterval(() => { if (!r.match || !r.match.tick() || (!r.host && !r.guest)) { clearInterval(r.timer); r.timer = null; } }, 1000 / SIM_HZ);
           }

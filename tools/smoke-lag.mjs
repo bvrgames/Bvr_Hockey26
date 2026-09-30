@@ -11,7 +11,7 @@
 // server: RTT and jitter (standard deviation of the RTT, like "jit" in the ?debug panel), 1 % loss bursts.
 //   · host scheme: the match runs on the host's phone, the guest's path to it is guest → server → host, so the relay
 //     gets the sum of both links (RTT_h + RTT_g, jitter of both); the host itself plays with zero delay;
-//   · server scheme (?net=server): the match runs in relay-mock's MatchRoom (= the Durable Object's code), each player
+//   · server scheme (the default; the host scheme is asked with &net=host): the match runs in relay-mock's MatchRoom (= the Durable Object's code), each player
 //     over their own link. "(host)" values are the host's own — in this scheme they are networked too.
 //   Scenarios A: host 140 ms / jit 55, guest 80 / jit 80 (the RZYT phone test); B: both 140 / jit 80.
 // --rtt 0,80,150,250 — the old host-scheme sweep (one relay hop, jitter 10 %).
@@ -149,7 +149,7 @@ for (const run of RUNS) {
   const { rtt, net, mode } = run;
   const relay = await startRelay(rport, net);
   const room = 'LAG' + Math.floor(Math.random() * 1e5);
-  const url = `http://127.0.0.1:${port}/index.html?room=${room}&srv=http://127.0.0.1:${rport}&seed=3${mode === 'server' ? '&net=server' : ''}`;
+  const url = `http://127.0.0.1:${port}/index.html?room=${room}&srv=http://127.0.0.1:${rport}&seed=3${mode === 'server' ? '' : '&net=host'}`;
   const sides = {};
   const R = { label: run.label, mode, rtt, net, scen: run.scen, errors: [] };
   // test set-ups change the authoritative match: the host's page in the host scheme, relay-mock's simulation (same

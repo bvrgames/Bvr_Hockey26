@@ -1,6 +1,9 @@
 // Online smoke: host + guest in two headless browsers through tools/relay-mock.mjs (same protocol as server/worker.js).
 // Checks that bus events reach the guest (snapshot field `e`), that the guest's match statistics — built only from those
 // events — equal the host's, that match:end / match:summary arrive on both sides, and that neither page logs an error.
+// The server scheme is the default (phase 3.5), so this pair asks for the host scheme by hand (&net=host). Then two
+// short fallback runs with a plain link: an old Worker that does not know server mode, and a server-mode room that
+// never starts the match — both must end up playing in the host scheme by themselves.
 // usage: node tools/smoke-online.mjs [--browser chromium|webkit] [--real 15] [--headed]
 import { startServer } from './serve.mjs';
 import { startRelay } from './relay-mock.mjs';
@@ -12,13 +15,43 @@ const name = opt('browser', 'chromium');
 const REAL = +opt('real', 15);
 const port = +opt('port', 8493), rport = +opt('relay', 8794);
 const room = 'SMK' + Math.floor(Math.random() * 1e5);
-const url = `http://127.0.0.1:${port}/index.html?room=${room}&srv=http://127.0.0.1:${rport}&seed=5`;
+const url = `http://127.0.0.1:${port}/index.html?room=${room}&srv=http://127.0.0.1:${rport}&seed=5&net=host`;
 
 const srv = await startServer(port);
 const relay = await startRelay(rport);
 const fails = [];
 const sides = [];
 const snap = (g) => g.page.evaluate('({s:__hk.snap(), st:__hk.stats(), m:__hk.match(), net:{role:__hk.net().role, seen:__hk.net().evSeen||0}})');
+
+// plain link (no &net=…): the game asks for server mode; the match must still start, in the host scheme
+async function fallback(label, relayOpt, srvAtFirst) {
+  const rp = rport + 1, code = 'FBK' + Math.floor(Math.random() * 1e5);
+  const u = `http://127.0.0.1:${port}/index.html?room=${code}&srv=http://127.0.0.1:${rp}&seed=5`;
+  const r2 = await startRelay(rp, relayOpt), pair = [];
+  try {
+    for (const who of ['first', 'second']) {
+      const g = await openGame(name, { headed: args.includes('--headed') }); pair.push([who, g]); sides.push([`${label} ${who}`, g]);
+      await g.page.goto(u, { waitUntil: 'load', timeout: 120000 });
+      await g.page.waitForFunction('window.__hk && !!__hk.net().role', null, { timeout: 30000 });
+    }
+    const [a, b] = [pair[0][1], pair[1][1]];
+    await a.page.waitForFunction('__hk.net().peer', null, { timeout: 10000 });
+    for (const [who, g] of pair) if ((await g.page.evaluate('!!__hk.net().srv')) !== srvAtFirst) fails.push(`${label}: ${who} srv flag is not ${srvAtFirst} before the start`);
+    await a.page.evaluate('__hk.start()');
+    for (const [who, g] of pair) await g.page.waitForFunction('__hk.st()!=="menu" && __hk.net().on && !__hk.net().srv', null, { timeout: 20000 })
+      .catch(() => fails.push(`${label}: ${who} is not in a host-scheme match 20 s after the start`));
+    await a.page.waitForTimeout(2000);
+    const M = []; for (const [, g] of pair) M.push(await g.page.evaluate('({m:__hk.match(), role:__hk.net().role, clk:__hk.snap().clock})'));
+    if (M[0].m.id !== M[1].m.id || !M[0].m.id) fails.push(`${label}: match ids ${M[0].m.id} / ${M[1].m.id}`);
+    if (M.some((x) => x.m.net !== 'host')) fails.push(`${label}: match net ${M.map((x) => x.m.net)}`);
+    if (M.map((x) => x.role).sort().join() !== 'guest,host') fails.push(`${label}: roles ${M.map((x) => x.role)}`);
+    console.log(`  fallback (${label}): host-scheme match on both sides, roles ${M.map((x) => x.role).join(' / ')}`);
+    for (const [who, g] of pair) {
+      for (const e of g.logs.filter(isError)) fails.push(`${label} ${who} [${e.type}] ${e.text}`);
+      for (const e of await g.page.evaluate('__hk.errors()')) fails.push(`${label} ${who} [window] ${e}`);
+    }
+  } finally { r2.close(); }
+}
 
 try {
   const host = await openGame(name, { headed: args.includes('--headed') }); sides.push(['host', host]);
@@ -84,6 +117,8 @@ try {
     for (const e of g.logs.filter(isError)) fails.push(`${who} [${e.type}] ${e.text}`);
     for (const e of await g.page.evaluate('__hk.errors()')) fails.push(`${who} [window] ${e}`);
   }
+  await fallback('old Worker', { noSrv: true }, false);
+  await fallback('silent server', { deadSrv: true }, true);
 } catch (e) {
   fails.push('runner error: ' + e.message.split('\n')[0]);
 } finally {

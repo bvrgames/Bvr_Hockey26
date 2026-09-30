@@ -1,5 +1,5 @@
 // Server-mode smoke (phase 3.2): the match runs on the server, both players are followers (snapshots + prediction).
-// Two headless browsers join one room with &net=server against
+// Two headless browsers join one room with a plain link (server mode is the default since phase 3.5) against
 //   · --target wrangler (default): `wrangler dev` on server/ — the real Worker + Durable Object in local workerd;
 //   · --target mock: tools/relay-mock.mjs, which runs the same server/room-sim.js in Node.
 // Checks: the room really is in server mode on both sides, the host does not simulate (it follows snapshots), bus
@@ -18,7 +18,7 @@ const name = opt('browser', 'chromium'), TARGET = opt('target', 'wrangler');
 const REAL = +opt('real', 15);
 const port = +opt('port', 8504), rport = +opt('relay', 8797);
 const room = 'SRV' + Math.floor(Math.random() * 1e5);
-const url = `http://127.0.0.1:${port}/index.html?room=${room}&srv=http://127.0.0.1:${rport}&net=server&seed=5`;
+const url = `http://127.0.0.1:${port}/index.html?room=${room}&srv=http://127.0.0.1:${rport}&seed=5`;
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const srv = await startServer(port);
@@ -31,8 +31,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     await host.page.goto(url, { waitUntil: 'load', timeout: 120000 });
     await host.page.waitForFunction('window.__hk && __hk.net().role==="host"', null, { timeout: 30000 });
     const guest = await openGame(name, { headed: args.includes('--headed') }); sides.push(['guest', guest]);
-    // the guest joins with a plain link: the room's mode comes from the server (hello srv:1)
-    await guest.page.goto(url.replace('&net=server', ''), { waitUntil: 'load', timeout: 120000 });
+    // the guest asks for the host scheme, but the room's mode comes from the server (hello srv:1)
+    await guest.page.goto(url + '&net=host', { waitUntil: 'load', timeout: 120000 });
     await guest.page.waitForFunction('window.__hk && __hk.net().role==="guest"', null, { timeout: 30000 });
     await host.page.waitForFunction('__hk.net().peer', null, { timeout: 10000 });
     for (const [who, g] of sides) if (!(await g.page.evaluate('!!__hk.net().srv'))) fails.push(`${who}: room is not in server mode (old Worker?)`);
