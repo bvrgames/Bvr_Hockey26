@@ -9,3 +9,6 @@ test_skate_slide.js
 node_modules/
 shots/
 server/.wrangler/
+
+# служебные файлы macOS
+.DS_Store
