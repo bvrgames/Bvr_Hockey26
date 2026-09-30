@@ -1,6 +1,7 @@
 // Graphics quality (phase E): start-up choice by device, dynamic resolution before preset changes, the player's
 // manual choice survives a reload and is not overridden, #q in the link wins and is not saved. Prints the decisions of
-// the device auto-choice on typical devices.
+// the device auto-choice on typical devices. Last step — in real time: a match on HIGH with AUTO where the high preset
+// costs +20 ms a frame (a weak phone GPU, ~45 fps); the real frame clock must bring it down to MEDIUM in about 10 s.
 // usage: node tools/smoke-quality.mjs [--browser chromium|webkit]
 import { startServer } from './serve.mjs';
 import { openGame, isError } from './browser.mjs';
@@ -99,6 +100,31 @@ try {
     const gq = await page.evaluate((d) => __hk.qGuessFor(d), d);
     console.log(`  ${n.padEnd(38)} → ${names[gq.level].padEnd(6)} ${gq.reason}`);
   }
+
+  // 7. real time, real frame clock (RT.ms → qualityTick): a weak GPU that cannot hold 55 fps on HIGH at any resolution
+  await page.addInitScript(`(function(){ var r=window.requestAnimationFrame.bind(window);
+    window.requestAnimationFrame=function(cb){ return r(function(t){ var b=(window.__hk && __hk.qInfo().level===2)?20:0, s=performance.now();
+      while(performance.now()-s<b){} cb(t); }); }; })()`);
+  await load('?autostart=600&autopilot');
+  await page.waitForFunction('__hk.st()!=="menu"');
+  await page.evaluate('__hk.q(2,true); __hk.qReset()');
+  const t0 = Date.now(), line = []; let prev = '', tDown = 0, fpsHigh = 0;
+  while (Date.now() - t0 < 26000) {
+    const s = await page.evaluate('(function(){var q=__hk.qInfo();return {l:q.level,d:q.dyn,f:Math.round(q.fps)}})()');
+    const t = (Date.now() - t0) / 1000;
+    if (s.l === 2 && t > 2) fpsHigh = s.f;
+    if (s.l + '/' + s.d !== prev) { prev = s.l + '/' + s.d; line.push(`${t.toFixed(1)} s q${s.l}×${s.d}`); }
+    if (s.l < 2 && !tDown) tDown = t;
+    await page.waitForTimeout(100);
+  }
+  q = await Q();
+  console.log(`\nreal time, HIGH at ~${fpsHigh} fps with AUTO: ${line.join(' → ')}`);
+  ok(fpsHigh > 0 && fpsHigh < 55, `the slow-HIGH model did not slow the game down (fps ${fpsHigh})`);
+  ok(tDown > 0, 'AUTO never left HIGH in 26 s at under 55 fps');
+  ok(!tDown || (tDown > 5 && tDown < 13), `HIGH → MEDIUM took ${tDown.toFixed(1)} s (expected about 9–10: 2 s warm-up, 4 resolution steps, 3 s under 55 fps)`);
+  ok(q.level === 1 && q.fps > 55, `after the drop: expected MEDIUM at full speed, got level ${q.level}, ${q.fps} fps`);
+  console.log(`  HIGH → MEDIUM after ${tDown.toFixed(1)} s; then ${q.fps} fps on MEDIUM, resolution ×${q.dyn}`);
+
   for (const e of g.logs.filter(isError)) fails.push(`[${e.type}] ${e.text}`);
   for (const e of await page.evaluate('__hk.errors()')) fails.push(`[window] ${e}`);
 } catch (e) {
