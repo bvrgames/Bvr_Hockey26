@@ -104,6 +104,13 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     if (!/переподключается|reconnecting|menyambung/.test(hb)) fails.push(`5 s drop: host banner "${hb}"`);
     if (!/переподключение|reconnecting|menyambung/.test(gb)) fails.push(`5 s drop: guest banner "${gb}" ` + await guest.page.evaluate('(function(){var e=document.getElementById("netban"),n=__hk.net();return JSON.stringify({rc:!!n.rc,on:n.on,tok:!!n.tok,txt:e.textContent,op:e.style.opacity,cs:getComputedStyle(e).opacity,st:__hk.st(),status:n.status})})()'));
     const clk0 = await host.page.evaluate('__hk.snap().clock');
+    // a stranger with the same room code must not get the dropped guest's slot: it is kept for the key holder
+    const stranger = await openGame(name, { headed: args.includes('--headed') }); sides.push(['stranger', stranger]);
+    await stranger.page.goto(url, { waitUntil: 'load', timeout: 120000 });
+    await stranger.page.waitForFunction('window.__hk && /занята|full|penuh/.test(__hk.net().status)', null, { timeout: 4000 })
+      .catch(async () => fails.push('5 s drop: a stranger was not refused: ' + await stranger.page.evaluate('JSON.stringify({role:__hk.net().role,on:__hk.net().on,status:__hk.net().status,st:__hk.st()})')));
+    if (await stranger.page.evaluate('__hk.st()') !== 'menu') fails.push('5 s drop: the stranger got into the match');
+    await stranger.browser.close(); sides.pop();
     await guest.page.waitForFunction('!__hk.net().rc && __hk.net().ws && __hk.net().ws.readyState===1', null, { timeout: 15000 }).catch(() => fails.push('5 s drop: the guest did not reconnect in 15 s'));
     const tBack = ((Date.now() - tDrop) / 1000).toFixed(1);
     // the away bit clears only when the guest's input reaches the server again
@@ -116,7 +123,19 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     if (Math.abs(A.s.clock - B.s.clock) > 1.5) fails.push(`5 s drop: clocks differ after the return: host ${A.s.clock} guest ${B.s.clock}`);
     if (!(A.s.clock < clk0)) fails.push(`5 s drop: the match stood still while the guest was away (${clk0} → ${A.s.clock})`);
     if (A.s.score.join() !== B.s.score.join()) fails.push(`5 s drop: score host ${A.s.score} guest ${B.s.score}`);
-    console.log(`  5 s drop: guest back after ${tBack} s, same match, clock host ${A.s.clock} / guest ${B.s.clock}`);
+    console.log(`  5 s drop: stranger refused, guest back after ${tBack} s, same match, clock host ${A.s.clock} / guest ${B.s.clock}`);
+
+    // the app was closed and opened again: a new page takes the slot back with the key from sessionStorage
+    await guest.page.evaluate('clearInterval(window.__smk)');
+    await guest.page.reload({ waitUntil: 'load', timeout: 120000 });
+    await guest.page.waitForFunction(`window.__hk && __hk.net().role==="guest" && __hk.st()!=="menu" && __hk.match().id==="${DID}"`, null, { timeout: 30000 })
+      .catch(async () => fails.push('reload: the guest did not return into the match with the stored key: ' + await guest.page.evaluate('JSON.stringify({role:__hk.net().role,status:__hk.net().status,st:__hk.st(),id:__hk.match().id})')));
+    await guest.page.evaluate(BOT);
+    await host.page.waitForFunction('(__hk.net().w&2)===0', null, { timeout: 6000 }).catch(() => fails.push('reload: the guest is still away for the server (its input does not count)'));
+    await host.page.waitForTimeout(1500);
+    const A2 = await snap(host), B2 = await snap(guest);
+    if (Math.abs(A2.s.clock - B2.s.clock) > 1.5 || A2.s.score.join() !== B2.s.score.join()) fails.push(`reload: host ${A2.s.clock} ${A2.s.score} / guest ${B2.s.clock} ${B2.s.score}`);
+    else console.log(`  reload: guest page reopened, back in the match with the key from sessionStorage, clock ${A2.s.clock} / ${B2.s.clock}`);
 
     const tDrop2 = Date.now();
     await guest.page.evaluate('__hk.netDrop(40)');

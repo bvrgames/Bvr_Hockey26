@@ -48,12 +48,14 @@ export function startRelay(port = 8787, net = {}) {
     rooms.set(code, r);
     // reconnect with ?re=<role>&tok=<tok>: the same slot back, like server/worker.js
     const re = q.get('re'), back = (re === 'host' || re === 'guest') && !!r.tok[re] && q.get('tok') === r.tok[re] ? re : null;
+    // a running server match keeps the slot of a player who dropped: without the key — "full"
+    const reserved = (k) => !!(r.srv && r.match && r.match.running && r.tok[k]);
     let slot;
-    if (back) slot = back; else if (!r.host) slot = 'host'; else if (!r.guest) slot = 'guest';
+    if (back) slot = back; else if (!r.host && !reserved('host')) slot = 'host'; else if (!r.guest && !reserved('guest')) slot = 'guest';
     else { ws.send(JSON.stringify({ t: 'full' })); ws.close(1000, 'room full'); return; }
     const si = slot === 'host' ? 0 : 1, up = {};   // `up` — key for this player's uplink order
     const tick = () => { if (!r.timer) r.timer = setInterval(() => { if (!r.match || !r.match.tick()) { clearInterval(r.timer); r.timer = null; } }, 1000 / SIM_HZ); };
-    if (!r.host && !r.guest && !(back && r.match && r.match.running)) {
+    if (!r.host && !r.guest && !(r.match && r.match.running)) {
       r.srv = !net.noSrv && q.get('mode') === 'srv';
       r.tok = { host: null, guest: null };
       if (r.timer) { clearInterval(r.timer); r.timer = null; }
@@ -67,7 +69,7 @@ export function startRelay(port = 8787, net = {}) {
       mode: r.srv ? 'server' : 'relay', conns: ['host', 'guest'].filter((k) => r[k]).map((k) => ({ slot: k, colo: 'LOCAL', country: 'XX' })) });
     ws.send(JSON.stringify({ t: 'hello', role: slot, n: count(r), diag: diag(), srv: r.srv ? 1 : 0, tok: r.tok[slot], run: r.match && r.match.running ? 1 : 0 }));
     peers(r);
-    if (r.match) { r.match.join(si, !back); if (r.match.running) tick(); }
+    if (r.match) { r.match.join(si, !back || q.get('fresh') === '1'); if (r.match.running) tick(); }
     ws.on('message', (data, isBinary) => {
       const txt = data.toString();
       // diagnostics are answered by the relay itself, like server/worker.js (with the emulated one-way lag both ways)

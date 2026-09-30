@@ -4260,7 +4260,10 @@ function netConnect(url, code, cb, re){
      mode=host — хост-схема: вручную (?net=host) или после того, как сервер не начал матч (NET.noSrv). */
   var wantSrv=TEST.srv && !NET.noSrv;
   var qs=[]; if(hq) qs.push('hint='+encodeURIComponent(hq)); qs.push(wantSrv?'mode=srv':'mode=host');
-  if(re) qs.push('re='+NET.role, 'tok='+encodeURIComponent(NET.tok));
+  /* ключ слота: после обрыва — из памяти; новая страница (приложение закрыли и открыли) — из sessionStorage */
+  var sk=re ? {role:NET.role, tok:NET.tok} : slotKeyLoad(code);
+  if(sk) qs.push('re='+sk.role, 'tok='+encodeURIComponent(sk.tok));
+  if(sk && !re) qs.push('fresh=1');
   try{ ws=new WebSocket(base+'/room/'+code+(qs.length?'?'+qs.join('&'):'')); }
   catch(e){ netStatus(T('badAddr')); return; }
   NET.ws=ws;
@@ -4299,7 +4302,7 @@ function netConnect(url, code, cb, re){
       greeted=true;
       /* вернулись, а комната уже другая (сервер её забыл, матч кончился без нас) — возвращаться некуда */
       if(re && (m.role!==NET.role || !m.srv || (netInMatch() && !m.run))){ netGiveUp(); return; }
-      NET.tok=m.tok||null;
+      NET.tok=m.tok||null; slotKeySave(code, m.role, NET.tok);
       NET.role=m.role; NET.on=true; NET.srv=!!m.srv;
       HUMAN = (m.role==='host')?0:1;
       NET.peer = m.n>1;
@@ -4351,6 +4354,17 @@ function netSend(o){
    Не вернулся за 30 с: у него — «связь потеряна» и меню, итог с result:'left'; у соперника матч
    доигрывается против ИИ до конца. В match:summary у обоих — поле disconnect. */
 var RC_LIMIT_MS=30000, RC_STALL_MS=3000;
+/* Секретный ключ слота (hello.tok): только с ним сервер пускает обратно на слот отключившегося в идущем матче.
+   В памяти (NET.tok) и в sessionStorage по коду комнаты — переживает перезагрузку страницы. Если приложение
+   закрыли совсем и хранилище пусто, ключа нет: позже сервер будет узнавать игрока по Telegram user id из
+   проверенного initData (PHASE3, раздел про обрывы). */
+function slotKeyLoad(code){
+  try{ var v=(sessionStorage.getItem('bvr_slot_'+code)||'').split(':');
+       return ((v[0]==='host'||v[0]==='guest') && v[1]) ? {role:v[0], tok:v[1]} : null; }catch(e){ return null; }
+}
+function slotKeySave(code, role, tok){
+  try{ if(tok) sessionStorage.setItem('bvr_slot_'+code, role+':'+tok); else sessionStorage.removeItem('bvr_slot_'+code); }catch(e){}
+}
 function netInMatch(){ return state!=='menu' && state!=='over'; }
 function netCanRejoin(){ return NET.on && NET.srv && !!NET.tok; }
 function netLost(){
@@ -4381,7 +4395,7 @@ function netGiveUp(){
   if(NET.rc){ clearTimeout(NET.rc.timer); NET.rc=null; }
   var w=NET.ws; NET.ws=null; try{ if(w) w.close(); }catch(e){}
   var inM=netInMatch();
-  NET.on=false; NET.peer=false; NET.role=null; NET.tok=null;
+  NET.on=false; NET.peer=false; NET.role=null; NET.tok=null; slotKeySave(NET.code, null, null);
   if(inM){
     if(NET.dc) NET.dc.selfLeft=true;
     if(!MATCH.summary){ MATCH.summary=buildSummary(score); EV.emit('match:summary', MATCH.summary); }

@@ -97,6 +97,9 @@ try {
   // closed socket: away at once; the right key returns into the same slot
   clearInterval(ivG); G.ws.close(); await wait(500);
   ok(wOf(H) === 2, `guest socket closed: w=${wOf(H)}`);
+  // the dropped guest's slot is reserved while the match runs: a stranger with the room code gets "full"
+  const Y = await player('?mode=srv'); await wait(300);
+  ok(Y.full && !Y.hello, `a stranger must not take the dropped guest's slot: ${JSON.stringify(Y.hello && Y.hello.role)}`);
   const G2 = await player(`?mode=srv&re=guest&tok=${G.hello.tok}`); await wait(500);
   ok(G2.hello && G2.hello.role === 'guest' && G2.hello.run === 1 && G2.hello.tok === G.hello.tok, `returning guest hello ${JSON.stringify(G2.hello)}`);
   ok(G2.cfg.length === 1 && G2.cfg[0].id === 'aaaabbbbccccddddeeeeffff', `returning guest must get the running cfg: ${JSON.stringify(G2.cfg)}`);
@@ -107,11 +110,13 @@ try {
   clearInterval(ivH); clearInterval(ivG);
   const clkA = H.snaps[H.snaps.length - 1].m.d[5];
   H.ws.close(); G2.ws.close(); await wait(3000);
+  const Z = await player('?mode=srv'); await wait(300);
+  ok(Z.full && !Z.hello, `a stranger must not take over an empty room with a running match: ${JSON.stringify(Z.hello && Z.hello.role)}`);
   const H2 = await player(`?mode=srv&re=host&tok=${H.hello.tok}`); await wait(600);
   ok(H2.hello && H2.hello.role === 'host' && H2.hello.run === 1, `host returns to the empty room: ${JSON.stringify(H2.hello)}`);
   ok(H2.cfg.length === 1 && H2.cfg[0].id === 'aaaabbbbccccddddeeeeffff' && H2.snaps.length > 5, `host returns: cfg ${H2.cfg.length}, snapshots ${H2.snaps.length}`);
   if (H2.snaps.length) ok(wOf(H2) === 3 && H2.snaps[H2.snaps.length - 1].m.d[5] < clkA, `empty room: w=${wOf(H2)}, clock ${clkA} → ${H2.snaps[H2.snaps.length - 1].m.d[5]}`);
-  console.log(`[${TARGET}] lost players: wrong key / silent / closed / return / empty room checked`);
+  console.log(`[${TARGET}] lost players: wrong key / silent / closed / stranger / return / empty room checked`);
   H2.ws.close();
 } catch (e) {
   fails.push('runner error: ' + e.message.split('\n').slice(0, 8).join('\n'));

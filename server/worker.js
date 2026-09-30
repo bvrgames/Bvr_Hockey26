@@ -13,8 +13,11 @@
  *
  *   server -> client:
  *     {t:'hello', role:'host'|'guest', n:<peerCount 1|2>, diag, srv, tok, run}   sent once, right after connect
- *                        tok — this player's key to the slot; reconnecting with ?re=<role>&tok=<tok> gives the same
- *                        slot back (and replaces a socket the server still thinks is alive); run — a server match is on
+ *                        tok — this player's secret key to the slot; reconnecting with ?re=<role>&tok=<tok> gives the
+ *                        same slot back (and replaces a socket the server still thinks is alive); &fresh=1 — a new page
+ *                        (key from sessionStorage), its input counters start again; run — a server match is on.
+ *                        While a server match runs, the slot of a player who dropped is reserved: without the key
+ *                        the answer is {t:'full'}
  *     {t:'full'}                                            room already has host+guest
  *     {t:'peer', n:<peerCount 0|1|2>}                        peer count changed (join/leave)
  *     {t:'cfg', a, b, min}     relayed verbatim, host -> guest (team picks + match length)
@@ -62,7 +65,21 @@ export class Room {
     this.srv = false;     // server mode: set by whoever opens the empty room
     this.match = null;    // MatchRoom while in server mode
     this.timer = null;
-    this.tok = { host: null, guest: null };   // slot keys for reconnecting
+    this.tok = { host: null, guest: null };   // secret slot keys (hello.tok) for reconnecting
+  }
+
+  // Which slot this request may take back. Today: the secret slot key from hello (?re=<role>&tok=<key>).
+  // Later (no key: the app was closed and sessionStorage is gone): the Telegram user id from verified initData —
+  // same HMAC check as the stats API; remember the id per slot next to the key and match it here.
+  claim(q) {
+    const re = q.get('re');
+    if ((re === 'host' || re === 'guest') && this.tok[re] && q.get('tok') === this.tok[re]) return re;
+    return null;
+  }
+
+  // a running server match keeps the slot of a player who dropped: only its owner may return
+  reserved(slot) {
+    return !!(this.srv && this.match && this.match.running && this.tok[slot]);
   }
 
   sendSlot(slot, txt) {
@@ -114,20 +131,20 @@ export class Room {
     server.accept();
     // the room's mode is chosen by whoever opens it empty (the second player follows the room)
     const q = new URL(request.url).searchParams;
-    const re = q.get('re'), back = (re === 'host' || re === 'guest') && !!this.tok[re] && q.get('tok') === this.tok[re] ? re : null;
-    // (a returning player keeps the running match even if the room is empty at the moment)
-    if (!this.host && !this.guest && !(back && this.match && this.match.running)) {
+    const back = this.claim(q);
+    // (a running match is kept even if the room is empty at the moment: its players may return)
+    if (!this.host && !this.guest && !(this.match && this.match.running)) {
       this.srv = q.get('mode') === 'srv';
       this.tok = { host: null, guest: null };
       if (this.timer) { clearInterval(this.timer); this.timer = null; }
       this.match = this.srv ? new MatchRoom((slot, txt) => this.sendSlot(slot, txt)) : null;
     }
-    this.handleSocket(server, { colo: request.headers.get('X-Edge-Colo') || '?', country: request.headers.get('X-Edge-Country') || '?' }, this.tok[back] ? back : null);
+    this.handleSocket(server, { colo: request.headers.get('X-Edge-Colo') || '?', country: request.headers.get('X-Edge-Country') || '?' }, this.claim(q), q.get('fresh') === '1');
 
     return new Response(null, { status: 101, webSocket: client });
   }
 
-  handleSocket(ws, where, back) {
+  handleSocket(ws, where, back, fresh) {
     let slot; // 'host' | 'guest'
 
     if (back) {
@@ -136,14 +153,14 @@ export class Room {
       const old = this[slot];
       this[slot] = { ws, ...where };
       if (old) { try { old.ws.close(1000, 'replaced'); } catch (e) {} }
-    } else if (!this.host) {
+    } else if (!this.host && !this.reserved('host')) {
       slot = 'host';
       this.host = { ws, ...where };
-    } else if (!this.guest) {
+    } else if (!this.guest && !this.reserved('guest')) {
       slot = 'guest';
       this.guest = { ws, ...where };
     } else {
-      // room already full
+      // room already full (or the free slot is kept for the player who dropped)
       try { ws.send(JSON.stringify({ t: 'full' })); } catch (e) {}
       try { ws.close(1000, 'room full'); } catch (e) {}
       return;
@@ -155,7 +172,7 @@ export class Room {
                                tok: this.tok[slot], run: this.match && this.match.running ? 1 : 0 }));
     } catch (e) {}
     this.broadcastPeerCount();
-    if (this.match) { this.match.join(slot === 'host' ? 0 : 1, !back); if (this.match.running) this.startTicking(); }
+    if (this.match) { this.match.join(slot === 'host' ? 0 : 1, !back || fresh); if (this.match.running) this.startTicking(); }
 
     ws.addEventListener('message', (event) => {
       const from = slot === 'host' ? this.host : this.guest;
