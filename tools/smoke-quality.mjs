@@ -39,13 +39,9 @@ try {
   r = await page.evaluate('__hk.qTickSim(52, 1)');
   ok(r.level === 1, `under 55 fps at min resolution for 3 s: preset should drop to 1, got ${JSON.stringify(r)}`);
   r = await page.evaluate('__hk.qTickSim(60, 60)');
-  ok(r.dyn === 1 && r.level === 1, `60 fps after the drop: resolution back to 1, level 2 banned for 2 min, got ${JSON.stringify(r)}`);
-  r = await page.evaluate('__hk.qTickSim(60, 200)');
-  ok(r.level === 2, `after the 2-minute ban level 2 may come back, got ${JSON.stringify(r)}`);
-  r = await page.evaluate('__hk.qTickSim(40, 16)');
-  ok(r.level === 1, `level 2 failing again → 1, got ${JSON.stringify(r)}`);
-  r = await page.evaluate('__hk.qTickSim(60, 600)');
-  ok(r.level === 1 && r.dyn === 1, `second failure: level 2 banned for the session, got ${JSON.stringify(r)}`);
+  ok(r.dyn === 1 && r.level === 1, `60 fps after the drop: resolution back to 1, level 2 stays banned, got ${JSON.stringify(r)}`);
+  r = await page.evaluate('__hk.qTickSim(60, 1200)');
+  ok(r.level === 1 && r.dyn === 1, `a level that failed once is banned for the session (10 minutes at 60 fps), got ${JSON.stringify(r)}`);
   r = await page.evaluate('__hk.qTickSim(56, 30)');
   ok(r.level === 1 && r.dyn === 1, `56 fps is inside the hysteresis band (55–58): nothing should change, got ${JSON.stringify(r)}`);
   r = await page.evaluate('__hk.qTickSim(30, 60)');
