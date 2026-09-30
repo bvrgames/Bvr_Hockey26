@@ -135,6 +135,68 @@ for (const S of SETUPS) {
     await g.browser.close();
   }
 }
+// ---------- the menu (docs/MENU_PLAN.md): every screen and the pause, landscape setups, RU / EN / ID.
+// Nothing under Telegram's buttons or outside the device safe area, texts fit their items, the screen content stays
+// above the footer (now playing + button hints) and the two columns do not overlap.
+const MENU_SCREENS = [['main'], ['mode'], ['prep'], ['friend'], ['settings'], ['rules', 0], ['rules', 1], ['pause']];
+for (const S of SETUPS.filter((x) => !x.name.startsWith('port'))) {
+  const g = await openGame(browserName, { w: S.w, h: S.h, mobile: true, tg: fakeTelegram({ fullscreen: true, safe: S.safe, content: S.content, lang: S.tgLang }) });
+  const { page } = g;
+  try {
+    await page.goto(`http://127.0.0.1:${port}/index.html?seed=4&nomusic`, { waitUntil: 'load', timeout: 120000 });
+    await page.waitForFunction('window.__hk && __hk.menuState && __hk.menuState().layer==="menu"', null, { timeout: 60000 });
+    await page.evaluate('document.fonts.ready');
+    for (const lang of LANGS) {
+      await page.evaluate(`__hk.lang('${lang}')`);
+      for (const [scr, key] of MENU_SCREENS) {
+        const tag = `menu ${S.name} ${lang} ${scr}${key !== undefined ? ' tab ' + key : ''}`;
+        if (scr === 'pause') {
+          await page.evaluate("__hk.menu('main'); __hk.start()");
+          await page.waitForFunction('__hk.st()==="face" || __hk.st()==="play"', null, { timeout: 60000 });
+          await page.waitForTimeout(200); await page.keyboard.press('Escape');
+        } else await page.evaluate(`__hk.menu('main'); ${scr === 'main' ? '' : `__hk.menu('${scr}'${key !== undefined ? ', ' + key : ''})`}`);
+        await page.waitForTimeout(150);
+        const r = await page.evaluate(({ sa, band, cw, rw, pause }) => {
+          const W = innerWidth, H = innerHeight, out = [];
+          const root = pause ? document.getElementById('pausescr') : document.getElementById('start');
+          const scr = root.querySelector('.mscr.cur'), foot = root.querySelector('.mfoot');
+          if (!scr) return ['no current screen'];
+          const vis = (e) => { const b = e.getBoundingClientRect(); return b.width > 0 && b.height > 0 && getComputedStyle(e).visibility !== 'hidden' ? b : null; };
+          const zones = [{ n: 'tg-close', x: sa.left || 0, y: sa.top || 0, w: cw, h: band }, { n: 'tg-right', x: W - (sa.right || 0) - rw, y: sa.top || 0, w: rw, h: band }];
+          const hit = (a, z) => a.left < z.x + z.w && z.x < a.right && a.top < z.y + z.h && z.y < a.bottom;
+          const name = (e) => (e.id ? '#' + e.id : '.' + [...e.classList].join('.')) + ' "' + e.textContent.trim().slice(0, 24) + '"';
+          const els = [...scr.querySelectorAll('.mi,.mrow,.mbtn,.mtc,.mtab,.mlang,.mtitle,.mbrand,.mpill,.mcard,.mroom,.mscore,.mtbl .tr,.mback')]
+            .concat(foot ? [...foot.querySelectorAll('.mnp,.mh')] : []);
+          const fb = foot && vis(foot);
+          for (const e of els) {
+            const b = vis(e); if (!b) continue;
+            for (const z of zones) if (hit(b, z)) out.push(`${name(e)} under ${z.n}`);
+            if (b.left < (sa.left || 0) - 0.5 || b.right > W - (sa.right || 0) + 0.5 || b.top < (sa.top || 0) - 0.5 || b.bottom > H - (sa.bottom || 0) + 0.5)
+              out.push(`${name(e)} outside the safe area ${Math.round(b.left)},${Math.round(b.top)} ${Math.round(b.width)}x${Math.round(b.height)}`);
+            if (e.scrollWidth > e.clientWidth + 1 && getComputedStyle(e).overflow !== 'visible') out.push(`${name(e)} text cut (${e.scrollWidth} > ${e.clientWidth})`);
+            if (fb && !foot.contains(e) && b.bottom > fb.top + 1 && b.right > fb.left && getComputedStyle(e).position !== 'absolute')
+              { const hs = [...foot.querySelectorAll('.mnp,.mh')].map(vis).filter(Boolean); if (hs.some((h) => hit(b, { x: h.left, y: h.top, w: h.width, h: h.height }))) out.push(`${name(e)} overlaps the footer`); }
+          }
+          // items of the left list must fit the left column
+          const L = scr.querySelector('.mleft'), R = scr.querySelector('.mright'), lb = L && vis(L), rb = R && vis(R);
+          if (lb) for (const e of L.querySelectorAll('.mi,.mrow')) { const b = vis(e); if (b && b.right > lb.right + 1) out.push(`${name(e)} wider than the left column`); }
+          if (lb && rb && !scr.classList.contains('wide')) for (const e of R.querySelectorAll('.mcard,.mroom,.mtbl,.mteams,.mlogo,.mscore')) { const b = vis(e); if (b && b.left < lb.right - 1 && b.right > lb.left && b.top < lb.bottom && b.bottom > lb.top) out.push(`${name(e)} overlaps the left column`); }
+          return out;
+        }, { sa: S.safe, band: S.content.top, cw: CLOSE_W[S.tgLang], rw: RIGHT_W, pause: scr === 'pause' });
+        for (const x of r) fails.push(`${tag}: ${x}`);
+        if (browserName === 'chromium' && lang === 'ru' && S.name === 'land') await page.screenshot({ path: `shots/ui/tg-menu-${scr}${key ? '-tab2' : ''}.png` });
+        if (scr === 'pause') { await page.keyboard.press('ArrowUp'); await page.keyboard.press('Enter'); await page.waitForTimeout(150); }
+      }
+    }
+    for (const e of g.logs.filter(isError)) fails.push(`menu ${S.name} [${e.type}] ${e.text}`);
+    for (const e of await page.evaluate('__hk.errors()')) fails.push(`menu ${S.name} [window] ${e}`);
+  } catch (e) {
+    fails.push(`menu ${S.name}: runner error: ${e.message.split('\n')[0]}`);
+  } finally {
+    await g.browser.close();
+  }
+}
+
 srv.close();
 if (fails.length) console.log('FAIL:\n  ' + fails.join('\n  '));
 console.log(fails.length ? `\nTG LAYOUT FAIL (${browserName})` : `TG LAYOUT OK (${browserName}) — screenshots in shots/ui/tg-*.png`);

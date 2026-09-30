@@ -1,6 +1,8 @@
 // Menu screenshots for the menu redesign (docs/MENU_PLAN.md), in a fake Telegram (safe areas as in smoke-tg.mjs):
 //   node tools/menu-shots.mjs before   — the game's current menu and pause → shots/menu/before-<screen>-<orient>.png
 //   node tools/menu-shots.mjs mock     — stage 1 mock-ups (tools/menu-mock/index.html) → shots/menu/mock-<screen>-<orient>.png
+//   node tools/menu-shots.mjs after    — the game's new menu (every screen, pause, result; portrait = the rotate screen)
+//                                        → shots/menu/after-<screen>-<orient>.png
 //   [--lang ru|en|id] [--only main,prep,…] [--zones] (--zones draws Telegram's button zones and the device safe area)
 import { mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { startServer } from './serve.mjs';
@@ -29,7 +31,33 @@ for (const o of ORIENT) {
   const g = await openGame('chromium', { w: o.w, h: o.h, mobile: true, dpr: 2, tg: fakeTelegram({ fullscreen: true, safe: o.safe, content: o.content, lang: LANG }) });
   const { page } = g;
   await page.addInitScript(`try{ localStorage.setItem('bvr_lang','${LANG}'); }catch(e){}`);
-  if (what === 'before') {
+  if (what === 'after') {
+    await page.goto(`http://127.0.0.1:${port}/index.html?seed=5`, { waitUntil: 'load' });
+    await page.waitForFunction('window.__hk && __hk.menuState', null, { timeout: 30000 });
+    await page.evaluate('document.fonts.ready'); await page.waitForTimeout(900);
+    const shot = async (n) => { if (ZONES) await page.evaluate(ZONE_JS(o)); await page.screenshot({ path: `shots/menu/after-${n}-${o.name}${LANG === 'ru' ? '' : '-' + LANG}.png` });
+      await page.evaluate("document.querySelectorAll('body>div[style*=\"z-index:9999\"]').forEach(function(e){e.remove();})"); };
+    if (o.name === 'port') { await shot('rotate'); await g.browser.close(); continue; }
+    const nav = async (keys) => { for (const k of keys) { await page.keyboard.press(k); await page.waitForTimeout(120); } };
+    await shot('main');
+    await page.evaluate("__hk.menu('mode')"); await page.waitForTimeout(200); await shot('mode');
+    await page.evaluate("__hk.menu('prep')"); await page.waitForTimeout(200); await shot('prep');
+    await page.evaluate("__hk.menu('main'); __hk.menu('mode'); __hk.menu('friend')"); await page.waitForTimeout(200); await shot('friend');
+    await nav(['ArrowDown']); await shot('friend-join');
+    await page.evaluate("__hk.menu('main'); __hk.menu('settings')"); await page.waitForTimeout(200); await nav(['ArrowDown']); await shot('settings');
+    await page.evaluate("__hk.menu('main'); __hk.menu('rules')"); await page.waitForTimeout(200); await shot('rules-controls');
+    await nav(['KeyE', 'ArrowDown', 'ArrowDown']); await shot('rules-hockey');
+    await page.evaluate("__hk.menu('main')"); await page.waitForTimeout(200);
+    await page.evaluate('__hk.start()');
+    await page.waitForFunction('__hk.st()==="play" || __hk.st()==="face"', null, { timeout: 60000 });
+    await page.waitForTimeout(1500);
+    await page.keyboard.press('Escape'); await page.waitForTimeout(300); await shot('pause');
+    await nav(['ArrowDown', 'Enter']); await page.waitForTimeout(200); await shot('pause-controls');
+    await nav(['Escape', 'ArrowDown', 'Enter']); await page.waitForTimeout(200); await shot('pause-settings');
+    await nav(['Escape', 'Escape']);
+    await page.evaluate('__hk.setClock(0.5)'); await page.waitForFunction('__hk.st()==="over"', null, { timeout: 20000 }); await page.waitForTimeout(600);
+    await shot('result');
+  } else if (what === 'before') {
     await page.goto(`http://127.0.0.1:${port}/index.html`, { waitUntil: 'load' });
     await page.waitForFunction('window.__hk', null, { timeout: 30000 });
     await page.waitForTimeout(1500);
@@ -75,8 +103,9 @@ writeFileSync('shots/menu/index.html', `<!doctype html><meta charset="utf-8"><ti
 <style>body{margin:0;padding:16px;background:#0b1320;color:#dfe7f1;font:14px system-ui}h2{margin:24px 0 8px}
 .g{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start}figure{margin:0}img{display:block;max-height:420px;max-width:100%;border-radius:8px;border:1px solid #2a3a52}
 figcaption{font:12px monospace;color:#9fb3c9;margin-top:4px}</style>
-<h1>Меню — этап 1: было и макеты</h1>
+<h1>Меню: было, макеты, после</h1>
 ${group('Было (текущая игра)', all.filter((f) => f.startsWith('before-')))}
+${group('После — новое меню (этап 2)', all.filter((f) => f.startsWith('after-')))}
 ${group('Макеты — горизонталь', all.filter((f) => f.startsWith('mock-') && /-land\.png$/.test(f)))}
 ${group('Макеты — вертикаль', all.filter((f) => f.startsWith('mock-') && /-port\.png$/.test(f)))}
 ${group('Макеты — EN / ID', all.filter((f) => f.startsWith('mock-') && /-(en|id)\.png$/.test(f)))}`);

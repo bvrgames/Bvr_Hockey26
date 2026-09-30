@@ -1,0 +1,2 @@
+# исходники ассетов не нужны на сайте: игра грузит только assets/dist (tools/pack-assets.mjs)
+assets/src/

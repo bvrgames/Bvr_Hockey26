@@ -15,8 +15,19 @@ const TYPES = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8',
   '.json': 'application/json', '.css': 'text/css', '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml',
   '.glb': 'model/gltf-binary', '.txt': 'text/plain; charset=utf-8', '.woff2': 'font/woff2', '.wasm': 'application/wasm',
-  '.bin': 'application/octet-stream', '.webp': 'image/webp',
+  '.bin': 'application/octet-stream', '.webp': 'image/webp', '.m4a': 'audio/mp4', '.mp3': 'audio/mpeg',
 };
+// audio is streamed by the browser in byte ranges (WebKit will not play media from a server without Range support)
+function sendRange(req, res, body, h) {
+  const m = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
+  if (!m) return false;
+  let a = m[1] === '' ? body.length - (+m[2]) : +m[1], b = m[1] !== '' && m[2] !== '' ? +m[2] : body.length - 1;
+  if (a < 0) a = 0; if (b >= body.length) b = body.length - 1;
+  if (a > b) { res.writeHead(416, { 'Content-Range': `bytes */${body.length}` }).end(); return true; }
+  res.writeHead(206, { ...h, 'Content-Range': `bytes ${a}-${b}/${body.length}`, 'Content-Length': b - a + 1, 'Accept-Ranges': 'bytes' });
+  res.end(body.subarray(a, b + 1));
+  return true;
+}
 const COMPRESSIBLE = /^(text\/|application\/(json|javascript|octet-stream)|image\/svg)/;
 
 // Cache-Control from vercel.json "headers" (source patterns like /assets/(.*)), default as on Vercel
@@ -42,7 +53,9 @@ export function startServer(port = 8490, { quiet = true, root = ROOT, vercel = f
       const type = TYPES[extname(file)] || 'application/octet-stream';
       if (!vercel) {
         const body = await readFile(file);
-        res.writeHead(200, { 'Content-Type': type, 'Cache-Control': 'no-store' });
+        const h0 = { 'Content-Type': type, 'Cache-Control': 'no-store', 'Accept-Ranges': 'bytes' };
+        if (req.headers.range && sendRange(req, res, body, h0)) return;
+        res.writeHead(200, h0);
         res.end(body); return;
       }
       let P = packed.get(file);
@@ -58,6 +71,7 @@ export function startServer(port = 8490, { quiet = true, root = ROOT, vercel = f
       const rule = rules.find((r) => r.re.test(path));
       const h = { 'Content-Type': type, 'Cache-Control': rule ? rule.cc : 'public, max-age=0, must-revalidate', ETag: P.etag, Vary: 'Accept-Encoding' };
       if (req.headers['if-none-match'] === P.etag) { res.writeHead(304, h).end(); return; }
+      if (req.headers.range && !P.br && sendRange(req, res, P.raw, h)) return;
       const ae = req.headers['accept-encoding'] || '';
       let body = P.raw;
       if (P.br && /\bbr\b/.test(ae)) { body = P.br; h['Content-Encoding'] = 'br'; }

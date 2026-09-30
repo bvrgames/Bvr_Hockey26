@@ -7,7 +7,8 @@
   "scripts": {
     "serve": "node tools/serve.mjs 8490",
     "check": "node tools/check.mjs",
-    "smoke": "node tools/smoke.mjs",
+    "smoke": "node tools/smoke.mjs && node tools/smoke-menu.mjs && node tools/smoke-menu.mjs --browser webkit",
+    "smoke:menu": "node tools/smoke-menu.mjs && node tools/smoke-menu.mjs --browser webkit",
     "smoke:chromium": "node tools/smoke.mjs --browser chromium",
     "smoke:webkit": "node tools/smoke.mjs --browser webkit",
     "play": "node tools/play.mjs",

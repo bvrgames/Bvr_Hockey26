@@ -24,6 +24,12 @@ export function fakeTelegram({ fullscreen = true, safe = {}, content = {}, lang 
       ready:noop, expand:noop, disableVerticalSwipes:noop, setHeaderColor:noop, setBackgroundColor:noop,
       enableClosingConfirmation:noop, requestFullscreen:noop, openTelegramLink:noop, onEvent:noop, offEvent:noop,
       HapticFeedback:{impactOccurred:noop, notificationOccurred:noop, selectionChanged:noop},
+      // BackButton: calls are recorded in window.__tgBack (visible, clicks); window.__tgBackClick() presses it
+      BackButton:(function(){ var cbs=[]; window.__tgBack={visible:false, shows:0, hides:0};
+        window.__tgBackClick=function(){ cbs.slice().forEach(function(f){ f(); }); };
+        return { get isVisible(){ return window.__tgBack.visible; },
+          show:function(){ window.__tgBack.visible=true; window.__tgBack.shows++; }, hide:function(){ window.__tgBack.visible=false; window.__tgBack.hides++; },
+          onClick:function(f){ cbs.push(f); }, offClick:function(f){ cbs=cbs.filter(function(x){ return x!==f; }); } }; })(),
       CloudStorage:{ getItem:function(k,cb){ setTimeout(function(){ cb(null, store[k]||''); },0); },
                      setItem:function(k,v,cb){ store[k]=String(v); if(cb) cb(null,true); } } }; })()};`;
 }

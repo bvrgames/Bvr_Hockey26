@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#05070c">
-<script data-asset="players">window.ASSETS={"lo":"assets/dist/players-lo.9a27696768.bin","hi":"assets/dist/players-hi.d82e201066.bin","env":"assets/dist/env.61f0cc2e9a.png","ads":"assets/dist/ads.50c525dbc9.png","logo":"assets/dist/logo.a579d5652c.png","loBytes":479292,"hiBytes":1383660};try{window.PLAYERS_FETCH=fetch(window.ASSETS.lo);}catch(e){}</script>
+<script data-asset="players">window.ASSETS={"lo":"assets/dist/players-lo.9a27696768.bin","hi":"assets/dist/players-hi.d82e201066.bin","env":"assets/dist/env.61f0cc2e9a.png","ads":"assets/dist/ads.50c525dbc9.png","logo":"assets/dist/logo.a579d5652c.png","loBytes":479292,"hiBytes":1383660,"fontLat":"assets/dist/font-lat.407c156726.woff2","fontCyr":"assets/dist/font-cyr.b547dfdaf0.woff2","music":[{"n":"Ice cold","u":"assets/dist/music-2ed25f0d5f.m4a"},{"n":"Sang & Glace","u":"assets/dist/music-b67e381790.m4a"},{"n":"Still Here","u":"assets/dist/music-fd8b2d66e6.m4a"},{"n":"Коробка","u":"assets/dist/music-7abf28f458.m4a"}]};try{window.PLAYERS_FETCH=fetch(window.ASSETS.lo);}catch(e){}</script>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <title>BVR Hockey</title>
 </head>
@@ -48,7 +48,15 @@
   #rotate .arrow{width:0;height:0;border-left:12px solid transparent;border-right:12px solid transparent;
     border-top:20px solid #fff;animation:bounceArrow 1.5s ease-in-out infinite}
   #rotate .text{font-size:14px;letter-spacing:.08em;line-height:1.5;color:rgba(255,255,255,.8)}
-  #rotate .brand{font-size:28px;font-weight:800;letter-spacing:.18em;color:#ffd166;margin-top:10px;text-transform:uppercase}
+  #rotate .brand{font-size:28px;font-weight:800;letter-spacing:.06em;color:#fff;margin-top:14px;text-transform:uppercase;
+    font-family:'BVR Sport','Arial Narrow',system-ui,sans-serif;font-style:italic}
+  #rotate .brand b{color:#ffd166}
+  #rotate .text{margin-top:14px}
+  #rotate .rsnd{display:none;margin-top:18px;padding:7px 14px;border-radius:999px;font-size:13px;font-weight:700;
+    color:#8fd8ff;border:1px solid rgba(143,216,255,.4);background:rgba(143,216,255,.08)}
+  #rotate.blocked .rsnd{display:block}
+  #rotate .rnp{position:absolute;left:0;right:0;bottom:calc(env(safe-area-inset-bottom,0px) + 22px);font-size:12px;
+    font-weight:700;color:rgba(255,255,255,.55);letter-spacing:.04em;transition:opacity .5s}
   @keyframes rotatePhone{
     0%,100%{transform:rotate(0deg)}
     25%{transform:rotate(-90deg)}
@@ -110,17 +118,6 @@
     border:1px solid rgba(143,227,160,.28);border-radius:6px;padding:3px 8px;
     font-variant-numeric:tabular-nums}
   body.portrait #fps{bottom:auto;top:108px}   /* ниже полосы уведомлений */
-  #pfps{margin:2px 0 16px;font-size:12px;color:#8fe3a0;font-weight:700;letter-spacing:.04em}
-  #start{position:absolute;inset:0;z-index:15;overflow-y:auto;overflow-x:hidden;
-    -webkit-overflow-scrolling:touch;touch-action:pan-y;
-    background:radial-gradient(120% 90% at 50% 30%,rgba(28,40,64,.96),rgba(5,7,12,.985))}
-  #start .card{width:min(760px,94vw);margin:0 auto;padding:14px 14px 88px;text-align:center}
-  #start h1{margin:0 0 2px;font-size:clamp(20px,5.2vw,30px);letter-spacing:.09em;font-weight:800}
-  #start .sb{margin:0 0 12px;font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:rgba(255,255,255,.45)}
-  #start .teams{display:flex;gap:9px;justify-content:center;flex-wrap:wrap;margin-bottom:9px}
-  #start .tsel{flex:1 1 210px;min-width:0;background:rgba(255,255,255,.045);
-    border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:8px 9px}
-  #start .tsel b{display:block;font-size:9px;letter-spacing:.16em;color:rgba(255,255,255,.42);margin-bottom:6px}
   .chips{display:flex;gap:5px}
   .chip{flex:1;min-width:0;padding:8px 2px;border-radius:8px;cursor:pointer;text-align:center;
     border:2px solid transparent;font-size:9.5px;font-weight:800;letter-spacing:.03em;
@@ -130,34 +127,6 @@
   .chip.opt{background:rgba(255,255,255,.09);opacity:.6;line-height:1.3}
   .chip.opt small{font-size:8px;font-weight:600;opacity:.75}
   .chip.opt.on{background:#ffd166;color:#241703;opacity:1;border-color:#fff}
-  #srv,#rcode{width:100%;margin:0 0 6px;padding:8px 9px;border-radius:8px;
-    border:1px solid rgba(255,255,255,.16);background:rgba(0,0,0,.32);
-    color:#eef2f7;font-size:12px;font-family:inherit}
-  .netrow{display:flex;gap:6px}
-  .netrow #rcode{flex:1;margin:0;text-transform:uppercase;letter-spacing:.12em;text-align:center}
-  .netrow button{flex:0 0 auto;padding:8px 11px;border-radius:8px;border:1px solid rgba(255,255,255,.18);
-    background:rgba(255,255,255,.09);color:#eef2f7;font-size:10.5px;font-weight:800;cursor:pointer;
-    font-family:inherit;letter-spacing:.04em}
-  .netrow button:active{background:#ffd166;color:#241703}
-  #netst{margin-top:7px;font-size:10.5px;color:#9fd3ff}
-  #netlink{margin-top:5px;font-size:10px;color:rgba(255,255,255,.5);word-break:break-all}
-  #go:disabled{opacity:.45;cursor:default}
-  .tsel.keys{text-align:left}
-  .tsel.keys span{display:flex;align-items:center;gap:7px;margin:4px 0;
-    font-size:11px;color:#dae1ec;line-height:1.3}
-  .k{font-style:normal;width:19px;height:19px;flex:0 0 19px;border-radius:5px;display:inline-flex;
-    align-items:center;justify-content:center;font-size:9.5px;font-weight:800;color:#0d1016}
-  .k.a{background:#5ad07f}.k.b{background:#e8736f}.k.x{background:#7fb0ff}.k.y{background:#ffd166}
-  .k.r{background:#9aa6b8;width:auto;padding:0 5px;flex:0 0 auto}
-  #startbar{position:fixed;left:0;right:0;bottom:0;z-index:16;padding:12px 14px;
-    padding-bottom:calc(12px + env(safe-area-inset-bottom,0px));text-align:center;
-    background:linear-gradient(180deg,rgba(5,7,12,0),rgba(5,7,12,.92) 45%)}
-  #go{width:min(420px,90vw);padding:13px 20px;border-radius:11px;border:none;cursor:pointer;
-    background:linear-gradient(180deg,#ffd166,#f0a92e);color:#241703;font-size:14px;font-weight:800;
-    letter-spacing:.09em;box-shadow:0 6px 22px rgba(0,0,0,.5)}
-  #start .hint{margin:8px 0 0;font-size:10px;color:rgba(255,255,255,.32)}
-  .tsel.keys span u{text-decoration:none}
-  .k.d{background:#b9c4d6;font-size:8px}
 
   #toast{position:absolute;left:50%;transform:translateX(-50%);bottom:14px;z-index:8;
     padding:8px 18px;border-radius:9px;background:rgba(12,18,30,.9);
@@ -178,31 +147,208 @@
   #bPause span{display:block;width:4px;height:14px;border-radius:1px;background:rgba(255,255,255,.85)}
   #bPause:active{background:rgba(255,255,255,.3)}
 
-  #pausescr,#overscr{position:absolute;inset:0;z-index:18;display:none;
-    align-items:center;justify-content:center;
-    background:radial-gradient(120% 90% at 50% 40%,rgba(14,22,40,.93),rgba(4,6,12,.97))}
-  .pbox{text-align:center;width:min(360px,86vw);padding:22px 18px}
-  .pbox h2,#oTitle{margin:0 0 14px;font-size:clamp(18px,5vw,26px);font-weight:800;letter-spacing:.10em}
-  #oTitle{font-size:11px;letter-spacing:.20em;color:rgba(255,255,255,.5);margin-bottom:8px}
-  #oScore{font-size:clamp(34px,11vw,54px);font-weight:800;letter-spacing:.06em;
-    font-variant-numeric:tabular-nums;margin-bottom:6px}
-  #oWinner{font-size:clamp(13px,3.6vw,17px);font-weight:700;color:#ffd166;
-    letter-spacing:.06em;margin-bottom:20px}
-  .pbtn{display:block;width:100%;margin:8px 0;padding:12px 16px;border-radius:10px;border:none;
-    cursor:pointer;font-family:inherit;font-size:13px;font-weight:800;letter-spacing:.08em;
-    background:rgba(255,255,255,.10);color:#eef2f7}
-  .pbtn.prim{background:linear-gradient(180deg,#ffd166,#f0a92e);color:#241703}
-  .pbtn:active{transform:scale(.98)}
-  #start .dev{margin:6px 0 0;font-size:10.5px;color:rgba(255,255,255,.40);letter-spacing:.04em}
-  /* Модели экипировки под CC-BY 4.0: указание авторов обязательно. */
-  #start .credits{margin:8px 0 0;font-size:9px;line-height:1.5;color:rgba(255,255,255,.28)}
-  #start .dev a{color:#8fd8ff;text-decoration:none;font-weight:700;border-bottom:1px solid rgba(143,216,255,.35)}
   /* отладочные индикаторы (скорость, FPS, сетевые счётчики) видны только с ?debug */
   body:not(.debug) .dbg{display:none!important}
   /* FPS — настройка игрока (меню/пауза) или ?debug */
   body:not(.debug):not(.showfps) #fps{display:none!important}
   /* подсказки геймпада на экране матча — только когда геймпад подключён */
   body:not(.pad) .padhint{display:none!important}
+
+  /* ============ меню (docs/MENU_PLAN.md) ============
+     Всё с префиксом m*, чтобы не задеть классы матча (.btn — экранные кнопки, .sw — табло).
+     Отступы от краёв (--mt/--ml/--mr/--mb) ставит mLayout(): зона устройства + полоса кнопок Telegram. */
+  :root{--mt:54px;--ml:18px;--mr:18px;--mb:10px;--mgold:#ffd166;--mgold2:#f0a92e;--mcyan:#8fd8ff;--mmag:#c325d8;--mblu:#2585ff;
+    --mdim:#9fb3c9;--mmute:#6f86a1;--msport:'BVR Sport','Arial Narrow',system-ui,-apple-system,sans-serif}
+  .mroot,.mlay{color:#f2f7ff;touch-action:manipulation;-webkit-font-smoothing:antialiased}
+  #start.mroot{position:absolute;inset:0;z-index:15;overflow:hidden;background:#040b16}
+  #start.overgame{background:rgba(4,9,18,.8)}
+  #start.overgame .mbg,#start.overgame .msnow,#start.overgame .mnp{display:none}
+  .mlay{position:absolute;inset:0;z-index:18;display:none;background:rgba(4,9,18,.74)}
+  #overscr.mlay{background:rgba(4,9,18,.84)}
+  .mbg{position:absolute;inset:0;overflow:hidden;
+    background:radial-gradient(120% 60% at 70% -10%,rgba(120,190,255,.28),transparent 60%),
+      radial-gradient(60% 40% at 15% 0%,rgba(195,37,216,.18),transparent 70%),linear-gradient(180deg,#0a1c33 0%,#040b16 55%)}
+  .mbg .ice{position:absolute;left:-10%;right:-10%;bottom:-2%;height:48%;transform:perspective(600px) rotateX(58deg);transform-origin:50% 100%;
+    background:repeating-linear-gradient(90deg,transparent 0 11%,rgba(255,255,255,.035) 11% 11.3%),
+      linear-gradient(90deg,transparent 47%,rgba(220,40,60,.45) 47% 48.2%,transparent 48.2%),
+      linear-gradient(90deg,transparent 30%,rgba(40,110,230,.4) 30% 31%,transparent 31% 64%,rgba(40,110,230,.4) 64% 65%,transparent 65%),
+      radial-gradient(50% 70% at 50% 100%,rgba(170,220,255,.55),transparent 70%),linear-gradient(180deg,#123356,#2a6690)}
+  .mbg .ice::after{content:'';position:absolute;inset:0;
+    background:repeating-linear-gradient(115deg,transparent 0 18px,rgba(255,255,255,.05) 18px 19px,transparent 19px 47px),
+      repeating-linear-gradient(64deg,transparent 0 31px,rgba(255,255,255,.04) 31px 32px,transparent 32px 70px)}
+  .mbg .lights{position:absolute;left:0;right:0;top:6%;height:18%;filter:blur(1px);
+    background:radial-gradient(closest-side,rgba(255,255,255,.55),transparent) 12% 40%/60px 60px no-repeat,
+      radial-gradient(closest-side,rgba(255,255,255,.45),transparent) 38% 20%/48px 48px no-repeat,
+      radial-gradient(closest-side,rgba(255,255,255,.5),transparent) 64% 30%/56px 56px no-repeat,
+      radial-gradient(closest-side,rgba(255,255,255,.45),transparent) 88% 45%/52px 52px no-repeat}
+  .mbg .drift{position:absolute;bottom:-40px;width:60%;height:120px;border-radius:50%;filter:blur(6px);
+    background:radial-gradient(closest-side,rgba(235,246,255,.95),rgba(200,225,245,.55) 60%,transparent)}
+  .mbg .drift.l{left:-22%}.mbg .drift.r{right:-24%;bottom:-54px}
+  .mbg .frost{position:absolute;inset:0;background:radial-gradient(40% 30% at 0% 100%,rgba(225,240,255,.35),transparent 70%),
+    radial-gradient(35% 28% at 100% 100%,rgba(225,240,255,.32),transparent 70%),radial-gradient(30% 22% at 100% 0%,rgba(225,240,255,.12),transparent 70%)}
+  .mbg .shade{position:absolute;inset:0;background:linear-gradient(90deg,rgba(3,8,16,.82) 0%,rgba(3,8,16,.45) 42%,rgba(3,8,16,0) 65%)}
+  .msnow{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+  .msnow i{position:absolute;top:-10px;border-radius:50%;background:#fff;animation:mfall linear infinite}
+  @keyframes mfall{to{transform:translate3d(var(--dx),110vh,0)}}
+  @media (prefers-reduced-motion:reduce){.msnow{display:none}}
+
+  .mscr{position:absolute;inset:0;display:none;gap:4px 18px;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);
+    grid-template-rows:auto minmax(0,1fr);grid-template-areas:"head head" "left right";
+    padding:var(--mt) var(--mr) calc(var(--mb) + 46px) var(--ml)}
+  .mscr.cur{display:grid}
+  .mscr.wide .mleft{grid-column:1/3}
+  .mhead{grid-area:head;display:flex;align-items:flex-end;gap:12px;min-width:0}
+  .mleft{grid-area:left;min-height:0;min-width:0;display:flex;flex-direction:column;justify-content:center}
+  .mright{grid-area:right;min-height:0;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px}
+  .mfoot{position:absolute;left:var(--ml);right:var(--mr);bottom:var(--mb);height:40px;display:flex;align-items:center;
+    justify-content:space-between;gap:12px;pointer-events:none}
+  .mfoot>*{pointer-events:auto}
+  .mbrand{font:italic 800 28px/.95 var(--msport);letter-spacing:.01em;text-transform:uppercase;white-space:nowrap;
+    text-shadow:0 2px 0 rgba(0,0,0,.35),0 0 24px rgba(37,133,255,.35)}
+  .mbrand b{color:var(--mgold);font-weight:800}
+  .mbrand::after{content:'';display:block;height:2px;width:62%;margin-top:3px;background:linear-gradient(90deg,var(--mgold),var(--mmag) 45%,transparent)}
+  .mbrand.sm{font-size:14px;opacity:.85;text-shadow:none}.mbrand.sm::after{display:none}
+  .mcrumb{display:flex;flex-direction:column;gap:2px;min-width:0}
+  .mtitle{font:italic 800 25px/1 var(--msport);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mback{display:none;align-items:center;justify-content:center;width:38px;height:38px;border-radius:11px;flex:none;cursor:pointer;
+    background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);font:800 22px/1 system-ui;color:#fff}
+  .mroot.ownback .mback{display:flex}
+  .mpill{font:italic 800 12px/1 var(--msport);text-transform:uppercase;letter-spacing:.04em;padding:6px 10px;border-radius:999px;
+    background:rgba(143,216,255,.14);color:var(--mcyan);border:1px solid rgba(143,216,255,.3);white-space:nowrap}
+  .mf{cursor:pointer}
+
+  /* список пунктов: выбранный — полоса с градиентом, затухает вправо */
+  .mlist{display:flex;flex-direction:column;gap:1px;margin-top:2px}
+  .mi{position:relative;z-index:0;padding:3px 0 3px 4px;font:italic 800 clamp(19px,6.2vh,27px)/1.06 var(--msport);text-transform:uppercase;
+    color:rgba(214,228,244,.66);white-space:nowrap}
+  .mi .d{display:block;font:600 11px/1.25 system-ui,-apple-system,sans-serif;letter-spacing:.02em;text-transform:none;color:var(--mdim);
+    margin-top:1px;white-space:normal;max-width:34em}
+  .mi:not(.on) .d{display:none}
+  .mi.on{color:#fff}
+  .mi.on::before{content:'';position:absolute;z-index:-1;top:0;bottom:0;left:calc(-1 * var(--ml));right:-30%;
+    background:linear-gradient(90deg,var(--mgold) 0 5px,rgba(37,133,255,.95) 5px,rgba(37,133,255,.55) 38%,rgba(195,37,216,.18) 70%,transparent);
+    clip-path:polygon(0 0,100% 0,calc(100% - 22px) 100%,0 100%)}
+  .mi.on::after{content:'›';position:absolute;right:-6px;top:50%;transform:translateY(-55%);font:800 28px/1 system-ui;color:var(--mgold)}
+  .mi.dis{opacity:.42}
+  .mi .soon{font:italic 800 11px/1 var(--msport);margin-left:8px;padding:3px 7px;border-radius:999px;vertical-align:middle;
+    color:var(--mcyan);border:1px solid rgba(143,216,255,.35)}
+  .mlist.sm .mi{font-size:clamp(17px,5.4vh,23px)}
+
+  .mglass{background:linear-gradient(180deg,rgba(18,40,70,.8),rgba(8,20,38,.85));border:1px solid rgba(143,216,255,.18);border-radius:14px;
+    box-shadow:0 10px 30px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.08)}
+  .mcard{padding:10px 14px;width:100%;max-width:380px;display:flex;flex-direction:column;gap:7px}
+  .mcard h3{margin:0;font:italic 800 19px/1.05 var(--msport);text-transform:uppercase}
+  .mnote{font:600 12px/1.38 system-ui,-apple-system,sans-serif;color:#dbe6f3}
+  .mnote.dim{color:var(--mdim)}
+  .mlogo{width:min(52vh,38vw);max-width:290px;aspect-ratio:1;filter:drop-shadow(0 10px 40px rgba(120,60,255,.45))}
+  .mrow{position:relative;display:flex;align-items:center;gap:10px;padding:5px 12px;border-radius:10px;min-height:34px}
+  .mrow .k{flex:1;font:italic 800 15px/1.1 var(--msport);text-transform:uppercase;color:var(--mdim);white-space:nowrap}
+  .mrow .v{display:flex;align-items:center;gap:8px;font:italic 800 16px/1 var(--msport);text-transform:uppercase;white-space:nowrap}
+  .mrow .ar{color:var(--mgold);font:800 18px/1 system-ui;padding:2px 4px}
+  .mrow.on{background:linear-gradient(90deg,rgba(37,133,255,.55),rgba(37,133,255,.12) 70%,transparent);box-shadow:inset 4px 0 0 var(--mgold)}
+  .mrow.on .k{color:#fff}
+  .mrow.ro .ar{visibility:hidden}
+  .mtog{width:44px;height:24px;border-radius:12px;background:rgba(255,255,255,.18);position:relative;flex:none}
+  .mtog::after{content:'';position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#cfd8e3;transition:left .15s}
+  .mtog.on{background:linear-gradient(90deg,var(--mblu),var(--mcyan))}.mtog.on::after{left:23px;background:#fff}
+  .mbar{width:120px;height:8px;border-radius:4px;background:rgba(255,255,255,.15);position:relative;flex:none;margin-right:8px}
+  .mbar i{position:absolute;left:0;top:0;bottom:0;border-radius:4px;background:linear-gradient(90deg,var(--mblu),var(--mcyan))}
+  .mbar i::after{content:'';position:absolute;right:-8px;top:-5px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 0 0 3px rgba(37,133,255,.5)}
+  .mbar::before{content:'';position:absolute;inset:-12px 0}   /* зона касания шире полосы */
+  #start .mseg{display:flex;gap:5px}
+  #start .mseg .chip{flex:0 0 auto;padding:6px 9px;border-radius:9px;border:0;font:italic 800 13px/1 var(--msport);text-transform:uppercase;
+    letter-spacing:.02em;color:var(--mdim);background:rgba(255,255,255,.08);opacity:1}
+  #start .mseg .chip.on{color:#241703;background:linear-gradient(180deg,var(--mgold),var(--mgold2))}
+  .mbtn{display:flex;align-items:center;justify-content:center;gap:10px;height:42px;padding:0 20px;border-radius:12px;border:0;
+    font:italic 800 19px/1 var(--msport);text-transform:uppercase;color:#241703;white-space:nowrap;cursor:pointer;
+    background:linear-gradient(180deg,var(--mgold),var(--mgold2));box-shadow:0 6px 20px rgba(240,169,46,.3),inset 0 1px 0 rgba(255,255,255,.5)}
+  .mbtn.ghost{background:rgba(255,255,255,.1);color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.2)}
+  .mbtn.on{outline:3px solid #fff;outline-offset:2px}
+  .mbtn:disabled,.mbtn.dis{opacity:.45;cursor:default}
+
+  /* подвал: «сейчас играет» (одна строка) и подсказки кнопок */
+  .mnp{display:flex;align-items:center;gap:8px;padding:5px 12px 5px 9px;border-radius:10px;min-width:0;max-width:48%;
+    background:linear-gradient(90deg,rgba(6,14,28,.85),rgba(6,14,28,.5));border-left:3px solid var(--mmag)}
+  .mnp.off{visibility:hidden}
+  .meq{display:flex;align-items:flex-end;gap:2px;height:14px;flex:none}
+  .meq i{width:3px;height:100%;border-radius:1px;background:linear-gradient(180deg,var(--mcyan),var(--mblu));animation:meq 1s ease-in-out infinite alternate}
+  .meq i:nth-child(2){animation-delay:-.4s}.meq i:nth-child(3){animation-delay:-.7s}.meq i:nth-child(4){animation-delay:-.2s}
+  .mnp.paused .meq i{animation:none;transform:scaleY(.3)}
+  @keyframes meq{from{transform:scaleY(1)}to{transform:scaleY(.3)}}
+  .mnptx{font:italic 800 13px/1.1 var(--msport);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:opacity .45s}
+  .mnptx.fade{opacity:0}
+  .mnptx small{font:700 11px/1 system-ui;color:var(--mcyan);margin-left:8px;font-style:normal;text-transform:none}
+  .mhints{display:flex;gap:12px;align-items:center;flex:none;margin-left:auto}
+  .mh{display:flex;align-items:center;gap:6px;font:italic 800 13px/1 var(--msport);text-transform:uppercase;color:var(--mdim);white-space:nowrap}
+  .mg{display:inline-flex;align-items:center;justify-content:center;min-width:21px;height:21px;border-radius:50%;padding:0 5px;
+    font:800 11px/1 system-ui;color:#0a1420;font-style:normal}
+  .mg.a{background:#5ad07f}.mg.b{background:#e8736f}.mg.x{background:#7fb0ff}.mg.y{background:#ffd166}
+  .mg.r{background:#b9c4d6;border-radius:6px}
+  .mg.key{background:#dfe7f1;border-radius:5px;box-shadow:inset 0 -2px 0 rgba(0,0,0,.25);font-size:10px}
+
+  /* язык на главном — сбоку, небольшой */
+  .mlang{margin-left:auto;display:flex;gap:4px;padding:3px;border-radius:10px}
+  .mlang .chip{flex:0 0 auto;padding:5px 8px;font:italic 800 12px/1 var(--msport);border-radius:7px;border:0;color:var(--mdim);background:rgba(255,255,255,.07);opacity:1}
+  .mlang .chip.on{background:rgba(255,255,255,.9);color:#0a1420}
+  .mlang.on{box-shadow:0 0 0 2px var(--mgold)}
+
+  /* подготовка матча */
+  .mprep{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:16px;align-items:center;height:100%}
+  .mteams{display:flex;align-items:center;justify-content:center;gap:4px}
+  .mtc{position:relative;width:min(140px,19vw);padding:7px 6px 9px;text-align:center;border-radius:14px}
+  .mtc .lbl{font:700 9px/1 system-ui;letter-spacing:.16em;color:var(--mmute);text-transform:uppercase}
+  .mtc .nm{font:italic 800 16px/1 var(--msport);text-transform:uppercase;margin-top:3px;white-space:nowrap}
+  .mtc .sws{display:flex;justify-content:center;gap:5px;margin-top:6px}
+  .mtc .sws i{width:11px;height:11px;border-radius:50%;box-shadow:0 0 0 1px rgba(255,255,255,.35);opacity:.45}
+  .mtc .sws i.on{opacity:1;box-shadow:0 0 0 2px #fff}
+  .mtc .nav{position:absolute;top:36%;left:-2px;right:-2px;display:flex;justify-content:space-between;font:800 24px/1 system-ui;color:var(--mgold);pointer-events:none}
+  .mtc .nav span{pointer-events:auto;padding:6px 4px}
+  .mtc.on{box-shadow:0 0 0 2px var(--mgold),0 10px 30px rgba(0,0,0,.35)}
+  .mtc.ro .nav{display:none}
+  .mtc svg{width:60%;height:auto;margin-top:3px;filter:drop-shadow(0 6px 10px rgba(0,0,0,.45))}
+  .mvs{font:italic 800 26px/1 var(--msport);color:var(--mgold);text-shadow:0 0 18px rgba(255,209,102,.5);padding:0 2px}
+  .mopts{display:flex;flex-direction:column;gap:4px}
+  .mwait{display:flex;align-items:center;gap:8px;font:700 12px/1.25 system-ui;color:var(--mcyan)}
+  .mdot{width:9px;height:9px;border-radius:50%;background:var(--mcyan);flex:none;animation:mpulse 1.4s infinite}
+  .mdot.ok{background:#5ad07f;animation:none}
+  @keyframes mpulse{0%{box-shadow:0 0 0 0 rgba(143,216,255,.7)}70%{box-shadow:0 0 0 10px rgba(143,216,255,0)}100%{box-shadow:0 0 0 0 rgba(143,216,255,0)}}
+
+  /* комната */
+  .mroom{padding:12px 16px;width:min(360px,100%);display:flex;flex-direction:column;gap:8px}
+  .mcode{font:italic 800 46px/1 var(--msport);letter-spacing:.14em;text-shadow:0 0 22px rgba(143,216,255,.45)}
+  .mlbl{font:700 9px/1 system-ui;letter-spacing:.16em;color:var(--mmute);text-transform:uppercase}
+  #start input{width:100%;padding:9px 11px;border-radius:9px;border:1px solid rgba(255,255,255,.2);background:rgba(0,0,0,.35);
+    color:#eef2f7;font:700 15px/1 system-ui;font-family:inherit;user-select:text;-webkit-user-select:text}
+  #start #rcode{text-transform:uppercase;letter-spacing:.2em;text-align:center;font:italic 800 22px/1 var(--msport)}
+  #start #srv{font-size:11px;font-weight:600}
+  #netst{font:600 11.5px/1.3 system-ui;color:var(--mcyan)}
+  #netlink{font:600 10px/1.3 system-ui;color:rgba(255,255,255,.45);word-break:break-all}
+  .mjoin{display:flex;gap:8px;align-items:center}
+  .mjoin .mbtn{height:40px;flex:none}
+
+  /* правила и управление */
+  .mtabs{display:flex;gap:5px;flex-wrap:nowrap}
+  .mtab{padding:7px 12px;border-radius:10px;font:italic 800 14px/1 var(--msport);text-transform:uppercase;color:var(--mdim);background:rgba(255,255,255,.06);white-space:nowrap;cursor:pointer}
+  .mtab.cur{color:#241703;background:linear-gradient(180deg,var(--mgold),var(--mgold2))}
+  .mtabs.on{box-shadow:0 0 0 2px var(--mgold);border-radius:12px}
+  .mtbl{display:flex;flex-direction:column;gap:2px;width:100%;max-width:440px}
+  .mtbl .tr{display:flex;align-items:center;gap:8px;padding:1px 6px;min-height:21px}
+  .mtbl .tr>span{flex:1;font:600 11px/1.2 system-ui;color:var(--mdim)}
+  .mtbl .tr>span:nth-child(2){color:#dbe6f3}
+  .mtbl .tr>b{flex:0 0 58px;display:flex;gap:3px;flex-wrap:wrap}
+  .mtbl .th>span{font:italic 800 13px/1 var(--msport);text-transform:uppercase;color:var(--mcyan)}
+  .mscheme{width:100%;max-width:400px}
+  .mscheme svg{width:100%;height:auto;display:block}
+  .mrule svg{height:min(22vh,110px);width:auto;max-width:100%}
+
+  /* пауза и итог */
+  .mscore{display:flex;align-items:center;gap:10px;padding:8px 14px;border-radius:12px;background:rgba(6,14,28,.85);
+    font:italic 800 22px/1 var(--msport);white-space:nowrap}
+  .mscore .c{width:10px;height:22px;border-radius:3px}.mscore .t{font-size:14px;color:var(--mgold);margin-left:6px}
+  .mres{align-items:center;text-align:center;padding:16px 20px}
+  #oScore{font:italic 800 clamp(40px,14vh,60px)/1 var(--msport);letter-spacing:.04em}
+  #oWinner{font:italic 800 16px/1.2 var(--msport);color:var(--mgold);text-transform:uppercase}
+  #pfps{font:700 11px/1 system-ui;color:#8fe3a0}
 </style>
 
 <div id="stage">
@@ -237,24 +383,31 @@
     <div id="bPause" title="Пауза"><span></span><span></span></div>
   </div>
 
-  <div id="pausescr">
-    <div class="pbox">
-      <h2 id="pauseTitle">ПАУЗА</h2>
-      <div id="pfps" class="dbg">—</div>
-      <button class="pbtn prim" id="pResume">ПРОДОЛЖИТЬ</button>
-      <button class="pbtn" id="pFps">FPS</button>
-      <button class="pbtn" id="pMenu">ГЛАВНОЕ МЕНЮ</button>
-    </div>
+  <!-- пауза и итог матча — слои меню (управление как в меню: касание, клавиатура, геймпад) -->
+  <div id="pausescr" class="mlay">
+    <section class="mscr cur" data-s="pause">
+      <div class="mhead"><div class="mcrumb"><div class="mbrand sm">BVR Hockey <b>26</b></div><div class="mtitle" id="pauseTitle">ПАУЗА</div></div></div>
+      <div class="mleft"><div class="mlist">
+        <div class="mi mf" id="pResume" data-act="resume"></div>
+        <div class="mi mf" id="pCtrl" data-act="pctrl"></div>
+        <div class="mi mf" id="pSet" data-act="pset"></div>
+        <div class="mi mf" id="pMenu" data-act="menu"></div>
+      </div></div>
+      <div class="mright"><div class="mscore" id="pScore"></div><div id="pfps" class="dbg"></div></div>
+    </section>
+    <div class="mfoot"><span></span><div class="mhints"></div></div>
   </div>
 
-  <div id="overscr">
-    <div class="pbox">
-      <div id="oTitle">МАТЧ ОКОНЧЕН</div>
-      <div id="oScore">0 : 0</div>
-      <div id="oWinner">—</div>
-      <button class="pbtn prim" id="oAgain">ИГРАТЬ СНОВА</button>
-      <button class="pbtn" id="oMenu">ГЛАВНОЕ МЕНЮ</button>
-    </div>
+  <div id="overscr" class="mlay">
+    <section class="mscr cur" data-s="result">
+      <div class="mhead"><div class="mcrumb"><div class="mbrand sm">BVR Hockey <b>26</b></div><div class="mtitle" id="oTitle">МАТЧ ОКОНЧЕН</div></div></div>
+      <div class="mleft"><div class="mlist">
+        <div class="mi mf" id="oAgain" data-act="again"></div>
+        <div class="mi mf" id="oMenu" data-act="menu"></div>
+      </div></div>
+      <div class="mright"><div class="mcard mglass mres"><div id="oScore">0 : 0</div><div id="oWinner">—</div></div></div>
+    </section>
+    <div class="mfoot"><span></span><div class="mhints"></div></div>
   </div>
 
   <canvas id="stick"></canvas>
@@ -269,8 +422,7 @@
   <div id="netdbg" class="dbg" style="display:none;position:fixed;left:10px;top:10px;z-index:99;pointer-events:none;
        font:12px/1.45 monospace;font-weight:700;color:#7dff8a;background:rgba(0,0,0,.78);padding:6px 10px;
        border-radius:6px;white-space:pre;max-width:calc(100vw - 20px);overflow:hidden"></div>
-  <!-- Отдельно от #rotate: не полноэкранный, не блокирует меню/игру под собой,
-       не задет paintLang() (тот стирает содержимое #rotate целиком через textContent).
+  <!-- Отдельно от #rotate: не полноэкранный, не блокирует меню/игру под собой.
        Показывается только если автоматический requestFullscreen (через orientationchange —
        не user gesture, на части Android-браузеров глушится) не сработал. -->
   <button id="fsHint" style="display:none;position:fixed;right:10px;top:10px;z-index:99;
@@ -279,65 +431,18 @@
   <div id="rotate">
     <div class="phone"></div>
     <div class="arrow"></div>
-    <div class="text">Поверни телефон горизонтально</div>
-    <div class="brand">BVR HOCKEY</div>
+    <div class="text" id="rotTxt">Поверни телефон горизонтально</div>
+    <div class="brand">BVR HOCKEY <b>26</b></div>
+    <div class="rsnd" id="rotSnd">🔊 коснись для звука</div>
+    <div class="rnp" id="rotNp"></div>
   </div>
 
-  <div id="start">
-    <div class="card">
-      <h1 id="mTitle">ЛИГА 5 НА 5</h1>
-      <p class="sb" id="mSub">аркадный хоккей · геймпад и экран</p>
-      <div class="teams">
-        <div class="tsel"><b id="lbLang">ЯЗЫК</b><div class="chips" id="langT"></div></div>
-        <div class="tsel"><b id="lbMode">РЕЖИМ МАТЧА</b><div class="chips" id="modeT"></div></div>
-      </div>
-      <div class="teams">
-        <div class="tsel"><b id="lbPlay">ИГРА</b><div class="chips" id="playT"></div></div>
-        <div class="tsel"><b id="lbQual">ГРАФИКА</b><div class="chips" id="qT"></div>
-          <div class="chips" id="fpsT" style="margin-top:6px"></div></div>
-      </div>
-      <div class="teams" id="diffbox">
-        <div class="tsel"><b id="lbDiff">СЛОЖНОСТЬ</b><div class="chips" id="diffT"></div></div>
-      </div>
-      <div class="teams" id="netbox" style="display:none">
-        <div class="tsel">
-          <b id="lbNet">ОНЛАЙН-МАТЧ</b>
-          <input id="srv" placeholder="https://имя.workers.dev" autocomplete="off"
-                 autocapitalize="off" autocorrect="off" spellcheck="false">
-          <div class="netrow">
-            <input id="rcode" placeholder="КОД" maxlength="6" autocapitalize="characters" autocorrect="off">
-            <button id="bJoin">ВОЙТИ</button>
-            <button id="bHost">СОЗДАТЬ</button>
-          </div>
-          <div id="netst">не подключено</div>
-          <div id="netlink"></div>
-        </div>
-      </div>
-      <div class="teams">
-        <div class="tsel"><b id="lbMy">ТВОЯ КОМАНДА</b><div class="chips" id="myT"></div></div>
-        <div class="tsel"><b id="lbOp">СОПЕРНИК</b><div class="chips" id="opT"></div></div>
-      </div>
-      <div class="teams">
-        <div class="tsel keys"><b id="lbAtt">С ШАЙБОЙ</b>
-          <span><i class="k a">A</i><u id="hA"></u></span>
-          <span><i class="k b">B</i><u id="hB"></u></span>
-          <span><i class="k x">X</i><u id="hX"></u></span>
-          <span><i class="k y">Y</i><u id="hY"></u></span>
-          <span><i class="k r">RT</i><u id="hRT"></u></span>
-        </div>
-        <div class="tsel keys"><b id="lbDef">В ОБОРОНЕ</b>
-          <span><i class="k a">A</i><u id="hA2"></u></span>
-          <span><i class="k b">B</i><u id="hB2"></u></span>
-          <span><i class="k x">X</i><u id="hX2"></u></span>
-          <span><i class="k y">Y</i><u id="hY2"></u></span>
-          <span><i class="k d">D</i><u id="hD2"></u></span>
-        </div>
-      </div>
-      <p class="hint" id="mHint"></p>
-      <p class="dev" id="mDev"></p>
-      <p class="credits" id="mCred"></p>
-    </div>
-    <div id="startbar"><button id="go">НАЧАТЬ МАТЧ</button></div>
+  <!-- меню (docs/MENU_PLAN.md): экраны строит код «МЕНЮ» ниже; фон — зимний, CSS -->
+  <div id="start" class="mroot">
+    <div class="mbg"><div class="lights"></div><div class="ice"></div><div class="drift l"></div><div class="drift r"></div><div class="frost"></div><div class="shade"></div></div>
+    <div class="msnow" id="msnow"></div>
+    <div id="mscreens"></div>
+    <div class="mfoot"><div class="mnp" id="mnp"><span class="meq"><i></i><i></i><i></i><i></i></span><span class="mnptx" id="mnpTx"></span></div><div class="mhints"></div></div>
   </div>
 </div>
 
@@ -715,6 +820,9 @@ function layout(){
 
   document.getElementById('rotate').style.display=PORTRAIT?'flex':'none';
   document.body.classList.toggle('portrait', PORTRAIT);
+  /* телефон повернули посреди матча против ИИ — пауза (меню паузы откроется, когда повернут обратно) */
+  if(PORTRAIT && typeof NET!=='undefined' && NET && !TEST.autostart && !TEST.autopilot && state!=='menu' && state!=='over' && !NET.on && !PAUSED && typeof setPaused==='function') setPaused(true);
+  if(typeof mLayout==='function') mLayout();
   /* fsHint — отдельная не-полноэкранная кнопка (см. ниже), скрываем при
      возврате в portrait вместе с #rotate. Не меняет поведение #rotate. */
   if(PORTRAIT){ var fh0=document.getElementById('fsHint'); if(fh0) fh0.style.display='none'; }
@@ -950,7 +1058,34 @@ ru:{
   padA1:'пас', padA2:'прессинг', padB1:'бросок', padB2:'отбор', padX1:'навес', padX2:'силовой', padY1:'в разрез', padY2:'вратарь',
   gamepad:'ГЕЙМПАД', connected:'подключён', kmh:'км/ч',
   qLow:'низкое', qMid:'среднее', qHigh:'высокое',
-  rotate:'Поверни телефон горизонтально 🔄', noPauseOnline:'в онлайне паузы нет'
+  rotate:'Поверни телефон горизонтально', noPauseOnline:'в онлайне паузы нет',
+  min5:'5 мин', tapSnd:'🔊 коснись для звука', soon:'скоро',
+  mQuick:'Быстрый матч', mMode:'Режим игры', mTrain:'Тренировка', mRules:'Правила', mSettings:'Настройки',
+  mModeD:'Против компьютера или с другом', mTrainD:'Уроки с медалями', mRulesD:'Управление и правила хоккея',
+  mSettingsD:'Язык, графика, звук, вибрация',
+  mVsAI:'Против компьютера', mVsAID:'Ты и твоя команда против ИИ · 3 уровня сложности',
+  mFriend:'С другом', mFriendD:'Приглашение в чат Telegram · матч считает сервер',
+  mPrep:'Подготовка матча', mMy:'Твоя команда', mOpp:'Соперник', mLen:'Длина матча', mTac:'Тактика',
+  mCreate:'Создать комнату', mCreateD:'Код и ссылка-приглашение для друга', mJoin:'Войти по коду', mJoinD:'Код из приглашения друга',
+  mRoom:'Комната', mInvite:'Отправить приглашение', mJoinBtn:'Войти',
+  mRoomNote:'Друг откроет игру по ссылке и сразу попадёт в комнату. Пропала связь — вернём в тот же матч.',
+  mJoinNote:'Впиши код комнаты из приглашения друга и нажми «Войти».',
+  mFriendIn:'Друг в комнате', mHostSees:'Друг видит твой выбор и ждёт старта', mGuestWait:'Команды и длину выбирает друг — матч начнёт он',
+  mWaitHost:'ждём старта', mSelect:'Выбрать', mBack:'Назад', mChange:'Изменить', mTabs:'Вкладки',
+  mLang:'Язык', mGfx:'Графика', mFps:'Показ FPS', mMusic:'Музыка', mSfx:'Звуки', mVib:'Вибрация', langName:'Русский',
+  mLangD:'Язык игры. Выбор сохраняется.', mGfxD:'Авто — игра сама держит 60 кадров: на слабом телефоне снижает качество.',
+  mFpsD:'Счётчик кадров в углу экрана во время матча.', mMusicD:'Музыка в меню. Когда начинается матч, она затихает.',
+  mSfxD:'Звуки матча: клюшки, броски, свисток, трибуны.', mVibD:'Лёгкая отдача: гол, силовой, нажатия в меню.',
+  mCtrl:'Управление', mHockey:'Правила хоккея', mTouch:'Экран', mKbd:'Клавиатура', mPad:'Геймпад',
+  mStickL:'Левая половина экрана — джойстик', mMove:'движение', mPauseK:'пауза', mSwitch:'смена игрока', mPress:'прессинг (держать)',
+  mTacK:'тактика', mDpad:'крестовина',
+  rOff:'Офсайд', rOffD:'Нельзя въезжать в зону соперника раньше шайбы. Загорелось «офсайд» — выйди за синюю линию, и игра пойдёт дальше. Тронешь шайбу в зоне — свисток и вбрасывание.',
+  rIce:'Проброс', rIceD:'Бросил шайбу из своей половины за линию ворот соперника, и её никто не тронул — вбрасывание у твоих ворот.',
+  rPen:'Удаления', rPenD:'Силовой против игрока без шайбы — удаление на 2 минуты: команда играет вчетвером.',
+  rFace:'Вбрасывание', rFaceD:'После гола, офсайда, проброса и остановки. Кто первым коснётся шайбы — тот владеет.',
+  rLen:'Длина матча', rLenD:'1, 3 или 5 минут чистого времени. Ничья — значит ничья.',
+  rGoal:'Гол', rGoalD:'Шайба целиком пересекла линию ворот. Вратарь может отбить её или накрыть.',
+  mDevD:'Ещё игры — @bvr_games_bot'
 },
 en:{
   fpsOn:'FPS: ON', fpsOff:'FPS: OFF',
@@ -992,7 +1127,34 @@ en:{
   padA1:'pass', padA2:'press', padB1:'shot', padB2:'poke', padX1:'lob', padX2:'check', padY1:'through', padY2:'goalie',
   gamepad:'GAMEPAD', connected:'connected', kmh:'km/h',
   qLow:'low', qMid:'medium', qHigh:'high',
-  rotate:'Turn your phone sideways 🔄', noPauseOnline:'no pause in online matches'
+  rotate:'Turn your phone sideways', noPauseOnline:'no pause in online matches',
+  min5:'5 min', tapSnd:'🔊 tap for sound', soon:'soon',
+  mQuick:'Quick match', mMode:'Game mode', mTrain:'Training', mRules:'Rules', mSettings:'Settings',
+  mModeD:'Against the computer or a friend', mTrainD:'Lessons with medals', mRulesD:'Controls and hockey rules',
+  mSettingsD:'Language, graphics, sound, vibration',
+  mVsAI:'Vs computer', mVsAID:'You and your team against the AI · 3 difficulty levels',
+  mFriend:'With a friend', mFriendD:'Invite in a Telegram chat · the server runs the match',
+  mPrep:'Match setup', mMy:'Your team', mOpp:'Opponent', mLen:'Match length', mTac:'Tactics',
+  mCreate:'Create a room', mCreateD:'Code and invite link for a friend', mJoin:'Join with a code', mJoinD:"Code from your friend's invite",
+  mRoom:'Room', mInvite:'Send invite', mJoinBtn:'Join',
+  mRoomNote:'Your friend opens the game from the link and lands in the room. Lost connection? You return to the same match.',
+  mJoinNote:"Type the room code from your friend's invite and press Join.",
+  mFriendIn:'Friend joined', mHostSees:'Your friend sees your choice and waits', mGuestWait:'Your friend picks teams and length and starts the match',
+  mWaitHost:'waiting for start', mSelect:'Select', mBack:'Back', mChange:'Change', mTabs:'Tabs',
+  mLang:'Language', mGfx:'Graphics', mFps:'Show FPS', mMusic:'Music', mSfx:'Sounds', mVib:'Vibration', langName:'English',
+  mLangD:'Game language. Your choice is saved.', mGfxD:'Auto keeps 60 fps: the game lowers quality on a slow phone.',
+  mFpsD:'Frame counter in the corner during a match.', mMusicD:'Menu music. It fades out when a match starts.',
+  mSfxD:'Match sounds: sticks, shots, whistle, crowd.', mVibD:'Light feedback: goals, hits, menu taps.',
+  mCtrl:'Controls', mHockey:'Hockey rules', mTouch:'Touch', mKbd:'Keyboard', mPad:'Gamepad',
+  mStickL:'Left half of the screen is the stick', mMove:'move', mPauseK:'pause', mSwitch:'switch player', mPress:'press (hold)',
+  mTacK:'tactics', mDpad:'D-pad',
+  rOff:'Offside', rOffD:'Do not enter the attacking zone ahead of the puck. When OFFSIDE lights up, skate back over the blue line and play goes on. Touch the puck in the zone — whistle and a faceoff.',
+  rIce:'Icing', rIceD:'Shot from your own half over the goal line and nobody touched it — faceoff at your end.',
+  rPen:'Penalties', rPenD:'A check on a player without the puck — 2 minutes in the box, your team plays with four.',
+  rFace:'Faceoff', rFaceD:'After a goal, offside, icing or a stoppage. The first to touch the puck owns it.',
+  rLen:'Match length', rLenD:'1, 3 or 5 minutes of play. A draw is a draw.',
+  rGoal:'Goal', rGoalD:'The whole puck crossed the goal line. The goalie can save it or cover it.',
+  mDevD:'More games — @bvr_games_bot'
 },
 id:{
   fpsOn:'FPS: AKTIF', fpsOff:'FPS: MATI',
@@ -1036,7 +1198,34 @@ id:{
   padA1:'umpan', padA2:'tekan', padB1:'tembak', padB2:'rebut', padX1:'lambung', padX2:'benturan', padY1:'terobosan', padY2:'kiper',
   gamepad:'GAMEPAD', connected:'terhubung', kmh:'km/j',
   qLow:'rendah', qMid:'sedang', qHigh:'tinggi',
-  rotate:'Putar HP ke posisi mendatar 🔄', noPauseOnline:'tidak ada jeda di mode online'
+  rotate:'Putar HP ke posisi mendatar', noPauseOnline:'tidak ada jeda di mode online',
+  min5:'5 mnt', tapSnd:'🔊 ketuk untuk suara', soon:'segera',
+  mQuick:'Main cepat', mMode:'Mode permainan', mTrain:'Latihan', mRules:'Aturan', mSettings:'Pengaturan',
+  mModeD:'Lawan komputer atau teman', mTrainD:'Pelajaran dengan medali', mRulesD:'Kontrol dan aturan hoki',
+  mSettingsD:'Bahasa, grafis, suara, getar',
+  mVsAI:'Lawan komputer', mVsAID:'Kamu dan timmu melawan AI · 3 tingkat kesulitan',
+  mFriend:'Dengan teman', mFriendD:'Undang di chat Telegram · server menjalankan laga',
+  mPrep:'Persiapan laga', mMy:'Timmu', mOpp:'Lawan', mLen:'Durasi laga', mTac:'Taktik',
+  mCreate:'Buat ruang', mCreateD:'Kode dan tautan undangan untuk teman', mJoin:'Masuk dengan kode', mJoinD:'Kode dari undangan teman',
+  mRoom:'Ruang', mInvite:'Kirim undangan', mJoinBtn:'Masuk',
+  mRoomNote:'Temanmu membuka game dari tautan dan langsung masuk ruang. Koneksi putus? Kamu kembali ke laga yang sama.',
+  mJoinNote:'Ketik kode ruang dari undangan temanmu lalu tekan Masuk.',
+  mFriendIn:'Teman sudah masuk', mHostSees:'Temanmu melihat pilihanmu dan menunggu', mGuestWait:'Temanmu memilih tim dan durasi, dia yang memulai laga',
+  mWaitHost:'menunggu mulai', mSelect:'Pilih', mBack:'Kembali', mChange:'Ubah', mTabs:'Tab',
+  mLang:'Bahasa', mGfx:'Grafis', mFps:'Tampilkan FPS', mMusic:'Musik', mSfx:'Suara', mVib:'Getar', langName:'Indonesia',
+  mLangD:'Bahasa game. Pilihanmu disimpan.', mGfxD:'Otomatis menjaga 60 fps: kualitas turun di ponsel yang lambat.',
+  mFpsD:'Penghitung frame di sudut layar saat laga.', mMusicD:'Musik menu. Pelan-pelan hilang saat laga dimulai.',
+  mSfxD:'Suara laga: tongkat, tembakan, peluit, penonton.', mVibD:'Getar ringan: gol, benturan, ketukan menu.',
+  mCtrl:'Kontrol', mHockey:'Aturan hoki', mTouch:'Layar', mKbd:'Keyboard', mPad:'Gamepad',
+  mStickL:'Separuh kiri layar adalah stik', mMove:'gerak', mPauseK:'jeda', mSwitch:'ganti pemain', mPress:'menekan (tahan)',
+  mTacK:'taktik', mDpad:'D-pad',
+  rOff:'Offside', rOffD:'Jangan masuk zona lawan sebelum keping. Saat OFFSIDE menyala, keluar lewat garis biru dan permainan lanjut. Sentuh keping di zona — peluit dan face-off.',
+  rIce:'Icing', rIceD:'Keping dari separuh lapanganmu melewati garis gawang lawan tanpa disentuh — face-off di dekat gawangmu.',
+  rPen:'Penalti', rPenD:'Benturan ke pemain tanpa keping — 2 menit keluar, timmu main berempat.',
+  rFace:'Face-off', rFaceD:'Setelah gol, offside, icing, atau penghentian. Yang pertama menyentuh keping menguasainya.',
+  rLen:'Durasi laga', rLenD:'1, 3, atau 5 menit permainan. Seri tetap seri.',
+  rGoal:'Gol', rGoalD:'Seluruh keping melewati garis gawang. Kiper bisa menepis atau menangkapnya.',
+  mDevD:'Game lainnya — @bvr_games_bot'
 }};
 var LANG='ru';
 try{ var _sl=localStorage.getItem('bvr_lang'); if(_sl && STRINGS[_sl]) LANG=_sl; }catch(e){}
@@ -1061,11 +1250,14 @@ function mix(a,b,t){return [a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2
 
 /* ---------- звук ---------- */
 var AC=null,master=null,crowdGain=null;
+/* громкость из Настроек: музыка меню и звуки матча (0…1) */
+var VOL={mus:0.7, sfx:1};
+function applySfx(){ if(master) master.gain.value=0.42*VOL.sfx; }
 function audioInit(){
   if(AC) return;
   try{
     AC=new (window.AudioContext||window.webkitAudioContext)();
-    master=AC.createGain(); master.gain.value=0.42; master.connect(AC.destination);
+    master=AC.createGain(); master.gain.value=0.42*VOL.sfx; master.connect(AC.destination);
     var n=AC.sampleRate*2, b=AC.createBuffer(1,n,AC.sampleRate), d=b.getChannelData(0);
     for(var i=0;i<n;i++) d[i]=(Math.random()*2-1)*0.5;
     var src=AC.createBufferSource(); src.buffer=b; src.loop=true;
@@ -1111,7 +1303,8 @@ var SFX={
       crowdGain.gain.linearRampToValueAtTime(0.30,AC.currentTime+0.3);
       crowdGain.gain.linearRampToValueAtTime(0.05,AC.currentTime+3.4); }
   },
-  swap:function(){ tone(760,1140,0.07,0.14,'square'); }
+  swap:function(){ tone(760,1140,0.07,0.14,'square'); },
+  ui:function(k){ tone(880,1180,0.05,0.05*(k||1),'triangle'); }    /* меню: перемещение и выбор */
 };
 /* Отдача. iOS Safari игнорирует navigator.vibrate, поэтому внутри Telegram
    идём через HapticFeedback — он работает и на айфоне, и на андроиде. */
@@ -1172,6 +1365,10 @@ if(!TEST.ai) prefGet('difficulty', function(v, src){
 var HAPTIC = !!(TG && TG.HapticFeedback && TG.HapticFeedback.impactOccurred);
 var VIBRO=true;
 try{ var _sv=localStorage.getItem('bvr_vibro'); if(_sv==='0') VIBRO=false; }catch(e){}
+/* вибро и громкость — настройки игрока (CloudStorage, копия в localStorage: bvr_vibro, bvr_music, bvr_sfx) */
+prefGet('vibro', function(v){ if(v==='0'||v==='1'){ VIBRO=(v==='1'); if(typeof MENU!=='undefined' && MENU.ready) MENU.repaint(); } });
+prefGet('music', function(v){ var x=parseFloat(v); if(x>=0 && x<=1){ VOL.mus=x; if(typeof MUSIC!=='undefined'){ MUSIC.apply(); if(MENU.ready) MENU.repaint(); } } });
+prefGet('sfx', function(v){ var x=parseFloat(v); if(x>=0 && x<=1){ VOL.sfx=x; applySfx(); if(typeof MENU!=='undefined' && MENU.ready) MENU.repaint(); } });
 function buzz(ms, kind){
   if(!VIBRO) return;
   if(HAPTIC){
@@ -1701,7 +1898,7 @@ function readInput(){
     else if(EDGE.DD) setTactic(HUMAN,2);
     else if(EDGE.DL||EDGE.DR) setTactic(HUMAN,0);
   }
-  if(EDGE.ST) togglePause();
+  if(EDGE.ST && !MENU.layer()) togglePause();   /* в меню паузы Esc / Start обрабатывает меню */
 }
 
 /* ---------- тактика ботов ---------- */
@@ -1735,10 +1932,12 @@ function togglePause(){
 }
 function setPaused(v){
   PAUSED=v;
+  if(!v && typeof closePauseSub==='function') closePauseSub();   /* продолжили из «Управления» / «Настроек» паузы */
   var e=document.getElementById('pausescr');
   if(e) e.style.display=v?'flex':'none';
   if(v){
-    setText('pauseTitle',T('pause'));
+    if(typeof MENU!=='undefined') MENU.foc.pause=0;   /* новая пауза — фокус на «Продолжить» */
+    paintPause();
     setText('pfps', Math.round(fpsAvg)+' FPS · '+T(['qLow','qMid','qHigh'][QLEVEL])+
                     (HAPTIC?' · haptic':'')+(padConnected?' · '+T('gamepad').toLowerCase():''));
   }
@@ -1910,6 +2109,7 @@ function showResult(){
   setText('oWinner', w);
   setText('oAgain', T('again'));
   setText('oMenu', T('mainMenu'));
+  MENU.foc.result=0;
   /* гость реванш не начинает — его запускает хост */
   var ag=document.getElementById('oAgain'); if(ag) ag.style.display=(NET.on && NET.role==='guest')?'none':'';
   var e=document.getElementById('overscr'); if(e) e.style.display='flex';
@@ -1922,7 +2122,9 @@ function backToMenu(){
   if(state!=='menu' && state!=='over') EV.emit('match:abort',{score:score.slice()});
   state='menu';
   var st=document.getElementById('start');
-  st.style.display='block'; st.scrollTop=0;
+  st.style.display='block';
+  /* из сетевого матча — к подготовке в той же комнате (реванш), иначе в главное меню */
+  MENU.setStack(ONLINE && NET.on ? ['main','mode','friend','prep'] : ['main']);
   netStatus(NET.status||T('notConnected'));
   paintTacBadge();
 }
@@ -4227,13 +4429,8 @@ function netStatus(txt){
   NET.status=txt;
   var el=document.getElementById('netst');
   if(el) el.textContent=txt;
-  var go=document.getElementById('go');
-  if(go){
-    if(!ONLINE){ go.disabled=false; go.textContent=T('start'); }
-    else if(NET.role==='host'){ go.disabled=!NET.peer;
-      go.textContent=NET.peer?T('start'):T('waiting'); }
-    else { go.disabled=true; go.textContent=T('waiting'); }
-  }
+  goPaint();
+  if(typeof MENU!=='undefined' && MENU.ready) MENU.netPaint();
 }
 function randCode(){
   var A='ABCDEFGHJKLMNPQRSTUVWXYZ23456789', r='';
@@ -4309,8 +4506,15 @@ function netConnect(url, code, cb, re){
       netStatus(T('room')+' '+code+' · '+(m.role==='host' ? T('youHost') : T('youGuest'))+(NET.srv?' · server':''));
       if(cb) cb();
       if(re) netRejoined();
+      MENU.onNet('hello');
     }
     else if(m.t==='full'){ if(re){ netGiveUp(); return; } NET.on=false; netStatus(T('roomFull')); }
+    /* выбор хоста на экране подготовки (гость видит его до старта) */
+    else if(m.t==='prep' && NET.role==='guest'){
+      if(CLUBS[m.a] && CLUBS[m.b] && m.a!==m.b){ selMy=m.a|0; selOp=m.b|0; }
+      if(MIN_OPTS.indexOf(m.min)>=0) selMin=m.min;
+      if(state==='menu'){ MENU.build('prep'); MENU.refocus(); }
+    }
     else if(m.t==='fb'){ netSrvFallback(m.k, true); }
     else if(m.t==='peer'){
       NET.peer = m.n>1;
@@ -4318,6 +4522,7 @@ function netConnect(url, code, cb, re){
       netFbStart();
       /* серверный режим: матч идёт дальше (за соперника — ИИ), надпись — по снимкам (netAway) */
       if(!NET.peer && state!=='menu' && !NET.srv){ flash(T('peerOut'),'',2.2); }
+      MENU.onNet('peer');
     }
     else if(m.t==='cfg' && netFollow()){
       clearTimeout(NET.srvT);
@@ -4328,10 +4533,12 @@ function netConnect(url, code, cb, re){
       TEAM[0]=CLUBS[m.a]; TEAM[1]=CLUBS[m.b];
       buildTeamMeshes();
       MATCH_MIN=m.min; clock=MATCH_MIN*60;
+      selMy=m.a; selOp=m.b; if(MIN_OPTS.indexOf(m.min)>=0) selMin=m.min;
       score[0]=0; score[1]=0; pen.length=0;
       document.getElementById('s1').textContent='0';
       document.getElementById('s2').textContent='0';
       reset(true);
+      TACTIC[HUMAN]=selTac;      /* своя тактика из подготовки (серверу она уходит с вводом) */
       document.getElementById('start').style.display='none';
       state='face'; stateT=0.9;
       hideResult(); setPaused(false);
@@ -4448,7 +4655,7 @@ function netFbStart(){
   if(!NET.fbKind || !NET.on || NET.srv || NET.role!=='host' || !NET.peer) return;
   var k=NET.fbKind; NET.fbKind=null;
   if(k==='again' && state!=='menu') startMatchAgain();
-  else document.getElementById('go').click();
+  else goStart();
 }
 
 /* --- хост: снимок состояния --- */
@@ -4868,7 +5075,8 @@ function frameStepInner(dt){
     layoutTop(); netBanner();
     document.getElementById('fps').textContent=f+' fps'+(padConnected?' · '+T('gamepad').toLowerCase():'')+' · '+T(['qLow','qMid','qHigh'][QLEVEL]);
     fT=0;fN=0;
-    qualityTick(RT.ms>0 ? 1000/RT.ms : fpsAvg);
+    /* под непрозрачным меню площадка не рисуется — и частоту кадров по нему не судим */
+    if(!MENU.covers()) qualityTick(RT.ms>0 ? 1000/RT.ms : fpsAvg);
   }
 
   /* Сторож ориентации: если размер окна разошёлся с тем, под который считана
@@ -4878,6 +5086,8 @@ function frameStepInner(dt){
   if(_vs[0]!==VW || _vs[1]!==VH) layout();
 
   readInput();
+  MENU.tick(dt);        /* после readInput: Esc / Start, открывшие паузу, меню в этом кадре уже не видит нажатыми */
+  MUSIC.tick(dt);
   RDT=dt;
   /* кнопки гаснут только в матче: в меню они и так не мешают */
   if(state==='menu'||PAUSED){ uiIdle=0; if(_padDim){ _padDim=false; padFade(false); } }
@@ -4900,7 +5110,7 @@ function frameStepInner(dt){
       NET.sendT-=dt;
       if(NET.sendT<=0){ NET.sendT=1/6; netSnap(); }
     }
-    pfRender();
+    if(!MENU.covers()) pfRender();
     return;
   }
 
@@ -4938,7 +5148,7 @@ function frameStepInner(dt){
       pfAdd('net',_tn2);
     }
   }
-  pfRender();
+  if(!MENU.covers()) pfRender();   /* меню и экран поворота непрозрачны — площадку под ними не рисуем */
 
   if(msgT>0){ msgT-=dt; if(msgT<=0) msgBox.style.opacity=0; }
 
@@ -4989,149 +5199,722 @@ requestAnimationFrame(frame);
 
 /* --- текстуры --- */
 
-/* --- выбор команд --- */
-var selMy=0, selOp=3;
-var ONLINE=false;
-var MODES=[{n:'quick',s:'min1',m:1},{n:'normal',s:'min3',m:3}];
-var selMode=1;
-function paintOpts(){
-  var lh=document.getElementById('langT'); lh.innerHTML='';
-  [['ru','RU'],['en','EN'],['id','ID']].forEach(function(o){
-    var el=document.createElement('div');
-    el.className='chip opt'+(LANG===o[0]?' on':'');
-    el.textContent=o[1];
-    el.addEventListener('click',function(){
-      LANG=o[0];
-      try{ localStorage.setItem('bvr_lang',LANG); }catch(e){}
-      paintLang(); paintOpts(); paintChips(); netStatus(NET.status||T('notConnected'));
-    });
-    lh.appendChild(el);
-  });
-  var ph=document.getElementById('playT'); ph.innerHTML='';
-  [[T('solo'),false],[T('duo'),true]].forEach(function(o){
-    var el=document.createElement('div');
-    el.className='chip opt'+(ONLINE===o[1]?' on':'');
-    el.textContent=o[0];
-    el.addEventListener('click',function(){
-      ONLINE=o[1];
-      document.getElementById('netbox').style.display=ONLINE?'flex':'none';
-      if(!ONLINE){ NET.on=false; HUMAN=TEST.side; try{if(NET.ws)NET.ws.close();}catch(e){} }
-      paintOpts(); netStatus(NET.status||T('notConnected'));
-    });
-    ph.appendChild(el);
-  });
-  var mh=document.getElementById('modeT'); mh.innerHTML='';
-  MODES.forEach(function(md,i){
-    var el=document.createElement('div');
-    el.className='chip opt'+(selMode===i?' on':'');
-    el.innerHTML=T(md.n)+'<br><small>'+T(md.s)+'</small>';
-    el.addEventListener('click',function(){ selMode=i; paintOpts(); });
-    mh.appendChild(el);
-  });
-  /* сложность — только в игре против компьютера */
-  var dh=document.getElementById('diffT'); dh.innerHTML='';
-  document.getElementById('diffbox').style.display=ONLINE?'none':'';
-  [['dEasy','easy'],['dNormal','normal'],['dHard','hard']].forEach(function(o){
-    var el=document.createElement('div');
-    el.className='chip opt'+(DIFF===o[1]?' on':'');
-    el.textContent=T(o[0]);
-    el.addEventListener('click',function(){ setDifficulty(o[1]); paintOpts(); });
-    dh.appendChild(el);
-  });
-  var fh=document.getElementById('fpsT'); fh.innerHTML='';
-  [['fpsOff',false],['fpsOn',true]].forEach(function(o){
-    var el=document.createElement('div');
-    el.className='chip opt'+(SHOWFPS===o[1]?' on':'');
-    el.textContent=T(o[0]);
-    el.addEventListener('click',function(){ setShowFps(o[1]); paintOpts(); });
-    fh.appendChild(el);
-  });
-  var qh=document.getElementById('qT'); qh.innerHTML='';
-  [['auto',-1,'byFps'],['qlow',0,'maxFps'],['qmid',1,'balance'],['qhigh',2,'pretty']]
-  .forEach(function(o){
-    var el=document.createElement('div');
-    var on = (o[1]===-1) ? QAUTO : (!QAUTO && QLEVEL===o[1]);
-    el.className='chip opt'+(on?' on':'');
-    el.innerHTML=T(o[0])+'<br><small>'+T(o[2])+'</small>';
-    el.addEventListener('click',function(){
-      /* выбор игрока запоминается: «авто» — снова автоподстройка, уровень — фиксирован */
-      if(o[1]===-1){ setQuality(QLEVEL,true); DYN=1; QSRC='device'; prefSet('quality','auto'); }
-      else { setQuality(o[1],false); QSRC='saved'; prefSet('quality',String(o[1])); }
-      layout(); paintOpts();
-    });
-    qh.appendChild(el);
-  });
-}
 function paintLang(){
-  setText('mTitle',T('title'));   setText('mSub',T('sub'));
   if(typeof layoutTop==='function') setTimeout(layoutTop,0);
-  setText('lbLang',T('lang'));    setText('lbMode',T('mode'));
-  setText('lbPlay',T('play'));    setText('lbQual',T('qual'));
-  setText('lbDiff',T('diff'));
-  setText('lbNet',T('net'));      setText('lbMy',T('myTeam'));
-  setText('lbOp',T('opTeam'));    setText('lbAtt',T('withPuck'));
-  setText('lbDef',T('onDef'));
-  setText('hA',T('hA'));   setText('hB',T('hB'));   setText('hX',T('hX'));
-  setText('hY',T('hY'));   setText('hRT',T('hRT'));
-  setText('hA2',T('hA2')); setText('hB2',T('hB2')); setText('hX2',T('hX2'));
-  setText('hY2',T('hY2')); setText('hD2',T('hD2'));
-  setText('mHint',T('hint'));
-  setText('pauseTitle',T('pause'));
-  setText('pResume',T('resume'));
-  setText('pFps',T(SHOWFPS?'fpsOn':'fpsOff'));
-  setText('pMenu',T('mainMenu'));
-  setText('oAgain',T('again'));
-  setText('oMenu',T('mainMenu'));
   setText('per',T('match'));
-  setText('go',T('start'));
   setText('fsHint',T('fsHint'));
+  setText('rotTxt',T('rotate'));
   var brt=document.querySelector('#bRT i'); if(brt) brt.textContent=T('hRT');
   fitPadLabels();
   var bpz=document.getElementById('bPause'); if(bpz) bpz.title=T('pause');
   var sv=document.getElementById('srv'); if(sv) sv.placeholder=T('srvHint');
+  var rc=document.getElementById('rcode'); if(rc) rc.placeholder=T('codeHint');
   document.title=T('docTitle');
   if(typeof GLOK!=='undefined' && GLOK && typeof TEX!=='undefined' && TEX.board && _adLang!==LANG){ _adLang=LANG; glTexUpdate(TEX.board, buildBoardTex()); }   /* реклама на борту — пересобираем только при смене языка */
-  var dv=document.getElementById('mDev');
-  if(dv){
-    dv.innerHTML='';
-    var parts=T('dev').split('@bvr_games_bot');
-    dv.appendChild(document.createTextNode(parts[0]));
-    var a=document.createElement('a'); a.href='#'; a.id='devlink'; a.textContent='@bvr_games_bot';
-    a.addEventListener('click',function(e){
-      e.preventDefault();
-      var u='https://t.me/bvr_games_bot';
-      var tg=(window.Telegram&&window.Telegram.WebApp)?window.Telegram.WebApp:null;
-      if(tg && tg.openTelegramLink) tg.openTelegramLink(u); else window.open(u,'_blank');
-    });
-    dv.appendChild(a);
-    dv.appendChild(document.createTextNode(parts[1]||''));
-  }
-  var rt=document.getElementById('rotate'); if(rt) rt.textContent=T('rotate');
-  var rc=document.getElementById('rcode'); if(rc) rc.placeholder=T('codeHint');
-  var bj=document.getElementById('bJoin'); if(bj) bj.textContent=T('join');
-  var bh=document.getElementById('bHost'); if(bh) bh.textContent=T('host');
   document.getElementById('t1n').textContent=clubAb(TEAM[0]);
   document.getElementById('t2n').textContent=clubAb(TEAM[1]);
+  if(typeof paintPause==='function') paintPause();
+  setText('oAgain',T('again')); setText('oMenu',T('mainMenu'));
   paintTacBadge();
 }
 
-function paintChips(){
-  ['myT','opT'].forEach(function(id,side){
-    var host=document.getElementById(id); host.innerHTML='';
-    CLUBS.forEach(function(cl,i){
-      var el=document.createElement('div');
-      el.className='chip'+((side===0?selMy:selOp)===i?' on':'')+
-        ((side===0? i===selOp : i===selMy)?' dis':'');
-      el.style.background=cl.j; el.textContent=clubName(cl);
-      el.addEventListener('click',function(){
-        if(side===0){ if(i===selOp) return; selMy=i; } else { if(i===selMy) return; selOp=i; }
-        paintChips();
-      });
-      host.appendChild(el);
-    });
+/* ============================================================
+   МЕНЮ (docs/MENU_PLAN.md, этап 2)
+   Экраны — стек (MENU.stack), верхний показан. Слои: 'menu' — #start (главное меню и подэкраны), 'pause' — #pausescr,
+   'result' — #overscr. Подэкраны паузы (Управление, Настройки) открываются в #start поверх матча, стек
+   начинается с '@pause'. Экран поворота (вертикаль на телефоне) закрывает всё и меню не управляется.
+   Управление одинаково на всех экранах: касание; клавиатура — стрелки, Enter/Пробел, Esc/Backspace, Q/E — вкладки;
+   геймпад — крестовина или левый стик, A, B, LB/RB — вкладки, Start в паузе — продолжить.
+   Фокус — класс .on у элемента .mf (data-act — действие, data-adj — значение, ← → его меняют).
+   «Назад»: в Telegram — системная BackButton, вне Telegram — своя «‹» в шапке экрана.
+   ============================================================ */
+var selMy=0, selOp=3, selMin=3, selTac=0;
+var ONLINE=false;
+var MIN_OPTS=[1,3,5];
+var MENU={stack:['main'], foc:{}, ready:false, via:'touch', lastL:undefined, pad:{}, rep:{k:null,t:0}, bb:null,
+          rulesTab:0, dev:-1, topic:0, friendMode:'create', ctrlOnly:false, sec:{}};
+try{ if(window.matchMedia && matchMedia('(pointer:fine)').matches) MENU.via='key'; }catch(e){}
+
+/* последний матч против ИИ — для «Быстрого матча» (CloudStorage + localStorage) */
+var LAST={my:0, op:3, min:3, tac:0};
+function lastApply(v){
+  var o=null; try{ o=JSON.parse(v); }catch(e){}
+  if(!o) return false;
+  if(CLUBS[o.my] && CLUBS[o.op] && o.my!==o.op){ LAST.my=o.my|0; LAST.op=o.op|0; }
+  if(MIN_OPTS.indexOf(o.min)>=0) LAST.min=o.min;
+  if(o.tac===0||o.tac===1||o.tac===2) LAST.tac=o.tac;
+  return true;
+}
+function lastSave(){ LAST={my:selMy, op:selOp, min:selMin, tac:selTac}; prefSet('last', JSON.stringify(LAST)); }
+function selFromLast(){ selMy=LAST.my; selOp=LAST.op; selMin=LAST.min; selTac=LAST.tac; }
+prefGet('last', function(v){ if(v && lastApply(v) && !ONLINE){ selFromLast(); if(MENU.ready) MENU.repaint(); } });
+prefGet('lang', function(v, src){ if(src==='cloud' && STRINGS[v] && v!==LANG) setLang(v, true); });
+function setLang(c, noSave){
+  if(!STRINGS[c]) return;
+  LANG=c; if(!noSave) prefSet('lang', c);
+  paintLang(); if(MENU.ready){ MENU.repaint(); MUSIC.paint(); } netStatus(NET.status||T('notConnected'));
+}
+/* совместимость: облачные настройки просят перерисовать меню */
+function paintOpts(){ if(MENU.ready) MENU.repaint(); }
+function paintChips(){ paintOpts(); }
+
+function mEsc(t){ return String(t).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+function mHead(title, extra, root){
+  return '<div class="mhead">'+(root?'':'<div class="mback" data-act="back">‹</div>')+'<div class="mcrumb">'+
+    (root?'<div class="mbrand">BVR Hockey <b>26</b></div>':'<div class="mbrand sm">BVR Hockey <b>26</b></div><div class="mtitle">'+mEsc(title)+'</div>')+
+    '</div>'+(extra||'')+'</div>';
+}
+function mItem(act, title, desc, extra, cls, attrs){
+  return '<div class="mi mf'+(cls?' '+cls:'')+'" data-act="'+act+'"'+(attrs||'')+'>'+mEsc(title)+(extra||'')+(desc?'<span class="d">'+mEsc(desc)+'</span>':'')+'</div>';
+}
+function mRow(adj, k, v, cls, attrs){
+  return '<div class="mrow'+(cls&&cls.indexOf('ro')>=0?'':' mf')+(cls?' '+cls:'')+'" data-adj="'+adj+'"'+(attrs||'')+'><span class="k">'+mEsc(k)+'</span><span class="v">'+v+'</span></div>';
+}
+function mArr(v){ return '<span class="ar" data-dir="-1">‹</span>'+mEsc(v)+'<span class="ar" data-dir="1">›</span>'; }
+function mTog(on){ return '<span class="mtog'+(on?' on':'')+'"></span>'; }
+function mBar(k, v){ return '<span class="mbar" data-bar="'+k+'"><i style="width:'+Math.round(v*100)+'%"></i></span>'; }
+function mJersey(c, num){
+  var sh=c.h||'#e8eaee';
+  return '<svg viewBox="0 0 100 100"><path d="M30 12 L42 8 Q50 16 58 8 L70 12 L92 28 L82 44 L72 38 L72 92 L28 92 L28 38 L18 44 L8 28 Z" fill="'+c.j+'" stroke="rgba(0,0,0,.35)" stroke-width="2"/>'+
+    '<path d="M28 66 H72 V74 H28 Z M8 28 L18 44 L22 41 L12 26 Z M92 28 L82 44 L78 41 L88 26 Z" fill="'+sh+'" opacity=".9"/>'+
+    '<path d="M28 74 H72 V80 H28 Z" fill="'+c.p+'"/><text x="50" y="58" text-anchor="middle" font-family="BVR Sport,Arial Narrow,sans-serif" font-style="italic" font-weight="800" font-size="26" fill="'+sh+'">'+num+'</text></svg>';
+}
+var CPU_KIT={j:'#3a4a60', p:'#26303f', h:'#8fd8ff'};
+function mTeamCard(side, club, label, num, ro){
+  var sw=''; for(var i=0;i<CLUBS.length;i++) sw+='<i style="background:'+CLUBS[i].j+'"'+(i===club?' class="on"':'')+'></i>';
+  return '<div class="mtc mglass'+(ro?' ro':' mf')+'" data-adj="'+side+'"><div class="lbl">'+mEsc(label)+'</div>'+mJersey(CLUBS[club], num)+
+    '<div class="nm">'+mEsc(clubName(CLUBS[club]))+'</div><div class="sws">'+sw+'</div><div class="nav"><span data-dir="-1">‹</span><span data-dir="1">›</span></div></div>';
+}
+function diffKey(){ return DIFF==='easy'?'dEasy':(DIFF==='hard'?'dHard':'dNormal'); }
+function nextClub(cur, d, other){ var n=CLUBS.length, v=cur; do{ v=(v+d+n)%n; }while(v===other); return v; }
+
+/* ---------- экраны ---------- */
+var MSCR={
+  main:function(){
+    var lg=''; [['ru','RU'],['en','EN'],['id','ID']].forEach(function(o){ lg+='<span class="chip'+(LANG===o[0]?' on':'')+'" data-lang="'+o[0]+'">'+o[1]+'</span>'; });
+    var qd=clubName(CLUBS[LAST.my])+' — '+clubName(CLUBS[LAST.op])+' · '+T(diffKey()).toLowerCase()+' · '+T('min'+LAST.min);
+    return mHead('', '<div class="mlang mf mlast" data-adj="lang">'+lg+'</div>', true)+
+      '<div class="mleft"><div class="mlist">'+mItem('quick',T('mQuick'),qd)+mItem('mode',T('mMode'),T('mModeD'))+
+      mItem('train',T('mTrain'),T('mTrainD'),'<span class="soon">'+mEsc(T('soon'))+'</span>','dis')+
+      mItem('rules',T('mRules'),T('mRulesD'))+mItem('settings',T('mSettings'),T('mSettingsD'))+'</div></div>'+
+      '<div class="mright"><img class="mlogo" alt="" src="'+(window.ASSETS&&ASSETS.logo||'')+'"></div>';
+  },
+  mode:function(){
+    return mHead(T('mMode'))+'<div class="mleft"><div class="mlist">'+mItem('vsai',T('mVsAI'),T('mVsAID'))+mItem('friend',T('mFriend'),T('mFriendD'))+
+      '</div></div><div class="mright" data-paint="modeR"></div>';
+  },
+  prep:function(){
+    var guest=ONLINE && NET.role==='guest';
+    /* гость играет за команду 1: «твоя» — вторая карточка хоста */
+    var my=guest?selOp:selMy, op=guest?selMy:selOp;
+    var cards='<div class="mteams">'+mTeamCard(guest?'op':'my', my, T('mMy'), '9', guest)+'<div class="mvs">VS</div>'+
+      mTeamCard(guest?'my':'op', op, T('mOpp'), '17', guest)+'</div>';
+    var opts='<div class="mopts">'+(ONLINE?'':mRow('diff',T('diff'),mArr(T(diffKey()))))+mRow('min',T('mLen'),mArr(T('min'+selMin)),guest?'ro':'')+
+      mRow('tac',T('mTac'),mArr(T(TACNAME[selTac])))+(ONLINE?'<div class="mwait" data-paint="prepSt"></div>':'')+
+      '<button class="mbtn mf" id="go" data-act="go"></button></div>';
+    return mHead(T('mPrep'),'<span class="mpill">'+mEsc(ONLINE?T('mFriend'):T('mVsAI'))+'</span>')+
+      '<div class="mleft"><div class="mprep">'+cards+opts+'</div></div>';
+  },
+  friend:function(){
+    return mHead(T('mFriend'))+'<div class="mleft"><div class="mlist">'+mItem('create',T('mCreate'),T('mCreateD'),'','',' id="bHost"')+
+      mItem('joinf',T('mJoin'),T('mJoinD'))+'</div></div><div class="mright"><div class="mroom mglass" data-paint="friendR"></div></div>';
+  },
+  settings:function(){
+    var inPause=MENU.stack[0]==='@pause';
+    var q=''; [['auto',-1],['qlow',0],['qmid',1],['qhigh',2]].forEach(function(o){
+      var on=(o[1]===-1)?QAUTO:(!QAUTO && QLEVEL===o[1]); q+='<span class="chip'+(on?' on':'')+'" data-q="'+o[1]+'">'+mEsc(T(o[0]))+'</span>'; });
+    var rows=(inPause?'':mRow('lang',T('mLang'),mArr(T('langName')),'',' data-info="mLangD"'))+
+      '<div class="mrow mf" data-adj="gfx" data-info="mGfxD"><span class="k">'+mEsc(T('mGfx'))+'</span><span class="v mseg" id="qT">'+q+'</span></div>'+
+      mRow('fps',T('mFps'),mTog(SHOWFPS),'',' data-info="mFpsD"')+(inPause?'':mRow('mus',T('mMusic'),mBar('mus',VOL.mus),'',' data-info="mMusicD"'))+
+      mRow('sfx',T('mSfx'),mBar('sfx',VOL.sfx),'',' data-info="mSfxD"')+mRow('vib',T('mVib'),mTog(VIBRO),'',' data-info="mVibD"');
+    return mHead(T('mSettings'))+'<div class="mleft"><div class="mopts">'+rows+'</div></div>'+
+      '<div class="mright"><div class="mcard mglass" data-paint="setR"></div></div>';
+  },
+  rules:function(){
+    var tabs='';
+    if(!MENU.ctrlOnly){
+      [['mCtrl',0],['mHockey',1]].forEach(function(o){ tabs+='<span class="mtab'+(MENU.rulesTab===o[1]?' cur':'')+'" data-tab="'+o[1]+'">'+mEsc(T(o[0]))+'</span>'; });
+      tabs='<div class="mtabs mf" data-adj="tab" style="margin-left:auto">'+tabs+'</div>';
+    }
+    var title=MENU.ctrlOnly?T('mCtrl'):T('mRules');
+    if(MENU.ctrlOnly || MENU.rulesTab===0){
+      var dv=''; [['mTouch',0],['mKbd',1],['mPad',2]].forEach(function(o){ dv+='<span class="mtab'+(curDev()===o[1]?' cur':'')+'" data-dev="'+o[1]+'">'+mEsc(T(o[0]))+'</span>'; });
+      return mHead(title, tabs)+'<div class="mleft"><div class="mtabs mf" data-adj="dev" style="margin-bottom:8px">'+dv+'</div>'+
+        '<div class="mscheme">'+ctrlScheme(curDev())+'</div></div><div class="mright">'+ctrlTable(curDev())+'</div>';
+    }
+    var it=''; RULES.forEach(function(r,i){ it+=mItem('topic',T(r[0]),'','','',' data-i="'+i+'"'); });
+    return mHead(title, tabs)+'<div class="mleft"><div class="mlist sm">'+it+'</div></div><div class="mright"><div class="mcard mglass mrule" data-paint="ruleR"></div></div>';
+  }
+};
+var RULES=[['rOff','rOffD'],['rIce','rIceD'],['rPen','rPenD'],['rFace','rFaceD'],['rLen','rLenD'],['rGoal','rGoalD']];
+var RULE_ICON=[
+  '<svg viewBox="0 0 50 34"><rect x="1" y="1" width="48" height="32" rx="8" fill="#1b4466"/><rect x="30" y="1" width="3" height="32" fill="#2b62c8"/><circle cx="40" cy="17" r="4" fill="#fff"/><circle cx="24" cy="12" r="3" fill="#ffd166"/></svg>',
+  '<svg viewBox="0 0 50 34"><rect x="1" y="1" width="48" height="32" rx="8" fill="#1b4466"/><rect x="24" y="1" width="2" height="32" fill="#c8354a"/><rect x="44" y="1" width="1.5" height="32" fill="#c8354a"/><path d="M8 17 H46" stroke="#fff" stroke-dasharray="3 3"/></svg>',
+  '<svg viewBox="0 0 50 34"><rect x="1" y="1" width="48" height="32" rx="8" fill="#1b4466"/><text x="25" y="23" text-anchor="middle" font-size="17" font-weight="800" fill="#ffd166" font-family="Arial">2:00</text></svg>',
+  '<svg viewBox="0 0 50 34"><rect x="1" y="1" width="48" height="32" rx="8" fill="#1b4466"/><circle cx="25" cy="17" r="10" fill="none" stroke="#c8354a" stroke-width="2"/><circle cx="25" cy="17" r="3" fill="#fff"/></svg>',
+  '<svg viewBox="0 0 50 34"><rect x="1" y="1" width="48" height="32" rx="8" fill="#1b4466"/><circle cx="25" cy="17" r="10" fill="none" stroke="#fff" stroke-width="2"/><path d="M25 10 V17 L30 20" stroke="#ffd166" stroke-width="2.5" fill="none"/></svg>',
+  '<svg viewBox="0 0 50 34"><rect x="1" y="1" width="48" height="32" rx="8" fill="#1b4466"/><path d="M14 8 H36 V26 H14" fill="none" stroke="#c8354a" stroke-width="2.5"/><circle cx="26" cy="17" r="3.5" fill="#fff"/></svg>'];
+/* устройство для схемы управления: выбранное вкладкой, иначе то, чем играют */
+function curDev(){ return MENU.dev>=0 ? MENU.dev : (padConnected ? 2 : (MENU.via==='touch' ? 0 : 1)); }
+function mg(k){ var c={A:'a',B:'b',X:'x',Y:'y'}[k]; return '<i class="mg '+(c||'r')+'">'+mEsc(k)+'</i>'; }
+function mk(k){ return '<i class="mg key">'+mEsc(k)+'</i>'; }
+function ctrlScheme(dev){
+  if(dev===0){
+    var s='<svg viewBox="140 10 440 240"><rect x="150" y="20" width="420" height="220" rx="30" fill="#0e2238" stroke="#8fd8ff" stroke-opacity=".5" stroke-width="3"/>'+
+      '<rect x="166" y="36" width="388" height="188" rx="16" fill="#123356"/>'+
+      '<circle cx="250" cy="160" r="46" fill="rgba(255,255,255,.08)" stroke="#fff" stroke-opacity=".5" stroke-width="2" stroke-dasharray="6 5"/><circle cx="262" cy="150" r="18" fill="rgba(255,255,255,.35)"/>'+
+      '<text x="262" y="92" text-anchor="middle" font-size="9" font-weight="700" fill="#9fb3c9" font-family="system-ui">'+mEsc(T('mStickL'))+'</text>'+
+      '<rect x="516" y="46" width="26" height="26" rx="7" fill="rgba(255,255,255,.2)"/><rect x="524" y="53" width="3" height="12" fill="#fff"/><rect x="531" y="53" width="3" height="12" fill="#fff"/>';
+    [['Y',428,88,'#ffd166'],['X',378,138,'#7fb0ff'],['B',478,138,'#e8736f'],['A',428,188,'#5ad07f']].forEach(function(b){
+      s+='<circle cx="'+b[1]+'" cy="'+b[2]+'" r="21" fill="'+b[3]+'" opacity=".9"/><text x="'+b[1]+'" y="'+(b[2]+6)+'" text-anchor="middle" font-size="16" font-weight="800" fill="#0a1420" font-family="system-ui">'+b[0]+'</text>'; });
+    return s+'<rect x="400" y="46" width="56" height="24" rx="8" fill="#9aa6b8"/><text x="428" y="63" text-anchor="middle" font-size="13" font-weight="800" fill="#0a1420" font-family="system-ui">RT</text></svg>';
+  }
+  if(dev===2){
+    var g='<svg viewBox="0 0 300 170"><path d="M60 40 Q150 20 240 40 Q290 50 290 110 Q290 160 255 160 Q225 160 205 125 L95 125 Q75 160 45 160 Q10 160 10 110 Q10 50 60 40 Z" fill="#0e2238" stroke="#8fd8ff" stroke-opacity=".5" stroke-width="3"/>'+
+      '<rect x="44" y="24" width="44" height="14" rx="5" fill="#b9c4d6"/><text x="66" y="35" text-anchor="middle" font-size="10" font-weight="800" fill="#0a1420" font-family="system-ui">LB</text>'+
+      '<rect x="212" y="24" width="44" height="14" rx="5" fill="#9aa6b8"/><text x="234" y="35" text-anchor="middle" font-size="10" font-weight="800" fill="#0a1420" font-family="system-ui">RT</text>'+
+      '<circle cx="80" cy="78" r="18" fill="rgba(255,255,255,.12)" stroke="#fff" stroke-opacity=".5"/><circle cx="80" cy="78" r="8" fill="rgba(255,255,255,.4)"/>'+
+      '<path d="M110 105 h12 v-12 h10 v12 h12 v10 h-12 v12 h-10 v-12 h-12 z" fill="#b9c4d6"/><rect x="138" y="60" width="24" height="10" rx="5" fill="#b9c4d6"/>';
+    [['Y',222,62,'#ffd166'],['X',200,84,'#7fb0ff'],['B',244,84,'#e8736f'],['A',222,106,'#5ad07f']].forEach(function(b){
+      g+='<circle cx="'+b[1]+'" cy="'+b[2]+'" r="12" fill="'+b[3]+'"/><text x="'+b[1]+'" y="'+(b[2]+4)+'" text-anchor="middle" font-size="11" font-weight="800" fill="#0a1420" font-family="system-ui">'+b[0]+'</text>'; });
+    return g+'</svg>';
+  }
+  /* клавиатура: раскладка из readInput() */
+  var cap=function(k,x,y,w){ return '<rect x="'+x+'" y="'+y+'" width="'+(w||30)+'" height="30" rx="6" fill="#dfe7f1"/><text x="'+(x+(w||30)/2)+'" y="'+(y+20)+'" text-anchor="middle" font-size="13" font-weight="800" fill="#0a1420" font-family="system-ui">'+k+'</text>'; };
+  return '<svg viewBox="0 0 300 130">'+cap('Q',10,10)+cap('W',46,10)+cap('E',82,10)+cap('A',16,46)+cap('S',52,46)+cap('D',88,46)+
+    cap('1',130,10)+cap('2',166,10)+cap('3',202,10)+cap('Esc',238,10,44)+cap('↑',196,56)+cap('←',160,92)+cap('↓',196,92)+cap('→',232,92)+
+    '<text x="260" y="54" text-anchor="middle" font-size="10" font-weight="700" fill="#9fb3c9" font-family="system-ui">'+mEsc(T('mPauseK'))+'</text>'+
+    '<text x="166" y="54" text-anchor="middle" font-size="10" font-weight="700" fill="#9fb3c9" font-family="system-ui">'+mEsc(T('mTacK'))+'</text></svg>';
+}
+function ctrlTable(dev){
+  var R;
+  if(dev===1) R=[[mk('← ↑ → ↓'),T('mMove'),T('mMove')],[mk('S'),T('hA'),T('mSwitch')],[mk('D'),T('padB1'),T('hX2')],[mk('A'),T('hX'),T('hX2')],
+                 [mk('W'),T('hY'),T('hY2')],[mk('Q'),T('hRT'),T('hRT')],[mk('E'),T('hA'),T('mPress')],[mk('1 2 3'),T('mTacK'),T('mTacK')]];   /* Esc — подпись на схеме */
+  else {
+    R=[[mg('A'),T('hA'),T('hA2')],[mg('B'),T('hB'),T('hB2')],[mg('X'),T('hX'),T('hX2')],[mg('Y'),T('hY'),T('hY2')],[mg('RT'),T('hRT'),T('hRT')]];
+    if(dev===2) R.push([mg('LB'),T('mSwitch'),T('mSwitch')],[mg('✚'),T('mTacK'),''],[mg('Start'),T('mPauseK'),'']);
+  }
+  var h='<div class="mtbl"><div class="tr th"><b></b><span>'+mEsc(T('withPuck'))+'</span><span>'+mEsc(T('onDef'))+'</span></div>';
+  R.forEach(function(r){ h+='<div class="tr"><b>'+r[0]+'</b><span>'+mEsc(r[1])+'</span><span>'+mEsc(r[2])+'</span></div>'; });
+  return h+'</div>';
+}
+/* части экранов, которые зависят от фокуса или сети */
+var MPAINT={
+  modeR:function(el){
+    var f=MENU.focusedAct('mode'), my=CLUBS[LAST.my];
+    el.innerHTML='<div class="mteams"><div class="mtc mglass ro">'+mJersey(my,'9')+'<div class="nm">'+mEsc(clubName(my))+'</div></div><div class="mvs">VS</div>'+
+      (f==='friend' ? '<div class="mtc mglass ro">'+mJersey(CLUBS[LAST.op],'17')+'<div class="nm">@friend</div></div>'
+                    : '<div class="mtc mglass ro">'+mJersey(CPU_KIT,'AI')+'<div class="nm">CPU</div></div>')+'</div>';
+  },
+  prepSt:function(el){
+    if(!ONLINE){ el.innerHTML=''; return; }
+    var t, ok=false;
+    if(NET.role==='guest'){ t=T('mGuestWait'); ok=true; }
+    else if(NET.on && NET.peer){ t=T('mFriendIn')+' · '+T('mHostSees'); ok=true; }
+    else t=NET.status||T('waiting');
+    el.innerHTML='<span class="mdot'+(ok?' ok':'')+'"></span>'+mEsc(t);
+  },
+  friendR:function(el){
+    var H=MENU.hold;
+    for(var hk in H) if(H[hk].parentNode!==MENU.holdEl) MENU.holdEl.appendChild(H[hk]);
+    if(NET.on && NET.role==='host'){
+      el.innerHTML='<div class="mlbl">'+mEsc(T('mRoom'))+'</div><div class="mcode">'+mEsc(NET.code)+'</div><div class="mwait"><span class="mdot"></span><span data-slot="netst"></span></div>'+
+        '<button class="mbtn mf" data-act="invite">'+mEsc(T('mInvite'))+'</button><div data-slot="netlink"></div><div class="mnote dim">'+mEsc(T('mRoomNote'))+'</div>';
+    } else if(MENU.friendMode==='joinf' || (NET.code && NET.role!=='host' && NET.ws)){
+      el.innerHTML='<div class="mlbl">'+mEsc(T('mJoin'))+'</div><div class="mjoin"><span data-slot="rcode" style="flex:1"></span>'+
+        '<button class="mbtn mf" id="bJoin" data-act="join">'+mEsc(T('mJoinBtn'))+'</button></div><div data-slot="netst"></div><div class="mnote dim">'+mEsc(T('mJoinNote'))+'</div>';
+    } else {
+      el.innerHTML='<div class="mlbl">'+mEsc(T('mCreate'))+'</div><div class="mnote">'+mEsc(T('mRoomNote'))+'</div><div data-slot="netst"></div>';
+    }
+    if(TEST.debug) el.insertAdjacentHTML('beforeend','<div data-slot="srv"></div>');
+    /* поля ввода и строки статуса живут вне экранов (их читает сетевой код) — переносим на место */
+    Array.prototype.forEach.call(el.querySelectorAll('[data-slot]'), function(s){ var n=H[s.getAttribute('data-slot')]; if(n) s.appendChild(n); });
+  },
+  setR:function(el){
+    var f=MENU.focusedEl('settings'), k=(f && f.getAttribute('data-info'))||'mGfxD', row=f&&f.querySelector('.k');
+    el.innerHTML='<h3>'+mEsc(row?row.textContent:T('mGfx'))+'</h3><div class="mnote">'+mEsc(T(k))+'</div>'+
+      '<div class="mnote dim" style="margin-top:6px">'+mEsc(T('mDevD'))+'</div>';
+  },
+  ruleR:function(el){
+    var f=MENU.focusedEl('rules'), i=f&&f.getAttribute('data-i')!==null ? +f.getAttribute('data-i') : 0;
+    el.innerHTML=RULE_ICON[i]+'<h3>'+mEsc(T(RULES[i][0]))+'</h3><div class="mnote">'+mEsc(T(RULES[i][1]))+'</div>';
+  }
+};
+
+/* ---------- движок ---------- */
+MENU.top=function(){ return MENU.stack[MENU.stack.length-1]; };
+MENU.layer=function(){
+  var r=document.getElementById('rotate'); if(r && r.style.display==='flex') return null;
+  var o=document.getElementById('overscr'); if(o && o.style.display && o.style.display!=='none') return 'result';
+  var st=document.getElementById('start'); if(st && st.style.display!=='none') return 'menu';
+  if(PAUSED) return 'pause';
+  return null;
+};
+/* меню закрывает площадку целиком — отрисовку матча можно не делать (экран поворота тоже непрозрачный) */
+MENU.covers=function(){
+  var r=document.getElementById('rotate'); if(r && r.style.display==='flex') return true;
+  var st=document.getElementById('start');
+  return state==='menu' && st.style.display!=='none' && !st.classList.contains('overgame');
+};
+MENU.scr=function(L){
+  if(L==='menu') return MENU.sec[MENU.top()];
+  if(L==='pause') return document.querySelector('#pausescr .mscr');
+  if(L==='result') return document.querySelector('#overscr .mscr');
+  return null;
+};
+MENU.key=function(L){ return L==='menu' ? MENU.top() : L; };
+/* порядок фокуса — порядок в разметке; .mlast (язык на главном, он в шапке) — в конце */
+MENU.items=function(L){
+  var s=MENU.scr(L); if(!s) return [];
+  var a=Array.prototype.filter.call(s.querySelectorAll('.mf'), function(e){ return e.offsetParent!==null; });
+  return a.filter(function(e){ return !e.classList.contains('mlast'); }).concat(a.filter(function(e){ return e.classList.contains('mlast'); }));
+};
+MENU.focusedEl=function(id){
+  var s=MENU.sec[id]; if(!s) return null;
+  var a=Array.prototype.filter.call(s.querySelectorAll('.mf'), function(e){ return e.offsetParent!==null; });
+  var it=a.filter(function(e){ return !e.classList.contains('mlast'); }).concat(a.filter(function(e){ return e.classList.contains('mlast'); }));
+  return it[Math.min(MENU.foc[id]||0, it.length-1)]||null;
+};
+MENU.focusedAct=function(id){ var e=MENU.focusedEl(id); return e ? e.getAttribute('data-act') : null; };
+MENU.setFocus=function(i, L){
+  L=L||MENU.layer(); if(!L) return;
+  var it=MENU.items(L); if(!it.length) return;
+  i=Math.max(0, Math.min(it.length-1, i));
+  var k=MENU.key(L), was=MENU.foc[k];
+  MENU.foc[k]=i;
+  for(var j=0;j<it.length;j++) it[j].classList.toggle('on', j===i);
+  if(was!==i && L==='menu') MENU.onFocus(k);
+};
+/* правая часть экрана зависит от выбранного пункта */
+MENU.onFocus=function(id){
+  var s=MENU.sec[id]; if(!s) return;
+  if(id==='friend'){ var a=MENU.focusedAct('friend'); if(a==='create'||a==='joinf'){ if(a!==MENU.friendMode){ MENU.friendMode=a; MENU.paintParts(s); MENU.refocus(); } } }
+  else MENU.paintParts(s);
+};
+MENU.paintParts=function(s){
+  Array.prototype.forEach.call(s.querySelectorAll('[data-paint]'), function(el){ var f=MPAINT[el.getAttribute('data-paint')]; if(f) f(el); });
+};
+MENU.refocus=function(){ var L=MENU.layer(); if(L) MENU.setFocus(MENU.foc[MENU.key(L)]||0, L); };
+MENU.move=function(d){
+  var L=MENU.layer(); if(!L) return;
+  var it=MENU.items(L); if(!it.length) return;
+  var n=it.length, i=MENU.foc[MENU.key(L)]||0;
+  MENU.setFocus((i+d+n)%n, L);
+  SFX.ui(0.5);
+};
+MENU.activate=function(){
+  var L=MENU.layer(); if(!L) return;
+  var it=MENU.items(L), el=it[Math.min(MENU.foc[MENU.key(L)]||0, it.length-1)];
+  if(el) MENU.act(el, null);
+};
+MENU.act=function(el, ev){
+  if(el.classList.contains('dis') || el.disabled) return;
+  var a=el.getAttribute('data-act');
+  if(a && ACT[a]){ mFeedback(); ACT[a](el, ev); }
+  else if(el.getAttribute('data-adj')) MENU.adjEl(el, 1, ev);
+};
+MENU.adj=function(d){
+  var L=MENU.layer(); if(!L) return;
+  var it=MENU.items(L), el=it[Math.min(MENU.foc[MENU.key(L)]||0, it.length-1)];
+  if(el && el.getAttribute('data-adj')) MENU.adjEl(el, d, null);
+};
+MENU.adjEl=function(el, d, ev){
+  var a=el.getAttribute('data-adj');
+  if(ADJ[a]){ ADJ[a](el, d, ev); mFeedback(true); }
+};
+MENU.tabs=function(d){
+  if(MENU.layer()==='menu' && MENU.top()==='rules' && !MENU.ctrlOnly){ MENU.rulesTab=(MENU.rulesTab+d+2)%2; MENU.show(); }
+};
+MENU.back=function(){
+  var L=MENU.layer();
+  if(L==='pause'){ setPaused(false); return; }
+  if(L!=='menu' || MENU.stack.length<2) return;
+  var leaving=MENU.stack.pop();
+  if(MENU.top()==='@pause'){ closePauseSub(); return; }
+  if(leaving==='friend'){ netLeave(); ONLINE=false; }
+  MENU.show();
+};
+MENU.go=function(id){ MENU.stack.push(id); MENU.show(); };
+MENU.setStack=function(arr){ MENU.stack=arr.slice(); MENU.show(); };
+/* перестроить экраны (язык, настройки, сеть) — поля ввода и строки статуса сохраняются */
+MENU.build=function(id){
+  var s=MENU.sec[id]; if(!s) return;
+  Array.prototype.forEach.call(s.querySelectorAll('[data-slot] > *'), function(n){ MENU.holdEl.appendChild(n); });
+  s.innerHTML=MSCR[id]();
+  MENU.paintParts(s);
+  if(id==='prep') goPaint();   /* кнопка «Начать матч»: у гостя и у хоста без друга — неактивна */
+};
+MENU.repaint=function(){
+  for(var id in MSCR) MENU.build(id);
+  goPaint(); MENU.show(true);
+};
+MENU.show=function(noBuild){
+  var top=MENU.top();
+  if(!noBuild && MSCR[top]) MENU.build(top);
+  for(var id in MENU.sec) MENU.sec[id].classList.toggle('cur', id===top);
+  goPaint();
+  var st=document.getElementById('start');
+  st.classList.toggle('overgame', MENU.stack[0]==='@pause');
+  st.classList.toggle('ownback', !tgBackOK());
+  if(MENU.layer()==='menu') MENU.setFocus(MENU.foc[top]||0, 'menu');
+  MENU.paintHints(); MENU.syncBack();
+};
+MENU.paintHints=function(){
+  var top=MENU.top(), v=MENU.via, h='';
+  function hint(pad, key, txt){ return '<span class="mh">'+(v==='pad'?pad:key)+mEsc(T(txt))+'</span>'; }
+  if(v!=='touch'){
+    var adjS=(top==='prep'||top==='settings'||top==='rules');
+    if(top==='rules' && !MENU.ctrlOnly) h+=hint(mg('LB')+mg('RB'), mk('Q')+mk('E'), 'mTabs');
+    if(adjS) h+=hint(mg('◀▶'), mk('← →'), 'mChange');
+    h+=hint(mg('A'), mk('Enter'), 'mSelect');
+    if(top!=='main') h+=hint(mg('B'), mk('Esc'), 'mBack');
+  }
+  var p='';
+  if(v!=='touch') p=hint(mg('A'), mk('Enter'), 'mSelect')+hint(mg('B'), mk('Esc'), 'mBack');
+  var hs=document.querySelectorAll('.mhints');
+  for(var i=0;i<hs.length;i++) hs[i].innerHTML = hs[i].closest('#start') ? h : (hs[i].closest('#overscr') ? (v!=='touch'?hint(mg('A'), mk('Enter'), 'mSelect'):'') : p);
+};
+MENU.setVia=function(v){ if(MENU.via!==v){ MENU.via=v; MENU.paintHints(); } };
+/* кнопка «Назад» Telegram: подэкраны меню, пауза (= продолжить), матч против ИИ (= пауза) */
+function tgBackOK(){ try{ return !!(TG && TG.BackButton && inTelegram() && TG.isVersionAtLeast && TG.isVersionAtLeast('6.1')); }catch(e){ return false; } }
+MENU.syncBack=function(){
+  var L=MENU.layer(), inMatch=state!=='menu' && state!=='over';
+  var want = L==='menu' ? MENU.stack.length>1 : (L==='pause' ? true : (!L && inMatch && !NET.on && !PAUSED && !PORTRAIT));
+  if(want===MENU.bb) return;
+  MENU.bb=want;
+  if(tgBackOK()){ try{ if(want) TG.BackButton.show(); else TG.BackButton.hide(); }catch(e){} }
+};
+function tgBack(){
+  var L=MENU.layer();
+  if(L) MENU.back();
+  else if(state!=='menu' && state!=='over' && !NET.on) setPaused(true);
+}
+function mFeedback(adj){
+  if(VIBRO && HAPTIC){ try{ if(adj && TG.HapticFeedback.selectionChanged) TG.HapticFeedback.selectionChanged(); else TG.HapticFeedback.impactOccurred('light'); }catch(e){} }
+  SFX.ui(adj?0.6:1);
+}
+MENU.onLayer=function(L){
+  if(L==='pause') paintPause();
+  if(L==='result') MENU.foc.result=0;
+  if(L==='menu') MENU.show(true);
+  else MENU.setFocus(MENU.foc[L]||0, L);
+  MENU.paintHints();
+};
+/* геймпад: крестовина / левый стик с автоповтором, A — выбрать, B — назад, LB/RB — вкладки, Start в паузе — продолжить.
+   Кнопки, зажатые в момент появления слоя меню, срабатывают только после отпускания. */
+MENU.tick=function(dt){
+  var L=MENU.layer();
+  if(L!==MENU.lastL){ MENU.lastL=L; MENU.padFresh=true; if(L) MENU.onLayer(L); }
+  MENU.syncBack();
+  var P={}, gp=null;
+  if(navigator.getGamepads){ var gs=navigator.getGamepads(); for(var i=0;i<gs.length;i++) if(gs[i] && gs[i].connected){ gp=gs[i]; break; } }
+  if(gp){
+    var b=gp.buttons, ax=gp.axes||[];
+    var bp=function(n){ return !!(b[n] && (b[n].pressed || b[n].value>0.5)); };
+    P.u=bp(12)||(ax[1]||0)<-0.6; P.d=bp(13)||(ax[1]||0)>0.6; P.l=bp(14)||(ax[0]||0)<-0.6; P.r=bp(15)||(ax[0]||0)>0.6;
+    P.a=bp(0); P.b=bp(1); P.st=bp(9); P.lb=bp(4); P.rb=bp(5);
+  }
+  var pr=MENU.pad; MENU.pad=P;
+  if(!L){ MENU.rep.k=null; return; }
+  if(MENU.padFresh){ MENU.padFresh=false; MENU.rep.k=(P.u?'u':P.d?'d':P.l?'l':P.r?'r':null); MENU.rep.t=1e9; return; }
+  var ed=function(k){ return P[k] && !pr[k]; };
+  var dir=P.u?'u':(P.d?'d':(P.l?'l':(P.r?'r':null)));
+  var fire=function(k){ MENU.setVia('pad'); if(k==='u') MENU.move(-1); else if(k==='d') MENU.move(1); else MENU.adj(k==='l'?-1:1); };
+  if(dir){
+    if(dir!==MENU.rep.k){ MENU.rep.k=dir; MENU.rep.t=0.38; fire(dir); }
+    else { MENU.rep.t-=dt; if(MENU.rep.t<=0){ MENU.rep.t=0.12; fire(dir); } }
+  } else MENU.rep.k=null;
+  if(ed('a')){ MENU.setVia('pad'); MENU.activate(); }
+  else if(ed('b')){ MENU.setVia('pad'); MENU.back(); }
+  else if(ed('st')){ if(L==='pause' || MENU.stack[0]==='@pause') setPaused(false); }
+  else if(ed('lb')){ MENU.setVia('pad'); MENU.tabs(-1); }
+  else if(ed('rb')){ MENU.setVia('pad'); MENU.tabs(1); }
+};
+/* отступы меню: зона устройства + полоса кнопок Telegram (как у табло) */
+function mLayout(){
+  if(typeof safeInsets!=='function') return;
+  var SA=safeInsets(), band=tgButtonsBand(), r=document.documentElement.style;
+  r.setProperty('--mt', Math.round(SA.t+band+(band?6:10))+'px');
+  r.setProperty('--ml', Math.round(SA.l+18)+'px');
+  r.setProperty('--mr', Math.round(SA.r+18)+'px');
+  r.setProperty('--mb', Math.round(SA.b+6)+'px');
+}
+/* снег: на «низком» — меньше и без анимации */
+function mSnow(){
+  var sn=document.getElementById('msnow'); if(!sn) return;
+  var n=QLEVEL===0?0:36, h='';
+  for(var i=0;i<n;i++){ var r=1+Math.random()*2.4, d=7+Math.random()*9;
+    h+='<i style="left:'+(Math.random()*100).toFixed(1)+'%;width:'+r.toFixed(1)+'px;height:'+r.toFixed(1)+'px;opacity:'+(0.3+Math.random()*0.5).toFixed(2)+
+      ';--dx:'+(Math.random()*60-30).toFixed(0)+'px;animation-duration:'+d.toFixed(1)+'s;animation-delay:-'+(Math.random()*d).toFixed(1)+'s"></i>'; }
+  sn.innerHTML=h;
+}
+
+/* ---------- действия ---------- */
+var ACT={
+  back:function(){ MENU.back(); },
+  quick:function(){ ONLINE=false; netLeave(); selFromLast(); goStart(); },
+  mode:function(){ MENU.go('mode'); },
+  rules:function(){ MENU.ctrlOnly=false; MENU.go('rules'); },
+  settings:function(){ MENU.go('settings'); },
+  vsai:function(){ ONLINE=false; netLeave(); selFromLast(); MENU.go('prep'); },
+  friend:function(){ ONLINE=true; MENU.friendMode='create'; MENU.go('friend'); },
+  create:function(){ netCreate(); },
+  joinf:function(){
+    MENU.friendMode='joinf'; MENU.paintParts(MENU.sec.friend); MENU.refocus();
+    if(MENU.via!=='pad'){ try{ codeEl.focus(); }catch(e){} }
+  },
+  join:function(){ netJoin(); },
+  invite:function(){ if(NET.code) shareLink(NET.code); },
+  go:function(){ goStart(); },
+  topic:function(){},
+  resume:function(){ setPaused(false); },
+  pctrl:function(){ openPauseSub('rules'); },
+  pset:function(){ openPauseSub('settings'); },
+  menu:function(){ backToMenu(); },
+  again:function(){ startMatchAgain(); }
+};
+function barVal(ev, el, cur, d){
+  var bar=ev && ev.target && ev.target.closest && ev.target.closest('.mbar');
+  if(bar && ev.clientX!==undefined){ var r=bar.getBoundingClientRect(); return Math.round(clamp((ev.clientX-r.left)/r.width,0,1)*20)/20; }
+  return Math.round(clamp(cur+d*0.1,0,1)*10)/10;
+}
+function mPick(ev, attr){ var t=ev && ev.target && ev.target.closest && ev.target.closest('['+attr+']'); return t ? t.getAttribute(attr) : null; }
+function prepChanged(){ MENU.build('prep'); MENU.refocus(); netPrepSend(); }
+var ADJ={
+  lang:function(el, d, ev){ var L=['ru','en','id'], c=mPick(ev,'data-lang')||L[(L.indexOf(LANG)+d+3)%3]; setLang(c); },
+  my:function(el, d){ if(ONLINE && NET.role==='guest') return; selMy=nextClub(selMy, d, selOp); prepChanged(); },
+  op:function(el, d){ if(ONLINE && NET.role==='guest') return; selOp=nextClub(selOp, d, selMy); prepChanged(); },
+  diff:function(el, d){ var D=['easy','normal','hard']; setDifficulty(D[(D.indexOf(DIFF)+d+3)%3]); prepChanged(); },
+  min:function(el, d){ if(ONLINE && NET.role==='guest') return; var i=MIN_OPTS.indexOf(selMin); selMin=MIN_OPTS[(i+d+MIN_OPTS.length)%MIN_OPTS.length]; prepChanged(); },
+  tac:function(el, d){ selTac=(selTac+d+3)%3; prepChanged(); },
+  gfx:function(el, d, ev){
+    var q=mPick(ev,'data-q'), cur=QAUTO?-1:QLEVEL, v=q!==null ? +q : ((cur+1+d+4)%4)-1;
+    /* выбор игрока запоминается: «авто» — снова автоподстройка, уровень — фиксирован */
+    if(v===-1){ setQuality(QLEVEL,true); DYN=1; QSRC='device'; prefSet('quality','auto'); }
+    else { setQuality(v,false); QSRC='saved'; prefSet('quality',String(v)); }
+    layout(); mSnow(); MENU.build(MENU.top()); MENU.refocus();
+  },
+  fps:function(){ setShowFps(!SHOWFPS); MENU.build(MENU.top()); MENU.refocus(); },
+  mus:function(el, d, ev){ VOL.mus=barVal(ev, el, VOL.mus, d); prefSet('music', String(VOL.mus)); MUSIC.apply(); MENU.build(MENU.top()); MENU.refocus(); },
+  sfx:function(el, d, ev){ VOL.sfx=barVal(ev, el, VOL.sfx, d); prefSet('sfx', String(VOL.sfx)); applySfx(); MENU.build(MENU.top()); MENU.refocus(); },
+  vib:function(){ VIBRO=!VIBRO; prefSet('vibro', VIBRO?'1':'0'); if(VIBRO) buzz(12,'soft'); MENU.build(MENU.top()); MENU.refocus(); },
+  tab:function(el, d, ev){ var t=mPick(ev,'data-tab'); MENU.rulesTab = t!==null ? +t : (MENU.rulesTab+d+2)%2; MENU.show(); },
+  dev:function(el, d, ev){ var t=mPick(ev,'data-dev'); MENU.dev = t!==null ? +t : (curDev()+d+3)%3; MENU.build('rules'); MENU.refocus(); }
+};
+
+/* ---------- пауза: подэкраны в #start поверх матча ---------- */
+function openPauseSub(id){
+  MENU.ctrlOnly=(id==='rules');
+  document.getElementById('pausescr').style.display='none';
+  var st=document.getElementById('start'); st.style.display='block';
+  MENU.stack=['@pause', id]; MENU.foc[id]=0;
+  MENU.show();
+}
+function closePauseSub(){
+  if(MENU.stack[0]!=='@pause') return;
+  var st=document.getElementById('start'); st.style.display='none'; st.classList.remove('overgame');
+  MENU.stack=['main']; MENU.ctrlOnly=false;
+  if(PAUSED) document.getElementById('pausescr').style.display='flex';
+}
+function paintPause(){
+  setText('pauseTitle',T('pause')); setText('pResume',T('resume')); setText('pCtrl',T('mCtrl')); setText('pSet',T('mSettings')); setText('pMenu',T('mainMenu'));
+  var mm=Math.floor(clock/60), ss=Math.floor(clock%60), sc=document.getElementById('pScore');
+  if(sc) sc.innerHTML='<span class="c" style="background:'+TEAM[0].j+'"></span>'+mEsc(clubAb(TEAM[0]))+' '+score[0]+' : '+score[1]+' '+mEsc(clubAb(TEAM[1]))+
+    '<span class="c" style="background:'+TEAM[1].j+'"></span><span class="t">'+mEsc(T('match'))+' · '+mm+':'+(ss<10?'0':'')+ss+'</span>';
+}
+
+/* ---------- ввод меню: клавиатура и касание ---------- */
+window.addEventListener('keydown', function(e){
+  var L=MENU.layer();
+  if(!L){
+    /* Esc в матче — пауза сразу, не дожидаясь кадра (короткое нажатие иначе теряется между кадрами) */
+    if(e.code==='Escape' && !e.repeat && state!=='menu' && state!=='over' && !PORTRAIT){ keys.Escape=false; e.preventDefault(); MENU.setVia('key'); togglePause(); }
+    return;
+  }
+  var k=e.code, tg=e.target;
+  if(tg && tg.tagName==='INPUT'){
+    if(k==='Escape'){ tg.blur(); e.preventDefault(); }
+    else if(k==='Enter' || k==='NumpadEnter'){ tg.blur(); e.preventDefault(); if(tg.id==='rcode') netJoin(); }
+    keys[k]=false; return;
+  }
+  var used=true;
+  if(k==='ArrowUp') MENU.move(-1);
+  else if(k==='ArrowDown') MENU.move(1);
+  else if(k==='ArrowLeft') MENU.adj(-1);
+  else if(k==='ArrowRight') MENU.adj(1);
+  else if(k==='Enter' || k==='NumpadEnter' || k==='Space'){ if(!e.repeat) MENU.activate(); }
+  else if(k==='Escape' || k==='Backspace'){ if(!e.repeat) MENU.back(); }
+  else if(k==='KeyQ' || k==='PageUp') MENU.tabs(-1);
+  else if(k==='KeyE' || k==='PageDown') MENU.tabs(1);
+  else used=false;
+  if(used){ e.preventDefault(); keys[k]=false; MENU.setVia('key'); }
+});
+var _mPtr='touch';
+function mPointer(e){ _mPtr=(e.pointerType==='mouse') ? 'key' : 'touch'; }
+function mClick(e){
+  var L=MENU.layer(); if(!L) return;
+  if(e.target && e.target.tagName==='INPUT') return;
+  var el=e.target.closest && e.target.closest('.mf,[data-act]'); if(!el) return;
+  MENU.setVia(_mPtr);
+  var it=MENU.items(L), f=el.classList.contains('mf') ? el : el.closest('.mf'), i=it.indexOf(f);
+  if(i>=0) MENU.setFocus(i, L);
+  var dir=e.target.closest('[data-dir]');
+  if(el.getAttribute('data-adj')){ if(!el.classList.contains('dis')) MENU.adjEl(el, dir ? +dir.getAttribute('data-dir') : 1, e); }
+  else MENU.act(el, e);
+}
+
+/* ---------- сеть: комната из меню ---------- */
+function goPaint(){
+  var go=document.getElementById('go'); if(!go) return;
+  if(!ONLINE){ go.disabled=false; go.textContent=T('start'); }
+  else if(NET.role==='host'){ go.disabled=!(NET.on && NET.peer); go.textContent=(NET.on && NET.peer)?T('start'):T('waiting'); }
+  else { go.disabled=true; go.textContent=T('mWaitHost'); }
+}
+MENU.netPaint=function(){
+  var top=MENU.top(), s=MENU.sec[top]; if(!s) return;
+  if(top==='friend' || top==='prep'){ MENU.paintParts(s); MENU.refocus(); }
+};
+/* события комнаты: гость сразу видит подготовку матча, хост — когда друг пришёл */
+MENU.onNet=function(ev){
+  if(state!=='menu' || !ONLINE) return;
+  var top=MENU.top();
+  if(NET.role==='guest' && NET.on && top!=='prep'){ MENU.stack=['main','mode','friend','prep']; MENU.show(); return; }
+  if(NET.role==='host' && NET.on){
+    if(NET.peer){ netPrepSend(); if(top!=='prep'){ MENU.stack=['main','mode','friend','prep']; MENU.show(); return; } }
+    else if(top!=='friend' && top!=='prep'){ MENU.stack=['main','mode','friend']; MENU.show(); return; }
+  }
+  MENU.netPaint();
+};
+/* хост показывает гостю свой выбор (релей пересылает неизвестные сообщения как есть) */
+function netPrepSend(){ if(ONLINE && NET.on && NET.role==='host' && NET.peer) netSend({t:'prep', a:selMy, b:selOp, min:selMin}); }
+function netLeave(){
+  if(NET.ws){ var w=NET.ws; NET.ws=null; try{ w.close(); }catch(e){} }
+  if(NET.rc){ clearTimeout(NET.rc.timer); NET.rc=null; }
+  clearTimeout(NET.srvT);
+  if(NET.code) slotKeySave(NET.code, null, null);
+  NET.on=false; NET.peer=false; NET.role=null; NET.code=''; NET.tok=null; HUMAN=TEST.side;
+  netStatus(T('notConnected'));
+}
+function netCreate(){
+  var u=srvEl.value.trim(); if(!u){ netStatus(T('needSrv')); return; }
+  ONLINE=true; var code=randCode(); codeEl.value=code;
+  netConnect(u, code, function(){ shareLink(code); });
+}
+function netJoin(){
+  var u=srvEl.value.trim(), c=(codeEl.value||'').trim().toUpperCase();
+  if(!u){ netStatus(T('needSrv')); return; }
+  if(c.length<2){ netStatus(T('needCode')); return; }
+  ONLINE=true; netConnect(u, c, null);
+}
+
+/* ---------- музыка меню ----------
+   Треки — assets/dist/music-*.m4a (tools/pack-assets.mjs), по одному, вперемешку без повтора подряд. Играет в меню и на
+   экране поворота, в матче затихает за 0.8 с. На iPhone звук включается только касанием: не разрешили — подсказка
+   «коснись для звука», музыка стартует с первого касания. Громкость — через WebAudio (на iPhone <audio>.volume не
+   работает), до первого касания — через <audio>.volume. */
+var MUSIC={el:null, list:[], order:[], i:-1, name:'', cur:0, blocked:false, pending:false, routed:false, gain:null, off:true};
+MUSIC.init=function(){
+  var L=(window.ASSETS && ASSETS.music) || [];
+  if(!L.length || TEST.autostart || TEST.frozen || /[?&]nomusic\b/.test(location.search)) { MUSIC.paint(); return; }
+  MUSIC.off=false; MUSIC.list=L;
+  var el=new Audio(); el.preload='auto'; MUSIC.el=el;
+  el.addEventListener('ended', function(){ MUSIC.next(); });
+  el.addEventListener('error', function(){ if(MUSIC.list.length>1) setTimeout(function(){ MUSIC.next(); }, 1500); });
+  MUSIC.paint();
+  /* трек качается после моделей игроков: на медленной сети они нужнее (без них не начать матч) */
+  playersReady(function(){ MUSIC.next(); });
+};
+MUSIC.next=function(){
+  var n=MUSIC.list.length;
+  if(++MUSIC.i>=MUSIC.order.length){
+    var last=MUSIC.order[MUSIC.order.length-1], o=[];
+    for(var k=0;k<n;k++) o.push(k);
+    for(var j=n-1;j>0;j--){ var r=Math.floor(Math.random()*(j+1)), t=o[j]; o[j]=o[r]; o[r]=t; }
+    if(n>1 && o[0]===last){ o[0]=o[1]; o[1]=last; }
+    MUSIC.order=o; MUSIC.i=0;
+  }
+  var tr=MUSIC.list[MUSIC.order[MUSIC.i]];
+  MUSIC.name=tr.n; MUSIC.el.src=tr.u; MUSIC.pending=false;
+  MUSIC.paint(true);
+  if(MUSIC.cur>0 || MUSIC.want()) MUSIC.play();
+};
+MUSIC.want=function(){ return !MUSIC.off && state==='menu'; };
+MUSIC.play=function(){
+  if(!MUSIC.el || MUSIC.pending) return;
+  MUSIC.pending=true; MUSIC.apply();
+  var p; try{ p=MUSIC.el.play(); }catch(e){ MUSIC.pending=false; MUSIC.block(); return; }
+  if(p && p.then) p.then(function(){ MUSIC.pending=false; if(MUSIC.blocked){ MUSIC.blocked=false; MUSIC.paint(); } },
+                         function(){ MUSIC.pending=false; MUSIC.block(); });
+  else MUSIC.pending=false;
+};
+MUSIC.block=function(){ if(!MUSIC.blocked){ MUSIC.blocked=true; MUSIC.paint(); } };
+/* первое касание / клавиша: звук разрешён — включаем и пропускаем через WebAudio (громкость на iPhone) */
+MUSIC.unlock=function(){
+  if(!MUSIC.el) return;
+  audioInit(); applySfx();
+  if(AC && AC.state!=='running'){ try{ AC.resume(); }catch(e){} }
+  if(!MUSIC.routed && AC){
+    try{ var s=AC.createMediaElementSource(MUSIC.el), g=AC.createGain(); s.connect(g); g.connect(AC.destination); MUSIC.gain=g; MUSIC.routed=true; MUSIC.el.volume=1; }catch(e){}
+  }
+  if(MUSIC.want() && (MUSIC.el.paused || MUSIC.blocked)){ MUSIC.pending=false; MUSIC.play(); }
+};
+MUSIC.apply=function(){
+  if(!MUSIC.el) return;
+  var v=clamp(MUSIC.cur*VOL.mus,0,1);
+  if(MUSIC.routed && MUSIC.gain) MUSIC.gain.gain.value=v; else MUSIC.el.volume=v;
+};
+MUSIC.tick=function(dt){
+  if(!MUSIC.el) return;
+  var tgt=MUSIC.want()?1:0;
+  if(MUSIC.cur!==tgt){ MUSIC.cur = tgt>MUSIC.cur ? Math.min(1, MUSIC.cur+dt/0.8) : Math.max(0, MUSIC.cur-dt/0.8); MUSIC.apply(); }
+  if(tgt && MUSIC.el.paused && !MUSIC.blocked && !MUSIC.pending) MUSIC.play();
+  if(!tgt && MUSIC.cur<=0 && !MUSIC.el.paused) MUSIC.el.pause();
+  var np=document.getElementById('mnp'); if(np) np.classList.toggle('paused', MUSIC.el.paused);
+};
+/* плашка «сейчас играет»: одна строка «BvR — трек», смена трека — плавно */
+MUSIC.paint=function(fade){
+  var np=document.getElementById('mnp'), tx=document.getElementById('mnpTx'), rt=document.getElementById('rotate'), rn=document.getElementById('rotNp');
+  if(np) np.classList.toggle('off', MUSIC.off || !MUSIC.name);
+  if(rt) rt.classList.toggle('blocked', MUSIC.blocked && !MUSIC.off);
+  setText('rotSnd', T('tapSnd'));
+  var line=(MUSIC.off || !MUSIC.name) ? '' : 'BvR — '+MUSIC.name;
+  if(rn) rn.textContent=line ? '♪ '+line : '';
+  if(!tx) return;
+  var html=mEsc(line)+(MUSIC.blocked?'<small>'+mEsc(T('tapSnd'))+'</small>':'');
+  if(fade && tx.innerHTML){ tx.classList.add('fade'); setTimeout(function(){ tx.innerHTML=html; tx.classList.remove('fade'); }, 450); }
+  else tx.innerHTML=html;
+};
+['touchend','pointerdown','keydown','click'].forEach(function(ev){ window.addEventListener(ev, function(){ MUSIC.unlock(); }, true); });
+
+/* шрифт меню: грузится после показа меню, не задерживая его (до загрузки — системный) */
+function mFontLoad(){
+  if(!window.FontFace || !document.fonts || !window.ASSETS || !ASSETS.fontLat) return;
+  [[ASSETS.fontLat,'U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+20AC,U+2122,U+2212,U+FEFF,U+FFFD'],
+   [ASSETS.fontCyr,'U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116']].forEach(function(f){
+    try{ document.fonts.add(new FontFace('BVR Sport','url('+f[0]+') format("woff2")',{style:'italic', weight:'800', unicodeRange:f[1], display:'swap'})); }catch(e){}
   });
 }
-paintChips(); paintOpts();
+
+/* ---------- сборка меню ---------- */
+(function(){
+  var box=document.getElementById('mscreens');
+  var hold=document.createElement('div'); hold.style.display='none'; box.appendChild(hold); MENU.holdEl=hold;
+  /* поля и строки, которые читает сетевой код: создаются один раз и переносятся между экранами */
+  hold.innerHTML='<input id="srv" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">'+
+    '<input id="rcode" maxlength="6" autocapitalize="characters" autocorrect="off" spellcheck="false" enterkeyhint="go">'+
+    '<div id="netst"></div><div id="netlink"></div>';
+  MENU.hold={srv:document.getElementById('srv'), rcode:document.getElementById('rcode'), netst:document.getElementById('netst'), netlink:document.getElementById('netlink')};
+  for(var id in MSCR){ var s=document.createElement('section'); s.className='mscr'+(id==='prep'?' wide':''); s.setAttribute('data-s',id); box.appendChild(s); MENU.sec[id]=s; }
+  ['start','pausescr','overscr'].forEach(function(i){ var el=document.getElementById(i); el.addEventListener('click', mClick); el.addEventListener('pointerdown', mPointer); });
+  if(tgBackOK()){ try{ TG.BackButton.onClick(tgBack); }catch(e){} }
+  selFromLast();
+  MENU.ready=true;
+  mLayout(); mSnow();
+  for(var k in MSCR) MENU.build(k);
+  MENU.show(true);
+  MUSIC.init();
+  requestAnimationFrame(function(){ setTimeout(mFontLoad, 0); });
+})();
 
 /* --- онлайн: сервер, код, ссылка --- */
 var srvEl=document.getElementById('srv'), codeEl=document.getElementById('rcode');
@@ -5159,17 +5942,7 @@ function shareLink(code){
   }
   try{ if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(shown).catch(function(){}); }catch(e){}
 }
-document.getElementById('bHost').addEventListener('click',function(){
-  var u=srvEl.value.trim(); if(!u){ netStatus(T('needSrv')); return; }
-  var code=randCode(); codeEl.value=code;
-  netConnect(u,code,function(){ shareLink(code); });
-});
-document.getElementById('bJoin').addEventListener('click',function(){
-  var u=srvEl.value.trim(), c=(codeEl.value||'').trim().toUpperCase();
-  if(!u){ netStatus(T('needSrv')); return; }
-  if(c.length<2){ netStatus(T('needCode')); return; }
-  netConnect(u,c,null);
-});
+/* «Создать комнату» / «Войти по коду» — действия меню (netCreate / netJoin) */
 
 /* --- инициализация Telegram Mini App --- */
 (function(){
@@ -5196,13 +5969,6 @@ document.getElementById('bJoin').addEventListener('click',function(){
   var q=new URLSearchParams(location.search);
   var room=q.get('room'), srv=q.get('srv');
   var _tgl=(window.Telegram&&window.Telegram.WebApp)?window.Telegram.WebApp:null;
-  var _dl=document.getElementById('devlink');
-  if(_dl) _dl.addEventListener('click',function(e){
-    e.preventDefault();
-    var u='https://t.me/bvr_games_bot';
-    if(_tgl && _tgl.openTelegramLink) _tgl.openTelegramLink(u);
-    else window.open(u,'_blank');
-  });
   var _tg=_tgl;
   if(!room && _tg && _tg.initDataUnsafe && _tg.initDataUnsafe.start_param){
     /* dbg_ / host_ — отладка и хост-схема (см. TEST выше); код комнаты — после префиксов */
@@ -5211,44 +5977,45 @@ document.getElementById('bJoin').addEventListener('click',function(){
   }
   if(srv){ srvEl.value=srv; try{localStorage.setItem('bvr_srv',srv);}catch(e){} }
   if(room && srvEl.value){
+    /* приглашение: сразу «С другом» — «Назад» ведёт в меню, а не закрывает игру */
     ONLINE=true;
-    document.getElementById('netbox').style.display='flex';
     codeEl.value=room.toUpperCase();
-    paintOpts();
+    MENU.friendMode='joinf'; MENU.setStack(['main','mode','friend']);
     netConnect(srvEl.value.trim(), room.toUpperCase(), null);
   }
 })();
 
-document.getElementById('go').addEventListener('click',function(){
+/* «Начать матч» (подготовка матча), «Быстрый матч», __hk.start(), ?autostart, запасная хост-схема */
+function goStart(){
   audioInit();
   /* модели игроков ещё качаются — экран загрузки, матч начнётся сам, как только они будут */
   if(!PLAYERS.done && !PLAYERS.failed){
-    if(!LOADING_ON){ loadingShow(true); playersReady(function(){ loadingShow(false); document.getElementById('go').click(); }); }
+    if(!LOADING_ON){ loadingShow(true); playersReady(function(){ loadingShow(false); goStart(); }); }
     return;
   }
   var mid=newMatchId();
   if(ONLINE){
     if(!NET.on || NET.role!=='host' || !NET.peer) return;
-    netSend({t:'cfg',a:selMy,b:selOp,min:MODES[selMode].m,id:mid});
+    netSend({t:'cfg',a:selMy,b:selOp,min:selMin,id:mid});
     /* серверный режим: матч начнёт сервер — его cfg придёт обоим, как гостю */
     if(NET.srv){ netSrvWatch('go'); return; }
-  } else { NET.on=false; HUMAN=TEST.side; }
+  } else { NET.on=false; HUMAN=TEST.side; lastSave(); }
   TEAM[0]=CLUBS[selMy]; TEAM[1]=CLUBS[selOp];
   buildTeamMeshes();
-  MATCH_MIN=MODES[selMode].m;
+  MATCH_MIN=selMin;
   score[0]=0; score[1]=0; period=1; clock=MATCH_MIN*60; pen.length=0;
   document.getElementById('s1').textContent='0';
   document.getElementById('s2').textContent='0';
   reset(true);
   if(GLOK) marksClear();
-  TACTIC[0]=0; TACTIC[1]=0;
+  TACTIC[0]=0; TACTIC[1]=0; TACTIC[HUMAN]=selTac;
   gkRush[0]=false; gkRush[1]=false;
   setPaused(false); hideResult();
   paintTacBadge();
   document.getElementById('start').style.display='none';
   state='face'; stateT=0.9;
   matchStart(mid, selMy, selOp);
-});
+}
 
 /* ---------- кнопки паузы и результата ---------- */
 function startMatchAgain(){
@@ -5266,16 +6033,12 @@ function startMatchAgain(){
   document.getElementById('s2').textContent='0';
   reset(true);
   if(GLOK) marksClear();
-  TACTIC[0]=0; TACTIC[1]=0; gkRush[0]=false; gkRush[1]=false;
+  TACTIC[0]=0; TACTIC[1]=0; TACTIC[HUMAN]=selTac; gkRush[0]=false; gkRush[1]=false;
   paintTacBadge();
   state='face'; stateT=0.9;
   matchStart(mid, MATCH.clubs[0], MATCH.clubs[1]);
 }
-document.getElementById('pResume').addEventListener('click',function(){ setPaused(false); });
-document.getElementById('pFps').addEventListener('click',function(){ setShowFps(!SHOWFPS); paintOpts(); });
-document.getElementById('pMenu').addEventListener('click',backToMenu);
-document.getElementById('oAgain').addEventListener('click',startMatchAgain);
-document.getElementById('oMenu').addEventListener('click',backToMenu);
+/* «Продолжить», «Главное меню», «Играть снова» — пункты меню паузы и итога (ACT в «МЕНЮ») */
 document.getElementById('bPause').addEventListener('click',function(e){
   e.preventDefault(); togglePause();
 });
@@ -5466,7 +6229,7 @@ function netRecvEvents(list){
 if(TEST.autostart && !ONLINE){
   /* после загрузки моделей: иначе старт отложился бы, а длина матча ниже выставилась бы раньше него */
   playersReady(function(){
-    document.getElementById('go').click();
+    goStart();
     if(TEST.autoLen>0){ MATCH_MIN=TEST.autoLen/60; clock=TEST.autoLen; }
   });
 }
@@ -5474,7 +6237,7 @@ if(TEST.autostart && !ONLINE){
 window.__hk={hs:function(){return HS;},net:function(){return NET;},setCam:function(i){CAM_TYPE=i;},st:function(){return state;},p:players,puck:puck,ctrl:function(){return controlled;},score:score,
   faces:function(){return buf.length;},cam:cam,
   press:function(k){IN[k]=true;setTimeout(function(){IN[k]=false;},60);},
-  start:function(){document.getElementById('go').click();},
+  start:function(){ goStart(); },
   move:function(x,z){stick.dx=x;stick.dz=z;},
   off:function(){return offWarn;}, clock:function(){return clock;},
   tex:function(n){return ({ice:buildIceTex,board:buildBoardTex,crowd:buildCrowdTex})[n]();},
@@ -5488,8 +6251,14 @@ window.__hk={hs:function(){return HS;},net:function(){return NET;},setCam:functi
   qTickSim:function(fps,n){ QA.warm=0; for(var i=0;i<(n||1);i++) qualityTick(fps); return {level:QLEVEL, dyn:DYN}; },
   qReset:function(){ QA.low=0; QA.hi=0; QA.up=0; QA.t=0; QA.hold=0; QA.fail=[0,0,0]; QA.ban=[0,0,0]; QA.clock=0; }, cams:function(){return CAM_PRESETS;}, ql:function(){return [QLEVEL,QAUTO];}, gl:function(){return gl;}, dpr:function(){return DPR;},
   lt:function(p){lastTouch=p;}, pz:function(){return prevZone;},
-  lang:function(c){ LANG=c; try{localStorage.setItem('bvr_lang',c);}catch(e){}
-                    paintLang(); paintOpts(); paintChips(); },
+  lang:function(c){ setLang(c); },
+  /* меню: menu('prep') — открыть экран; menuState() — слой, стек, фокус; music() — состояние музыки */
+  menu:function(id, tab){ if(tab!==undefined) MENU.rulesTab=tab; if(id==='main') MENU.setStack(['main']); else MENU.go(id); },
+  menuState:function(){ var L=MENU.layer(), it=MENU.items(L), f=it[Math.min(MENU.foc[MENU.key(L)]||0, it.length-1)];
+    return {layer:L, stack:MENU.stack.slice(), focus:f?(f.getAttribute('data-act')||f.getAttribute('data-adj')||f.id):null, n:it.length,
+            sel:{my:selMy, op:selOp, min:selMin, tac:selTac, diff:DIFF}, online:ONLINE, via:MENU.via, back:MENU.bb, matchMin:MATCH_MIN}; },
+  music:function(){ return {off:MUSIC.off, blocked:MUSIC.blocked, name:MUSIC.name, playing:!!(MUSIC.el && !MUSIC.el.paused), cur:+MUSIC.cur.toFixed(2),
+            vol:VOL.mus, routed:MUSIC.routed, src:MUSIC.el?MUSIC.el.currentSrc:''}; },
   tac:function(){return TACTIC;}, tacSet:function(t,v){TACTIC[t]=v;},
   rush:function(t,v){gkRush[t]=v;}, pause:function(){togglePause();},
   paused:function(){return PAUSED;}, team:function(){return TEAM;},

@@ -9,11 +9,15 @@
 //   assets/dist/players-hi.<hash>.bin  full meshes (high level only; loaded on demand)
 //     both: 'BVR1', u32 header length, header JSON (blobs as [offset, length]), raw blobs 4-byte aligned — no base64
 //   assets/dist/<name>.<hash>.png
+//   assets/src/music/*.mp3    menu music (title = file name, artist BvR) → assets/dist/music-<hash>.m4a, AAC 96 kbit/s via
+//                             macOS afconvert; the hash is of the source + encoder settings, so --check never re-encodes
+//   assets/src/fonts/*.woff2  menu font (Fira Sans Extra Condensed 800 italic, OFL) → assets/dist/font-lat|font-cyr.<hash>.woff2
 //
 // usage: node tools/pack-assets.mjs            rebuild dist + manifest (after changing anything in assets/src)
 //        node tools/pack-assets.mjs --check    exit 1 if index.html / dist are out of date (npm run check)
 //        node tools/pack-assets.mjs --extract  one-time: move the inline data out of index.html into assets/src
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, unlinkSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
@@ -21,6 +25,9 @@ import { createHash } from 'node:crypto';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = join(ROOT, 'assets', 'src'), DIST = join(ROOT, 'assets', 'dist'), HTML = join(ROOT, 'index.html');
 const IMAGES = ['env', 'ads', 'logo'];
+const MUSIC = join(SRC, 'music'), FONTS = join(SRC, 'fonts');
+const AAC = ['-f', 'm4af', '-d', 'aac', '-b', '96000'];      // afconvert arguments (part of the music file hash)
+const FONT_FILES = { fontLat: 'fira-sans-extra-condensed-latin-800-italic.woff2', fontCyr: 'fira-sans-extra-condensed-cyrillic-800-italic.woff2' };
 const args = process.argv.slice(2);
 const hash = (b) => createHash('sha1').update(b).digest('hex').slice(0, 10);
 
@@ -106,7 +113,20 @@ function build() {
   const manifest = {};
   for (const [k, [n, ext, buf]] of Object.entries(files)) manifest[k] = `assets/dist/${n}.${hash(buf)}.${ext}`;
   manifest.loBytes = P.lo.length; manifest.hiBytes = P.hi.length;   // loading progress (content-length is compressed)
-  return { files, manifest };
+  for (const [k, f] of Object.entries(FONT_FILES)) {
+    const buf = readFileSync(join(FONTS, f));
+    files[k] = [k === 'fontLat' ? 'font-lat' : 'font-cyr', 'woff2', buf];
+    manifest[k] = `assets/dist/${files[k][0]}.${hash(buf)}.woff2`;
+  }
+  // music: the output file is named by the hash of its source, encoded only when missing (encoding is slow, mac only)
+  const music = [];
+  const srcs = existsSync(MUSIC) ? readdirSync(MUSIC).filter((f) => /\.mp3$/i.test(f)).sort((a, b) => a.normalize('NFC').localeCompare(b.normalize('NFC'))) : [];
+  for (const f of srcs) {
+    const src = join(MUSIC, f), h = hash(Buffer.concat([readFileSync(src), Buffer.from('|' + AAC.join(' '))]));
+    music.push({ n: f.replace(/\.mp3$/i, '').normalize('NFC'), u: `assets/dist/music-${h}.m4a`, src });
+  }
+  manifest.music = music.map((m) => ({ n: m.n, u: m.u }));
+  return { files, manifest, music };
 }
 
 function htmlWith(html, manifest) {
@@ -122,19 +142,25 @@ function htmlWith(html, manifest) {
 }
 
 if (args.includes('--extract')) extract();
-const { files, manifest } = build();
+const { files, manifest, music } = build();
+const allPaths = Object.values(manifest).filter((p) => typeof p === 'string').concat(manifest.music.map((m) => m.u));
 const html = readFileSync(HTML, 'utf8'), want = htmlWith(html, manifest);
 if (args.includes('--check')) {
   const bad = [];
   if (want !== html) bad.push('index.html manifest / preload are out of date');
-  for (const p of Object.values(manifest)) if (typeof p === 'string' && !existsSync(join(ROOT, p))) bad.push(p + ' is missing');
+  for (const p of allPaths) if (!existsSync(join(ROOT, p))) bad.push(p + ' is missing');
   if (bad.length) { console.log(bad.join('\n') + '\n→ node tools/pack-assets.mjs'); process.exit(1); }
-  console.log('assets ok: ' + Object.values(manifest).filter((p) => typeof p === 'string').join(', '));
+  console.log('assets ok: ' + allPaths.join(', '));
 } else {
   mkdirSync(DIST, { recursive: true });
-  const keep = new Set(Object.values(manifest).filter((p) => typeof p === 'string').map((p) => p.split('/').pop()));
+  const keep = new Set(allPaths.map((p) => p.split('/').pop()));
   for (const f of readdirSync(DIST)) if (!keep.has(f)) unlinkSync(join(DIST, f));
   for (const [k, [, , buf]] of Object.entries(files)) writeFileSync(join(ROOT, manifest[k]), buf);
+  for (const m of music) {
+    const out = join(ROOT, m.u);
+    if (!existsSync(out)) execFileSync('afconvert', [...AAC, m.src, out]);
+    console.log(`${m.u}  ${(readFileSync(out).length / 1024).toFixed(1)} KB  (${m.n})`);
+  }
   writeFileSync(HTML, want);
   for (const [k, [, , buf]] of Object.entries(files)) console.log(`${manifest[k]}  ${(buf.length / 1024).toFixed(1)} KB`);
 }
