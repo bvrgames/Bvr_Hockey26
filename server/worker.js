@@ -53,16 +53,23 @@
 
 import { MatchRoom, SIM_HZ } from './room-sim.js';
 import { handleApi } from './api.js';
+import { verifyInitData, StakeRoom, stakeFinish, stakeDeadline, confFrom } from './coins.js';
+import { d1Store } from './coins-d1.js';
 
 const ROOM_CODE_RE = /^\/room\/([A-Za-z0-9_-]{2,16})(\/diag)?$/;
 const HINTS = new Set(['wnam', 'enam', 'sam', 'weur', 'eeur', 'apac', 'apac-ne', 'apac-se', 'oc', 'afr', 'me']);
 // phase 3.0 measurement from Indonesia (10 new rooms per hint): apac-se → SIN 8/10, apac → SIN/HKG/NRT, none → sometimes MXP
 const DEFAULT_HINT = 'apac-se';
 const RESULTS_KEEP = 8;
+const now = () => Math.floor(Date.now() / 1000);
 
 export class Room {
   constructor(state, env) {
     this.state = state;
+    this.env = env || {};
+    this.code = null;     // the room code (the Worker passes it in X-Room-Code)
+    this.stakes = new StakeRoom();   // the stake offer before the match (coins.js); live — the stake of the match on
+    this.starting = false;           // a start with a stake is being locked in D1
     this.host = null;   // { ws, colo, country }
     this.guest = null;  // { ws, colo, country }
     this.created = Date.now();   // this instance's start (the object may be evicted and restarted between matches)
@@ -130,12 +137,81 @@ export class Room {
     console.log('result saved', JSON.stringify({ id: r.id, len: r.len, score: r.score, left: r.left, kept: Math.min(list.length, RESULTS_KEEP) }));
   }
 
+  // ---- stakes (server mode). The rules are in coins.js (StakeRoom, stakeFinish); here only the Cloudflare side: who is
+  // who (the Telegram id from verified initData sent over the socket), D1, the object's storage and alarm.
+  store() { return this.env.DB ? d1Store(this.env.DB) : null; }
+  stakesOn() { return !!(this.srv && this.env.DB && this.env.BOT_TOKEN); }
+  stakeSend(err, slot) {
+    const t = JSON.stringify(this.stakes.view(err));
+    if (slot === undefined) { this.sendSlot(0, t); this.sendSlot(1, t); } else this.sendSlot(slot, t);
+  }
+  matchLive() { return !!(this.match && this.match.running && this.match.sim.state !== 'over'); }
+
+  async onStakeMsg(k, m) {
+    const S = this.stakes, store = this.store();
+    if (m.t === 'auth') {
+      const u = this.env.BOT_TOKEN && typeof m.d === 'string' ? await verifyInitData(m.d, this.env.BOT_TOKEN, now()) : null;
+      if (u) S.auth(k, u.id);
+      this.sendSlot(k, JSON.stringify({ t: 'auth', ok: u ? 1 : 0 }));
+      this.stakeSend();
+      return;
+    }
+    if (!store || !this.stakesOn()) return this.stakeSend('off', k);
+    if (this.matchLive()) return this.stakeSend('live', k);
+    const err = m.t === 'stake' ? await S.offer(store, k, m.n | 0) : await S.confirm(store, k, m.n | 0);
+    if (err) this.stakeSend(err, k); else this.stakeSend();
+  }
+
+  // the host starts (or restarts) the match: with a stake on the table it starts only once the stake is locked from both
+  async startMatch(m) {
+    if (this.starting) return;
+    if (this.matchLive() && this.stakes.live) return;          // a match with a stake is not restarted halfway
+    const S = this.stakes;
+    if (S.n > 0) {
+      const store = this.store();
+      if (!store || !this.stakesOn()) return this.stakeSend('off', 0);
+      this.starting = true;
+      try {
+        const len = Math.round(Math.max(0.25, Math.min(10, +m.min || 3)) * 60), t = now();
+        const deadline = stakeDeadline(len, t, confFrom(this.env));
+        const err = await S.start(store, { id: m.id, room: this.code || '?', len, now: t, deadline });
+        if (err) { this.stakeSend(); this.stakeSend(err, 0); return; }
+        await this.state.storage.put('stake', S.live);
+        await this.state.storage.setAlarm((deadline + 5) * 1000);
+        console.log('stake locked', JSON.stringify({ room: this.code, ...S.live }));
+      } finally { this.starting = false; }
+      this.stakeSend();
+    } else if (S.live) { S.live = null; this.stakeSend(); }
+    if (this.match && this.match.onMessage(0, m)) this.startTicking();
+  }
+
+  // the match ended (result) or stopped without one (null): settle its stake — idempotent, the stats API and the alarm
+  // may do the same
+  async stakeEnd(id, result) {
+    const live = this.stakes.live || (await this.state.storage.get('stake'));
+    if (!live || live.id !== id) return;
+    const store = this.store(); if (!store) return;
+    const st = await stakeFinish(store, id, result, now());
+    console.log('stake settled', JSON.stringify({ room: this.code, id, outcome: st && st.outcome }));
+    await this.state.storage.delete('stake');
+    await this.state.storage.deleteAlarm();
+  }
+
+  // the stake's deadline: the room's result if it has one, else a refund (the object was restarted, the match lost)
+  async alarm() {
+    const live = await this.state.storage.get('stake');
+    if (!live) return;
+    const r = ((await this.state.storage.get('results')) || []).find((x) => x.id === live.id) || null;
+    await this.stakeEnd(live.id, r);
+  }
+
   async fetch(request) {
     if (request.headers.get('X-Internal') === 'result') {
       const id = new URL(request.url).searchParams.get('id');
       const r = ((await this.state.storage.get('results')) || []).find((x) => x.id && x.id === id);
       return new Response(JSON.stringify(r || null), { status: r ? 200 : 404, headers: { 'content-type': 'application/json' } });
     }
+    if (!this.code) this.code = request.headers.get('X-Room-Code');
     const hint = request.headers.get('X-Loc-Hint');
     if (this.hint === null) this.hint = hint || 'none';
     await this.colo();
@@ -158,7 +234,14 @@ export class Room {
       this.tok = { host: null, guest: null };
       if (this.timer) { clearInterval(this.timer); this.timer = null; }
       this.match = this.srv ? new MatchRoom((slot, txt) => this.sendSlot(slot, txt)) : null;
-      if (this.match) this.match.onEnd = (r) => { this.saveResult(r).catch((e) => console.error('saveResult', e)); };
+      this.stakes = new StakeRoom();
+      if (this.match) {
+        this.match.onEnd = (r) => {
+          this.saveResult(r).catch((e) => console.error('saveResult', e));
+          this.stakeEnd(r.id, r).catch((e) => console.error('stakeEnd', e));
+        };
+        this.match.onStop = (id) => { this.stakeEnd(id, null).catch((e) => console.error('stakeEnd', e)); };
+      }
     }
     this.handleSocket(server, { colo: request.headers.get('X-Edge-Colo') || '?', country: request.headers.get('X-Edge-Country') || '?' }, this.claim(q), q.get('fresh') === '1');
 
@@ -190,7 +273,7 @@ export class Room {
     if (!back) this.tok[slot] = crypto.randomUUID().replace(/-/g, '');
     try {
       ws.send(JSON.stringify({ t: 'hello', role: slot, n: this.peerCount(), diag: this.diag(), srv: this.srv ? 1 : 0,
-                               tok: this.tok[slot], run: this.match && this.match.running ? 1 : 0 }));
+                               tok: this.tok[slot], run: this.match && this.match.running ? 1 : 0, stk: this.stakesOn() ? 1 : 0 }));
     } catch (e) {}
     this.broadcastPeerCount();
     if (this.match) { this.match.join(slot === 'host' ? 0 : 1, !back || fresh); if (this.match.running) this.startTicking(); }
@@ -208,7 +291,14 @@ export class Room {
       // server mode: input and match start are for the simulation here, not for the other player
       if (this.srv && this.match && typeof data === 'string' && (data.startsWith('{"t":"i"') || data.startsWith('{"t":"cfg"') || data.startsWith('{"t":"s"'))) {
         let m = null; try { m = JSON.parse(data); } catch (e) {}
-        if (m && this.match.onMessage(slot === 'host' ? 0 : 1, m) && m.t === 'cfg') this.startTicking();
+        if (m && m.t === 'cfg') { if (slot === 'host') this.startMatch(m).catch((e) => console.error('startMatch', e)); return; }
+        if (m) this.match.onMessage(slot === 'host' ? 0 : 1, m);
+        return;
+      }
+      // server mode: who the player is and the stake — answered here, never relayed (initData is the player's own)
+      if (this.srv && typeof data === 'string' && data.length < 6000 && (data.startsWith('{"t":"auth"') || data.startsWith('{"t":"stake'))) {
+        let m = null; try { m = JSON.parse(data); } catch (e) {}
+        if (m && (m.t === 'auth' || m.t === 'stake' || m.t === 'stakeOk')) this.onStakeMsg(slot === 'host' ? 0 : 1, m).catch((e) => console.error('stake', e));
         return;
       }
       const to = slot === 'host' ? this.guest : this.host;
@@ -222,6 +312,7 @@ export class Room {
       if (!this[slot] || this[slot].ws !== ws) return;   // already replaced by the same player's new socket
       this[slot] = null;
       if (this.match) this.match.leave(slot === 'host' ? 0 : 1);
+      if (this.srv && !this.matchLive()) { this.stakes.left(slot === 'host' ? 0 : 1); this.stakeSend(); }
       this.broadcastPeerCount();
     };
     ws.addEventListener('close', onLeave);
@@ -266,6 +357,7 @@ export default {
     const fwd = new Request(request);
     fwd.headers.delete('X-Internal');               // only the stats API asks the room for results
     fwd.headers.set('X-Loc-Hint', hint || 'none');
+    fwd.headers.set('X-Room-Code', code);
     fwd.headers.set('X-Edge-Colo', cf.colo || '?');
     fwd.headers.set('X-Edge-Country', cf.country || '?');
     return stub.fetch(fwd);

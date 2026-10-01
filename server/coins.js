@@ -23,6 +23,14 @@
  *                                              totals and the balance, write the ledger row (when coins > 0);
  *                                              'duplicate' — the same (uid, id) got in first (two copies of one request)
  *   balance(uid) → coins
+ *   stakeLock(s) → 'ok' | 'funds' | 'duplicate'  s = { id, room, amount, uids: [host, guest], len, now, deadline }: in one
+ *                                              transaction the stake row, −amount from both balances (never below
+ *                                              zero: 'funds' and nothing changes), ledger rows 'stake'; 'duplicate' —
+ *                                              this match id already has a stake
+ *   stakeGet(id) → { id, room, amount, uids, len, status: 'locked' | 'settled', outcome, created, deadline } | null
+ *   stakeSettle(id, outcome, pays, now)        in one transaction, only while the stake is 'locked': pays [[uid, delta,
+ *                                              reason]] into balances and ledger, status 'settled' (else nothing)
+ *   stakesOverdue(uid, now) → [stake]          this player's stakes still locked after their deadline
  *   profile(uid) → { coins, stars, matches, wins, draws, losses, goals, goals_against, streak, best_streak, online,
  *                    inventory: [item ids] } | null
  *
@@ -38,6 +46,7 @@ export const DEF = {
   MATCHES_DAY: 40,         // accepted matches per player per UTC day
   MATCH_GAP: 0.8,          // the next match is accepted not sooner than MATCH_GAP × len after the previous one
   AUTH_MAX_AGE: 86400,     // initData older than this (s) is refused
+  STAKE_GRACE: 900,        // a stake still locked 2 × len + this (s) after the start, with no result from the room → refund
 };
 const REWARD = { win: 10, draw: 5, loss: 3, left: 0 };
 const BONUS_MAX = 5;
@@ -139,6 +148,122 @@ export function rewardParts(s, conf = confFrom(null)) {
 
 export const dayStart = (sec) => sec - (sec % 86400);
 
+// ---------- stakes: a coin bet on a match with a friend (server mode only), docs/EVENTS.md «Ставка на матч»
+// Only coins are staked. Stars (Telegram Stars) are a donation currency: they are never staked and never turn into
+// coins — otherwise this would be gambling on real money. The stake is outside the daily coin caps (own ledger
+// reasons). The outcome is decided only by the room's own result (the server match), never by a client:
+//   the room has a result: the winner takes both stakes, a draw gives each their own back; a player who dropped and
+//   did not come back (result.left) loses the stake whatever the score (both gone — both get it back);
+//   no result (the match never ended, the server went down, the room forgot it) — both get it back.
+// Idempotent: one stake per match id (stakes primary key), settlement only from status 'locked', every ledger row is
+// unique per (player, reason, match id).
+export const STAKES = [0, 10, 25, 50, 100];
+
+// the room result → who takes the pot: 'host' | 'guest' | 'draw' | 'refund'
+export function stakeOutcome(r) {
+  if (!r || !Array.isArray(r.score)) return 'refund';
+  const left = Array.isArray(r.left) ? r.left : [false, false];
+  if (left[0] && left[1]) return 'refund';
+  if (left[0]) return 'guest';
+  if (left[1]) return 'host';
+  return r.score[0] > r.score[1] ? 'host' : r.score[0] < r.score[1] ? 'guest' : 'draw';
+}
+// the payouts of a settled stake: [[uid, delta, ledger reason]]
+export function stakePayout(st, outcome) {
+  const [h, g] = st.uids, n = st.amount;
+  if (outcome === 'host') return [[h, 2 * n, 'stake_win']];
+  if (outcome === 'guest') return [[g, 2 * n, 'stake_win']];
+  return [[h, n, 'stake_back'], [g, n, 'stake_back']];
+}
+// what one player sees: { n, out: 'win' | 'loss' | 'back' | 'pending', delta } (delta — what came back at the end)
+export function stakeView(st, uid) {
+  if (!st) return null;
+  const me = st.uids[0] === uid ? 'host' : st.uids[1] === uid ? 'guest' : null;
+  if (!me) return null;
+  if (st.status !== 'settled') return { n: st.amount, out: 'pending', delta: 0 };
+  const o = st.outcome;
+  const out = o === me ? 'win' : (o === 'host' || o === 'guest') ? 'loss' : 'back';
+  return { n: st.amount, out, delta: out === 'win' ? 2 * st.amount : out === 'back' ? st.amount : 0 };
+}
+
+// settle the stake of match `id` by the room's result (null = there is none: refund). Safe to call any number of
+// times from anywhere (the room at the end of the match, the stats API on a report or a profile read, a timer):
+// only the first call pays. → the stake after it, or null when there is no stake on this match
+export async function stakeFinish(store, id, result, now) {
+  const st = await store.stakeGet(id);
+  if (!st || st.status !== 'locked') return st;
+  const outcome = stakeOutcome(result);
+  await store.stakeSettle(id, outcome, stakePayout(st, outcome), now);
+  return store.stakeGet(id);
+}
+// the stakes of this player still locked after their deadline: settled by the room's result if it has one, else
+// refunded (the match never ended — the room was restarted, both players left, the server was down)
+export async function stakeSweep(store, uid, now, roomResult) {
+  for (const st of await store.stakesOverdue(uid, now)) {
+    let r = null; try { r = await roomResult(st.room, st.id); } catch (e) {}
+    await stakeFinish(store, st.id, r, now);
+  }
+}
+
+// The stake offer of one room before the match: the host picks the amount, the guest confirms it; both checked against
+// the balance; the match starts with a stake only when both have agreed. The room's code feeds it the players'
+// verified Telegram ids and their messages, and sends view() to both after every change. No platform API in here.
+//   host → {t:'stake', n}       offer (0 — no stake); a new amount drops the guest's confirmation
+//   guest → {t:'stakeOk', n}    confirm exactly this amount
+//   both ← {t:'stake', n, ok:[host, guest], err?, live?}   live: {id, n} — the stake of the match being played
+// the stake of this reported match as this player sees it; a locked one is settled here if the room has its result
+async function stakeFor(d, uid, s, now) {
+  let st = await d.store.stakeGet(s.id);
+  if (!st || !st.uids.includes(uid)) return null;
+  if (st.status === 'locked') {
+    let r = null; try { r = await d.roomResult(st.room, st.id); } catch (e) {}
+    if (r) st = await stakeFinish(d.store, st.id, r, now);
+  }
+  return stakeView(st, uid);
+}
+// the deadline of a stake locked now for a match of len seconds
+export function stakeDeadline(len, now, conf = confFrom(null)) { return now + 2 * len + conf('STAKE_GRACE'); }
+
+export class StakeRoom {
+  constructor() { this.uid = [null, null]; this.n = 0; this.ok = [false, false]; this.live = null; }
+  view(err) { return { t: 'stake', n: this.n, ok: [this.ok[0] ? 1 : 0, this.ok[1] ? 1 : 0], ...(this.live ? { live: this.live } : {}), ...(err ? { err } : {}) }; }
+  auth(slot, uid) { if (this.uid[slot] !== uid) { this.uid[slot] = uid; this.ok[slot] = false; } }
+  left(slot) { this.ok[slot] = false; }                // the player left the room: a returning one confirms again
+  async canPay(store, slot, n) {
+    const uid = this.uid[slot];
+    if (!uid) return 'auth';
+    if (this.uid[0] && this.uid[0] === this.uid[1]) return 'same';
+    if ((await store.balance(uid)) < n) return 'funds';
+    return null;
+  }
+  // → null, or the reason it was refused ('amount' | 'auth' | 'funds' | 'same' | 'role')
+  async offer(store, slot, n) {
+    if (slot !== 0) return 'role';
+    if (!STAKES.includes(n)) return 'amount';
+    if (n > 0) { const e = await this.canPay(store, 0, n); if (e) return e; }
+    this.n = n; this.ok = [n > 0, false];
+    return null;
+  }
+  async confirm(store, slot, n) {
+    if (slot !== 1) return 'role';
+    if (n !== this.n || !(n > 0)) return 'amount';
+    const e = await this.canPay(store, 1, n); if (e) return e;
+    this.ok[1] = true;
+    return null;
+  }
+  // the host starts match `id`: null (no stake, or the stake is locked — this.live) or the reason it may not start
+  async start(store, { id, room, len, now, deadline }) {
+    if (!(this.n > 0)) { this.live = null; return null; }
+    if (!this.ok[0] || !this.ok[1]) return 'confirm';
+    if (typeof id !== 'string' || !/^[0-9a-f]{8,32}$/.test(id)) return 'id';
+    const r = await store.stakeLock({ id, room, amount: this.n, uids: [this.uid[0], this.uid[1]], len, now, deadline });
+    if (r !== 'ok') { this.ok = [this.n > 0, false]; return r; }   // 'funds' | 'duplicate'
+    this.live = { id, n: this.n };
+    this.n = 0; this.ok = [false, false];              // one stake — one match: a rematch is without a stake
+    return null;
+  }
+}
+
 async function postMatch(request, d, user, now) {
   const { store, conf } = d;
   let s = null;
@@ -146,6 +271,9 @@ async function postMatch(request, d, user, now) {
   const bad = checkSummary(s, conf('MIN_LEN'));
   if (bad) return json(422, { reason: bad });
   const uid = user.id;
+  await stakeSweep(store, uid, now, d.roomResult);
+  // a stake on a server match: settled by the room's result, never by this report (outside the daily caps)
+  const stake = s.mode === 'online' && s.net === 'server' ? await stakeFor(d, uid, s, now) : null;
   if (await store.matchSeen(uid, s.id)) return json(409, { reason: 'duplicate' });
   const recent = await store.lastMatch(uid);
   if (recent && now - recent.at < conf('MATCH_GAP') * Math.min(recent.len, s.len)) return json(429, { reason: 'gap' });
@@ -175,11 +303,12 @@ async function postMatch(request, d, user, now) {
   if (r === 'duplicate') return json(409, { reason: 'duplicate' });
   const balance = await store.balance(uid);
   return json(200, { accepted: true, id: s.id, coins, balance, verdict, kind: reason, day: { coins: earned + coins, cap },
-                     parts: { res: s.result, base: parts.base, bonus: parts.bonus } });
+                     parts: { res: s.result, base: parts.base, bonus: parts.bonus }, stake });
 }
 
 async function getProfile(d, user, now) {
   const { store, conf } = d;
+  await stakeSweep(store, user.id, now, d.roomResult);
   const u = await store.profile(user.id);
   const earned = u ? await store.coinsSince(user.id, 'match_ai', dayStart(now)) : 0;
   const earnedDuo = u ? await store.coinsSince(user.id, 'match_duo', dayStart(now)) : 0;

@@ -1,8 +1,12 @@
 /**
  * The coins store (server/coins.js, STORE) on Cloudflare D1. The SQL is plain SQLite (schema — migrations/), so the
  * same statements run on SQLite anywhere (node:sqlite / better-sqlite3 on a VPS); for Postgres — the notes in
- * docs/EVENTS.md «Перенос API». A D1 batch is one transaction: the match, the totals and the ledger row go in together.
+ * docs/EVENTS.md «Перенос API». A D1 batch is one transaction: the match, the totals and the ledger row go in together;
+ * a stake's lock and its settlement are one batch each (schema — migrations/0002_stakes.sql).
  */
+const stakeRow = (r) => ({ id: r.match_id, room: r.room, amount: r.amount, uids: [r.host_uid, r.guest_uid], len: r.len,
+  status: r.status, outcome: r.outcome, created: r.created_at, deadline: r.deadline });
+
 export function d1Store(db) {
   const one = (sql, ...a) => db.prepare(sql).bind(...a).first();
   return {
@@ -43,6 +47,48 @@ export function d1Store(db) {
         throw e;
       }
       return 'ok';
+    },
+    // ---- stakes (coins.js «stakes»): the lock and the settlement are one D1 batch each = one transaction
+    async stakeLock(s) {
+      const q = [
+        db.prepare(`INSERT INTO stakes (match_id, room, amount, host_uid, guest_uid, len, status, created_at, deadline)
+                    VALUES (?, ?, ?, ?, ?, ?, 'locked', ?, ?)`).bind(s.id, s.room, s.amount, s.uids[0], s.uids[1], s.len, s.now, s.deadline),
+      ];
+      for (const uid of s.uids) {
+        // below zero → the trigger users_coins_nonneg aborts the whole batch; a player without a row → balance_after NULL aborts it
+        q.push(db.prepare('UPDATE users SET coins = coins - ?, updated_at = ? WHERE user_id = ?').bind(s.amount, s.now, uid));
+        q.push(db.prepare(`INSERT INTO ledger (user_id, delta, reason, ref, balance_after, created_at)
+                           VALUES (?, ?, 'stake', ?, (SELECT coins FROM users WHERE user_id = ?), ?)`).bind(uid, -s.amount, s.id, uid, s.now));
+      }
+      try { await db.batch(q); }
+      catch (e) {
+        const m = String(e && e.message);
+        if (/insufficient|NOT NULL/i.test(m)) return 'funds';
+        if (/UNIQUE|PRIMARY KEY|constraint/i.test(m)) return 'duplicate';
+        throw e;
+      }
+      return 'ok';
+    },
+    async stakeGet(id) {
+      const r = await one('SELECT * FROM stakes WHERE match_id = ?', id);
+      return r ? stakeRow(r) : null;
+    },
+    async stakeSettle(id, outcome, pays, now) {
+      const locked = "EXISTS (SELECT 1 FROM stakes WHERE match_id = ? AND status = 'locked')";
+      const q = [];
+      for (const [uid, delta, reason] of pays) {
+        q.push(db.prepare(`UPDATE users SET coins = coins + ?, updated_at = ? WHERE user_id = ? AND ${locked}`).bind(delta, now, uid, id));
+        q.push(db.prepare(`INSERT INTO ledger (user_id, delta, reason, ref, balance_after, created_at)
+                           SELECT ?, ?, ?, ?, (SELECT coins FROM users WHERE user_id = ?), ? WHERE ${locked}`).bind(uid, delta, reason, id, uid, now, id));
+      }
+      q.push(db.prepare("UPDATE stakes SET status = 'settled', outcome = ?, settled_at = ? WHERE match_id = ? AND status = 'locked'").bind(outcome, now, id));
+      try { await db.batch(q); }
+      catch (e) { if (/UNIQUE|constraint/i.test(String(e && e.message))) return 'done'; throw e; }
+      return 'ok';
+    },
+    async stakesOverdue(uid, now) {
+      const r = await db.prepare(`SELECT * FROM stakes WHERE status = 'locked' AND deadline <= ? AND (host_uid = ? OR guest_uid = ?)`).bind(now, uid, uid).all();
+      return r.results.map(stakeRow);
     },
     async balance(uid) { const r = await one('SELECT coins FROM users WHERE user_id = ?', uid); return r ? r.coins : 0; },
     async profile(uid) {

@@ -61,7 +61,7 @@ function summary(o = {}) {
 // ---------- the rules without Cloudflare: server/coins.js in plain Node.js with an in-memory store (the STORE contract)
 {
   const { handleCoins } = await import('../server/coins.js');
-  const M = new Map(), U = new Map(), Lg = [];
+  const M = new Map(), U = new Map(), Lg = [], St = new Map();
   const store = {
     async matchSeen(uid, id) { return M.has(uid + ':' + id); },
     async lastMatch(uid) { const a = [...M.values()].filter((m) => m.uid === uid).sort((x, y) => y.now - x.now)[0]; return a ? { at: a.now, len: a.len } : null; },
@@ -78,6 +78,23 @@ function summary(o = {}) {
     },
     async balance(uid) { return (U.get(uid) || { coins: 0 }).coins; },
     async profile(uid) { return U.get(uid) || null; },
+    // stakes: the same contract as server/coins-d1.js — all or nothing, never below zero, settle only from 'locked'
+    async stakeLock(s) {
+      if (St.has(s.id)) return 'duplicate';
+      const us = s.uids.map((uid) => U.get(uid));
+      if (us.some((u) => !u || u.coins < s.amount)) return 'funds';
+      for (const [i, u] of us.entries()) { u.coins -= s.amount; Lg.push({ uid: s.uids[i], d: -s.amount, reason: 'stake', ref: s.id, at: s.now }); }
+      St.set(s.id, { id: s.id, room: s.room, amount: s.amount, uids: s.uids.slice(), len: s.len, status: 'locked', outcome: null, created: s.now, deadline: s.deadline });
+      return 'ok';
+    },
+    async stakeGet(id) { const s = St.get(id); return s ? { ...s, uids: s.uids.slice() } : null; },
+    async stakeSettle(id, outcome, pays, now) {
+      const s = St.get(id); if (!s || s.status !== 'locked') return 'done';
+      for (const [uid, d, reason] of pays) { U.get(uid).coins += d; Lg.push({ uid, d, reason, ref: id, at: now }); }
+      s.status = 'settled'; s.outcome = outcome; s.settled = now;
+      return 'ok';
+    },
+    async stakesOverdue(uid, now) { return [...St.values()].filter((s) => s.status === 'locked' && s.deadline <= now && s.uids.includes(uid)); },
   };
   const P = { id: 777000111, first_name: 'Node' };
   const deps = { botToken: TOKEN, store, roomResult: async () => null };
@@ -93,6 +110,89 @@ function summary(o = {}) {
   ok((await go('POST', '/v1/match', initData(P), summary())).status === 429, 'node core: next match right away → 429');
   r = await go('GET', '/v1/profile', initData(P));
   ok(r.status === 200 && r.j.coins === 15 && r.j.totals.w === 1 && r.j.day.coins === 15, `node core: profile ${JSON.stringify(r.j)}`);
+
+  // ---- stakes (coins.js StakeRoom / stakeFinish / stakeSweep) on the same in-memory store
+  const { StakeRoom, stakeFinish, stakeSweep } = await import('../server/coins.js');
+  const user = (id, coins) => { U.set(id, { coins, stars: 0, matches: 0, wins: 0, draws: 0, losses: 0, goals: 0, goals_against: 0, streak: 0, best_streak: 0, online: 0, inventory: [] }); return id; };
+  const bal = (id) => U.get(id).coins;
+  const H = user(9001, 100), G = user(9002, 30), Poor = user(9003, 5);
+  const total0 = bal(H) + bal(G) + bal(Poor);
+  let sid = 0; const mid = () => 'abcdef' + String(++sid).padStart(10, '0');
+  const now = 1_800_000_000;
+  // a room with both players signed in and a stake both agreed to → the started match id
+  async function staked(n, uids = [H, G]) {
+    const R = new StakeRoom(); R.auth(0, uids[0]); R.auth(1, uids[1]);
+    const e1 = await R.offer(store, 0, n), e2 = e1 || await R.confirm(store, 1, n);
+    if (e1 || e2) return { R, err: e1 || e2 };
+    const id = mid(), err = await R.start(store, { id, room: 'NODE', len: 180, now, deadline: now + 1260 });
+    return { R, id, err };
+  }
+  // win: the host takes both; the second settlement pays nothing
+  let t = await staked(25);
+  ok(!t.err && bal(H) === 75 && bal(G) === 5 && t.R.live && t.R.live.n === 25 && t.R.n === 0, `stake: locked from both ${JSON.stringify([t.err, bal(H), bal(G)])}`);
+  await stakeFinish(store, t.id, { score: [3, 1], left: [false, false] }, now + 200);
+  await stakeFinish(store, t.id, { score: [0, 9], left: [false, false] }, now + 300);
+  ok(bal(H) === 125 && bal(G) === 5, `stake: win → the host takes both, settled once (${bal(H)}, ${bal(G)})`);
+  // the report of that match: the stake as each sees it, outside the daily cap; the same report again → 409, no coins
+  const duo = (team, id, sc) => summary({ score: sc, patch: { id, mode: 'online', role: team ? 'guest' : 'host', team, net: 'server', room: 'NODE', difficulty: null,
+    result: sc[team] > sc[1 - team] ? 'win' : sc[team] < sc[1 - team] ? 'loss' : 'draw' } });
+  const ide = (id) => initData({ id, first_name: 'S' + id });
+  r = await go('POST', '/v1/match', ide(G), duo(1, t.id, [3, 1]));
+  ok(r.status === 200 && r.j.stake && r.j.stake.out === 'loss' && r.j.stake.n === 25 && r.j.stake.delta === 0 && r.j.balance === 5 + r.j.coins,
+    `stake: guest's report shows the lost stake ${JSON.stringify(r.j)}`);
+  const gAfter = bal(G), rj = r.j;
+  ok((await go('POST', '/v1/match', ide(G), duo(1, t.id, [3, 1]))).status === 409 && bal(G) === gAfter, 'stake: the same report again → 409, nothing paid');
+  ok((await store.coinsSince(G, 'match_ai', 0)) === r.j.coins && Lg.some((l) => l.uid === G && l.reason === 'stake'), 'stake: not counted in the daily match caps');
+  const gWas = bal(G); U.get(G).coins = 40;          // top up the guest for the next ones (bookkeeping below)
+  let extra = 40 - gWas;
+  // draw: each gets their own back
+  t = await staked(10);
+  await stakeFinish(store, t.id, { score: [2, 2], left: [false, false] }, now);
+  ok(!t.err && bal(H) === 125 && bal(G) === 40, `stake: draw → each their own back (${bal(H)}, ${bal(G)})`);
+  // a player who dropped and did not come back loses the stake, whatever the score
+  t = await staked(10);
+  await stakeFinish(store, t.id, { score: [0, 3], left: [false, true] }, now);
+  ok(!t.err && bal(H) === 135 && bal(G) === 30, `stake: the guest left → the host takes both despite 0:3 (${bal(H)}, ${bal(G)})`);
+  t = await staked(10);
+  await stakeFinish(store, t.id, { score: [1, 0], left: [true, true] }, now);
+  ok(!t.err && bal(H) === 135 && bal(G) === 30, `stake: both left → both back (${bal(H)}, ${bal(G)})`);
+  // not enough coins: the offer, the confirmation, and a balance that dropped before the start
+  t = await staked(10, [Poor, G]);
+  ok(t.err === 'funds' && bal(Poor) === 5, `stake: the host without coins cannot offer (${t.err})`);
+  t = await staked(10, [H, Poor]);
+  ok(t.err === 'funds' && bal(Poor) === 5 && bal(H) === 135, `stake: the guest without coins cannot confirm (${t.err})`);
+  {
+    const R = new StakeRoom(); R.auth(0, H); R.auth(1, G);
+    await R.offer(store, 0, 25); await R.confirm(store, 1, 25);
+    U.get(G).coins = 20; extra -= 10;
+    const e = await R.start(store, { id: mid(), room: 'NODE', len: 180, now, deadline: now + 1260 });
+    ok(e === 'funds' && bal(H) === 135 && bal(G) === 20 && !R.ok[1], `stake: balance gone before the start → nothing locked (${e})`);
+    // not confirmed: no start
+    const e2 = await R.start(store, { id: mid(), room: 'NODE', len: 180, now, deadline: now + 1260 });
+    ok(e2 === 'confirm' && bal(H) === 135, `stake: not confirmed by the guest → the match does not start (${e2})`);
+    // a new amount drops the confirmation; another amount cannot be confirmed
+    await R.offer(store, 0, 10); ok((await R.confirm(store, 1, 25)) === 'amount' && !R.ok[1], 'stake: confirming another amount is refused');
+    // the same Telegram user on both sides
+    const S2 = new StakeRoom(); S2.auth(0, H); S2.auth(1, H);
+    ok((await S2.offer(store, 0, 10)) === 'same', 'stake: the same player in both slots is refused');
+    // unsigned player
+    const S3 = new StakeRoom(); S3.auth(1, G);
+    ok((await S3.offer(store, 0, 10)) === 'auth', 'stake: an offer without a verified player is refused');
+    ok((await S3.offer(store, 0, 7)) === 'amount', 'stake: only 0 / 10 / 25 / 50 / 100');
+  }
+  // one stake per match id
+  t = await staked(10);
+  ok((await store.stakeLock({ id: t.id, room: 'NODE', amount: 10, uids: [H, G], len: 180, now, deadline: now })) === 'duplicate' && bal(H) === 125 && bal(G) === 10,
+    'stake: a second lock of the same match → duplicate, nothing taken twice');
+  // no result from the room (the match never ended): refunded after the deadline by a sweep, once
+  await stakeSweep(store, H, now + 1000, async () => null);
+  ok(bal(H) === 125, 'stake: not refunded before the deadline');
+  await stakeSweep(store, H, now + 1300, async () => null);
+  await stakeSweep(store, G, now + 1300, async () => null);
+  ok(bal(H) === 135 && bal(G) === 20, `stake: no room result → both refunded (${bal(H)}, ${bal(G)})`);
+  // the books: stakes move coins between players, never make or lose any
+  const matchPaid = Lg.filter((l) => l.reason === 'match_duo' || l.reason === 'match_ai').filter((l) => [H, G, Poor].includes(l.uid)).reduce((a, l) => a + l.d, 0);
+  ok(bal(H) + bal(G) + bal(Poor) === total0 + extra + matchPaid, `stake: coins add up to the coin (${bal(H) + bal(G) + bal(Poor)} = ${total0} + ${extra} + ${matchPaid})`);
 }
 
 const persist = mkdtempSync(join(tmpdir(), 'bvr-api-'));
@@ -158,6 +258,26 @@ try {
   ok(last.j.verdict === 'capped' && total === 100 && last.j.balance === 100 && last.j.day.coins === 100, `daily cap 100: total ${total}, last ${JSON.stringify(last.j)}`);
   p = await call('GET', '/v1/profile', ib);
   ok(p.j.coins === 100 && p.j.totals.m === 11 && p.j.totals.l === 1 && p.j.totals.d === 1 && p.j.totals.w === 9 && p.j.totals.best === 9, `profile B ${JSON.stringify(p.j.totals)}`);
+
+  // a socket to a room that keeps every message; next() waits for one that matches
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const roomSock = (code, q) => new Promise((res, rej) => {
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/room/${code}${q}`); const P = { ws, q: [], end: null, send: (o) => ws.send(JSON.stringify(o)) };
+    ws.on('message', (d) => { const m = JSON.parse(d.toString()); if (m.t === 's') { if (m.e) for (const [nm, e] of m.e) if (nm === 'match:end') P.end = e; return; } P.q.push(m); });
+    ws.on('open', () => res(P)); ws.on('error', rej);
+  });
+  const next = async (P, f, ms = 4000) => { const t = Date.now(); while (Date.now() - t < ms) { const i = P.q.findIndex(f); if (i >= 0) return P.q.splice(i, 1)[0]; await sleep(50); } return null; };
+  const coinsOf = async (u) => (await call('GET', '/v1/profile', initData(u))).j.coins;
+  // two signed-in players in a fresh server room with a stake of n both agreed to → { H, G }
+  async function stakeRoom(code, hu, gu, n) {
+    const H = await roomSock(code, '?mode=srv'); await sleep(200); const G = await roomSock(code, '');
+    const hh = await next(H, (m) => m.t === 'hello'); await next(G, (m) => m.t === 'hello');
+    H.stk = hh && hh.stk;
+    H.send({ t: 'auth', d: initData(hu) }); G.send({ t: 'auth', d: initData(gu) });
+    H.auth = await next(H, (m) => m.t === 'auth'); G.auth = await next(G, (m) => m.t === 'auth');
+    if (n) { H.send({ t: 'stake', n }); await next(G, (m) => m.t === 'stake' && m.n === n); G.send({ t: 'stakeOk', n }); await next(H, (m) => m.t === 'stake' && m.ok && m.ok[1]); }
+    return { H, G };
+  }
   // a server-mode match in a real room
   const room = 'API' + Math.floor(Math.random() * 1e5), mid = 'fedcba9876543210' + Math.floor(Math.random() * 1e8).toString(16).padStart(8, '0');
   const sock = (q) => new Promise((res, rej) => {
@@ -191,6 +311,56 @@ try {
     ok(ext.ok && !('score' in (await ext.json())), 'X-Internal from outside does not reach the room results');
   }
   H.ws.close(); G.ws.close();
+
+  // ---------- a stake on a real server match: the players sign in over the socket, the host offers, the guest
+  // confirms, the room locks the stake in D1 at the start and settles it by its own result
+  const SH = { id: A.id + 10, first_name: 'StakeHost' }, SG = { id: A.id + 11, first_name: 'StakeGuest' };
+  for (const u of [SH, SG]) { const r1 = await call('POST', '/v1/match', initData(u), summary()); ok(r1.j && r1.j.balance === 15, `stake player earns 15 first ${JSON.stringify(r1.j)}`); }
+  {
+    const code = 'STK' + Math.floor(Math.random() * 1e5), sm = 'aa' + Math.floor(Math.random() * 1e12).toString(16).padStart(14, '0') + 'bb00cc11';
+    const { H, G } = await stakeRoom(code, SH, SG, 0);
+    ok(H.stk === 1 && H.auth && H.auth.ok === 1 && G.auth && G.auth.ok === 1, `stake: hello.stk and initData accepted over the socket ${JSON.stringify([H.stk, H.auth, G.auth])}`);
+    H.send({ t: 'stake', n: 100 });
+    let m = await next(H, (x) => x.t === 'stake' && x.err);
+    ok(m && m.err === 'funds', `stake: 100 with 15 coins → funds ${JSON.stringify(m)}`);
+    G.send({ t: 'stake', n: 10 });
+    m = await next(G, (x) => x.t === 'stake' && x.err);
+    ok(m && m.err === 'role', `stake: only the host offers ${JSON.stringify(m)}`);
+    H.send({ t: 'stake', n: 10 });
+    m = await next(G, (x) => x.t === 'stake' && x.n === 10);
+    ok(m && m.ok[0] === 1 && m.ok[1] === 0, `stake: the guest sees the offer ${JSON.stringify(m)}`);
+    H.send({ t: 'cfg', a: 0, b: 3, min: 0.25, id: sm });
+    m = await next(H, (x) => x.t === 'stake' && x.err);
+    ok(m && m.err === 'confirm' && !(await next(H, (x) => x.t === 'cfg', 800)), `stake: not confirmed → no match ${JSON.stringify(m)}`);
+    G.send({ t: 'stakeOk', n: 10 });
+    m = await next(H, (x) => x.t === 'stake' && x.ok && x.ok[1] === 1);
+    ok(!!m, 'stake: the host sees the confirmation');
+    H.send({ t: 'cfg', a: 0, b: 3, min: 0.25, id: sm });
+    const cfgH = await next(H, (x) => x.t === 'cfg'), live = await next(G, (x) => x.t === 'stake' && x.live);
+    ok(cfgH && cfgH.id === sm && live && live.live.id === sm && live.live.n === 10, `stake: locked, the match starts ${JSON.stringify([cfgH, live])}`);
+    ok((await coinsOf(SH)) === 5 && (await coinsOf(SG)) === 5, 'stake: 10 locked from each (15 → 5)');
+    H.send({ t: 'cfg', a: 0, b: 3, min: 0.25, id: 'ab' + sm.slice(2) });
+    ok(!(await next(H, (x) => x.t === 'cfg', 800)), 'stake: a match with a stake is not restarted halfway');
+    const t1 = Date.now(); while (!(H.end && G.end) && Date.now() - t1 < 40000) await sleep(200);
+    ok(H.end && G.end, 'stake: the staked match ended');
+    if (H.end) {
+      const sc = H.end.score, win = sc[0] > sc[1] ? 0 : sc[0] < sc[1] ? 1 : -1;
+      const want = win === 0 ? [25, 5] : win === 1 ? [5, 25] : [15, 15];
+      let got = []; for (let i = 0; i < 30; i++) { got = [await coinsOf(SH), await coinsOf(SG)]; if (got[0] === want[0] && got[1] === want[1]) break; await sleep(200); }
+      ok(got[0] === want[0] && got[1] === want[1], `stake: settled by the room's ${sc.join(':')} → ${JSON.stringify(got)} (want ${JSON.stringify(want)})`);
+      const rep = (team, u) => call('POST', '/v1/match', initData(u), summary({ len: 15, score: sc, patch: { id: sm, mode: 'online', role: team ? 'guest' : 'host', team, net: 'server', room: code,
+        difficulty: null, played: 15, result: sc[team] > sc[1 - team] ? 'win' : sc[team] < sc[1 - team] ? 'loss' : 'draw' } }));
+      const rh = await rep(0, SH), rg = await rep(1, SG);
+      const outs = win === 0 ? ['win', 'loss'] : win === 1 ? ['loss', 'win'] : ['back', 'back'];
+      ok(rh.status === 200 && rh.j.stake && rh.j.stake.out === outs[0] && rh.j.balance === want[0] + rh.j.coins, `stake: host's report ${JSON.stringify(rh.j)}`);
+      ok(rg.status === 200 && rg.j.stake && rg.j.stake.out === outs[1] && rg.j.balance === want[1] + rg.j.coins, `stake: guest's report ${JSON.stringify(rg.j)}`);
+      ok((await rep(0, SH)).status === 409 && (await coinsOf(SH)) === rh.j.balance && (await coinsOf(SG)) === rg.j.balance, 'stake: the same report again pays nothing');
+      ok((await coinsOf(SH)) + (await coinsOf(SG)) === 30 + rh.j.coins + rg.j.coins, 'stake: both balances add up to the coin');
+      const ph = await call('GET', '/v1/profile', initData(SH));
+      ok(ph.j.day.duo === rh.j.coins, `stake: not in the daily duo cap ${JSON.stringify(ph.j.day)}`);
+    }
+    H.ws.close(); G.ws.close();
+  }
 
   // the game itself: queue on start, profile, reward on the result screen
   {
@@ -238,6 +408,34 @@ try {
       const errs = g.logs.filter(isError).filter((e) => !/ERR_FAILED/.test(e.text));   // the request aborted on purpose above
       ok(!errs.length, `game: page errors ${JSON.stringify(errs).slice(0, 400)}`);
     } finally { await g.browser.close(); srv.close(); }
+  }
+
+
+  // ---------- no result from the room → refund: a Worker whose stakes are already past their deadline when locked
+  // (STAKE_GRACE far below zero) — the room's alarm and the profile's sweep refund it; the match's own end later pays nothing
+  w.close(); await sleep(800);
+  w = await startWrangler(port, { args: ['--persist-to', persist, '--var', `BOT_TOKEN:${TOKEN}`, '--var', 'MATCH_GAP:0', '--var', 'MIN_LEN:10', '--var', 'STAKE_GRACE:-100000'] });
+  {
+    const before = [await coinsOf(SH), await coinsOf(SG)];
+    const code = 'STR' + Math.floor(Math.random() * 1e5), sm = 'cc' + Math.floor(Math.random() * 1e12).toString(16).padStart(14, '0') + 'dd00ee11';
+    const { H, G } = await stakeRoom(code, SH, SG, 10);
+    H.send({ t: 'cfg', a: 0, b: 3, min: 0.25, id: sm });
+    const live = await next(G, (x) => x.t === 'stake' && x.live);
+    ok(live && live.live.id === sm, `refund: stake locked ${JSON.stringify(live)}`);
+    let got = []; for (let i = 0; i < 40; i++) { got = [await coinsOf(SH), await coinsOf(SG)]; if (got[0] === before[0] && got[1] === before[1]) break; await sleep(250); }
+    ok(got[0] === before[0] && got[1] === before[1], `refund: no room result → both back ${JSON.stringify(got)} (was ${JSON.stringify(before)})`);
+    const t1 = Date.now(); while (!(H.end && G.end) && Date.now() - t1 < 40000) await sleep(200);
+    await sleep(1500);
+    ok((await coinsOf(SH)) === before[0] && (await coinsOf(SG)) === before[1], 'refund: the match ending afterwards pays nothing more');
+    // not enough coins: a player with none cannot confirm
+    const Z = { id: A.id + 12, first_name: 'Zero' };
+    await call('GET', '/v1/profile', initData(Z));
+    const z = await stakeRoom('STZ' + Math.floor(Math.random() * 1e5), SH, Z, 0);
+    z.H.send({ t: 'stake', n: 10 }); await next(z.G, (x) => x.t === 'stake' && x.n === 10);
+    z.G.send({ t: 'stakeOk', n: 10 });
+    const e = await next(z.G, (x) => x.t === 'stake' && x.err);
+    ok(e && e.err === 'funds', `funds: a guest without coins cannot confirm ${JSON.stringify(e)}`);
+    for (const P of [H, G, z.H, z.G]) P.ws.close();
   }
 
   // A is untouched by B

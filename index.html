@@ -1199,7 +1199,7 @@ ru:{
   mRoomNote:'Друг откроет игру по ссылке и сразу попадёт в комнату. Пропала связь — вернём в тот же матч.',
   mJoinNote:'Впиши код комнаты из приглашения друга и нажми «Войти».',
   mFriendIn:'Друг в комнате', mHostSees:'Друг видит твой выбор и ждёт старта', mGuestWait:'Команды и длину выбирает друг — матч начнёт он',
-  mWaitHost:'ждём старта', mSelect:'Выбрать', mBack:'Назад', mChange:'Изменить', mTabs:'Вкладки',
+  mWaitHost:'ждём старта', mStake:'Ставка', stNone:'без ставки', stWaitOk:'Друг принимает ставку…', stAccept:'Принять ставку', stAccepted:'Ставка принята', stRule:'Ставка: победитель забирает обе, ничья — каждому своя', stErr:'Ставка не принята', stErr_funds:'Не хватает монет для ставки', stErr_confirm:'Друг ещё не принял ставку', stErr_same:'Ставка — только между разными игроками', stErr_auth:'Ставки — только в Telegram', stErr_off:'Ставки сейчас недоступны', stErr_live:'Матч уже идёт', rwStWin:'Ставка выиграна', rwStLoss:'Ставка проиграна', rwStBack:'Ставка возвращена', rwStWait:'Ставка: итог позже', mSelect:'Выбрать', mBack:'Назад', mChange:'Изменить', mTabs:'Вкладки',
   mLang:'Язык', mGfx:'Графика', mFps:'Показ FPS', mMusic:'Музыка', mSfx:'Звуки', mVib:'Вибрация', langName:'Русский',
   mLangD:'Язык игры. Выбор сохраняется.', mGfxD:'Авто — игра сама держит 60 кадров: на слабом телефоне снижает качество.',
   mFpsD:'Счётчик кадров в углу экрана во время матча.', mMusicD:'Музыка в меню. Когда начинается матч, она затихает.',
@@ -1290,7 +1290,7 @@ en:{
   mRoomNote:'Your friend opens the game from the link and lands in the room. Lost connection? You return to the same match.',
   mJoinNote:"Type the room code from your friend's invite and press Join.",
   mFriendIn:'Friend joined', mHostSees:'Your friend sees your choice and waits', mGuestWait:'Your friend picks teams and length and starts the match',
-  mWaitHost:'waiting for start', mSelect:'Select', mBack:'Back', mChange:'Change', mTabs:'Tabs',
+  mWaitHost:'waiting for start', mStake:'Stake', stNone:'no stake', stWaitOk:'Your friend is accepting…', stAccept:'Accept stake', stAccepted:'Stake accepted', stRule:'Stake: the winner takes both, a draw returns each', stErr:'Stake not accepted', stErr_funds:'Not enough coins for this stake', stErr_confirm:'Your friend has not accepted the stake yet', stErr_same:'Stakes are only between two different players', stErr_auth:'Stakes work only in Telegram', stErr_off:'Stakes are unavailable now', stErr_live:'The match is already on', rwStWin:'Stake won', rwStLoss:'Stake lost', rwStBack:'Stake returned', rwStWait:'Stake: result later', mSelect:'Select', mBack:'Back', mChange:'Change', mTabs:'Tabs',
   mLang:'Language', mGfx:'Graphics', mFps:'Show FPS', mMusic:'Music', mSfx:'Sounds', mVib:'Vibration', langName:'English',
   mLangD:'Game language. Your choice is saved.', mGfxD:'Auto keeps 60 fps: the game lowers quality on a slow phone.',
   mFpsD:'Frame counter in the corner during a match.', mMusicD:'Menu music. It fades out when a match starts.',
@@ -1383,7 +1383,7 @@ id:{
   mRoomNote:'Temanmu membuka game dari tautan dan langsung masuk ruang. Koneksi putus? Kamu kembali ke laga yang sama.',
   mJoinNote:'Ketik kode ruang dari undangan temanmu lalu tekan Masuk.',
   mFriendIn:'Teman sudah masuk', mHostSees:'Temanmu melihat pilihanmu dan menunggu', mGuestWait:'Temanmu memilih tim dan durasi, dia yang memulai laga',
-  mWaitHost:'menunggu mulai', mSelect:'Pilih', mBack:'Kembali', mChange:'Ubah', mTabs:'Tab',
+  mWaitHost:'menunggu mulai', mStake:'Taruhan', stNone:'tanpa taruhan', stWaitOk:'Teman sedang menerima…', stAccept:'Terima taruhan', stAccepted:'Taruhan diterima', stRule:'Taruhan: pemenang ambil keduanya, seri — kembali', stErr:'Taruhan tidak diterima', stErr_funds:'Koin tidak cukup untuk taruhan', stErr_confirm:'Teman belum menerima taruhan', stErr_same:'Taruhan hanya antara dua pemain berbeda', stErr_auth:'Taruhan hanya di Telegram', stErr_off:'Taruhan tidak tersedia sekarang', stErr_live:'Laga sudah berjalan', rwStWin:'Taruhan menang', rwStLoss:'Taruhan kalah', rwStBack:'Taruhan dikembalikan', rwStWait:'Taruhan: hasil nanti', mSelect:'Pilih', mBack:'Kembali', mChange:'Ubah', mTabs:'Tab',
   mLang:'Bahasa', mGfx:'Grafis', mFps:'Tampilkan FPS', mMusic:'Musik', mSfx:'Suara', mVib:'Getar', langName:'Indonesia',
   mLangD:'Bahasa game. Pilihanmu disimpan.', mGfxD:'Otomatis menjaga 60 fps: kualitas turun di ponsel yang lambat.',
   mFpsD:'Penghitung frame di sudut layar saat laga.', mMusicD:'Musik menu. Pelan-pelan hilang saat laga dimulai.',
@@ -4735,6 +4735,11 @@ function netConnect(url, code, cb, re){
       /* вернулись, а комната уже другая (сервер её забыл, матч кончился без нас) — возвращаться некуда */
       if(re && (m.role!==NET.role || !m.srv || (netInMatch() && !m.run))){ netGiveUp(); return; }
       NET.tok=m.tok||null; slotKeySave(code, m.role, NET.tok);
+      /* ставки: сервер узнаёт игрока по подписанному initData (только серверная схема и только новый Worker — stk:1;
+         старый переслал бы initData сопернику) */
+      if(!re) STK={n:0, ok:[0,0], live:null, auth:false};
+      NET.stk=!!(m.srv && m.stk);
+      if(NET.stk && TG && TG.initData) netSend({t:'auth', d:TG.initData});
       NET.role=m.role; NET.on=true; NET.srv=!!m.srv;
       HUMAN = (m.role==='host')?0:1;
       NET.peer = m.n>1;
@@ -4751,6 +4756,13 @@ function netConnect(url, code, cb, re){
       if(state==='menu'){ MENU.build('prep'); MENU.refocus(); }
     }
     else if(m.t==='fb'){ netSrvFallback(m.k, true); }
+    else if(m.t==='auth' && NET.srv){ STK.auth=!!m.ok; if(state==='menu') MENU.onNet('stake'); }
+    else if(m.t==='stake' && NET.srv){
+      if(m.live && !(STK.live && STK.live.id===m.live.id)) setTimeout(profileFetch, 300);   /* ставка списана — баланс с сервера */
+      STK.n=m.n|0; STK.ok=Array.isArray(m.ok)?m.ok:[0,0]; STK.live=m.live||null;
+      if(m.err){ clearTimeout(NET.srvT); toast(T('stErr_'+m.err)!=='stErr_'+m.err ? T('stErr_'+m.err) : T('stErr'), 2.6); }
+      if(state==='menu' && MENU.top()==='prep'){ MENU.build('prep'); MENU.refocus(); }
+    }
     else if(m.t==='peer'){
       NET.peer = m.n>1;
       netStatus(NET.peer?T('peerIn'):T('waiting'));
@@ -5582,6 +5594,7 @@ var MSCR={
     var cards='<div class="mteams">'+mTeamCard(guest?'op':'my', my, T('mMy'), '9', guest)+'<div class="mvs">VS</div>'+
       mTeamCard(guest?'my':'op', op, T('mOpp'), '17', guest)+'</div>';
     var opts='<div class="mopts">'+(ONLINE?'':mRow('diff',T('diff'),mArr(T(diffKey()))))+mRow('min',T('mLen'),mArr(T('min'+selMin)),guest?'ro':'')+
+      (stakeOn() ? mRow('stake',T('mStake'),'<span class="ar" data-dir="-1">‹</span>'+stakeLabel(STK.n)+'<span class="ar" data-dir="1">›</span>',guest?'ro':'') : '')+
       mRow('tac',T('mTac'),mArr(T(TACNAME[selTac])))+(ONLINE?'<div class="mwait" data-paint="prepSt"></div>':'')+
       '<button class="mbtn mf" id="go" data-act="go"></button></div>';
     return mHead(T('mPrep'),'<span class="mpill">'+mEsc(ONLINE?T('mFriend'):T('mVsAI'))+'</span>')+
@@ -5753,6 +5766,7 @@ var MPAINT={
     if(NET.role==='guest'){ t=T('mGuestWait'); ok=true; }
     else if(NET.on && NET.peer){ t=T('mFriendIn')+' · '+T('mHostSees'); ok=true; }
     else t=NET.status||T('waiting');
+    if(stakeOn() && STK.n>0 && NET.peer) t=T('stRule');
     el.innerHTML='<span class="mdot'+(ok?' ok':'')+'"></span>'+mEsc(t);
   },
   friendR:function(el){
@@ -6060,6 +6074,7 @@ var ADJ={
   diff:function(el, d){ var D=['easy','normal','hard']; setDifficulty(D[(D.indexOf(DIFF)+d+3)%3]); prepChanged(); },
   min:function(el, d){ if(ONLINE && NET.role==='guest') return; var i=MIN_OPTS.indexOf(selMin); selMin=MIN_OPTS[(i+d+MIN_OPTS.length)%MIN_OPTS.length]; prepChanged(); },
   tac:function(el, d){ selTac=(selTac+d+3)%3; prepChanged(); },
+  stake:function(el, d){ stakeStep(d); },
   gfx:function(el, d, ev){
     var q=mPick(ev,'data-q'), cur=QAUTO?-1:QLEVEL, v=q!==null ? +q : ((cur+1+d+4)%4)-1;
     /* выбор игрока запоминается: «авто» — снова автоподстройка, уровень — фиксирован */
@@ -6140,7 +6155,15 @@ function mClick(e){
 function goPaint(){
   var go=document.getElementById('go'); if(!go) return;
   if(!ONLINE){ go.disabled=false; go.textContent=T('start'); }
-  else if(NET.role==='host'){ go.disabled=!(NET.on && NET.peer); go.textContent=(NET.on && NET.peer)?T('start'):T('waiting'); }
+  else if(NET.role==='host'){
+    var wait=stakeOn() && STK.n>0 && !STK.ok[1];
+    go.disabled=!(NET.on && NET.peer) || wait; go.textContent=(NET.on && NET.peer)?T(wait?'stWaitOk':'start'):T('waiting');
+  }
+  else if(stakeOn() && STK.n>0){
+    /* гость: ставку хоста нужно принять до старта */
+    go.disabled=!!STK.ok[1];
+    go.innerHTML=STK.ok[1] ? mEsc(T('stAccepted'))+' · '+mEsc(T('mWaitHost')) : mEsc(T('stAccept'))+' '+curHtml('coin', STK.n);
+  }
   else { go.disabled=true; go.textContent=T('mWaitHost'); }
 }
 MENU.netPaint=function(){
@@ -6596,6 +6619,7 @@ function goStart(){
     return;
   }
   var mid=newMatchId();
+  if(ONLINE && NET.on && NET.role==='guest' && stakeOn() && STK.n>0 && !STK.ok[1]){ netSend({t:'stakeOk', n:STK.n}); return; }
   if(ONLINE){
     if(!NET.on || NET.role!=='host' || !NET.peer) return;
     netSend({t:'cfg',a:selMy,b:selOp,min:selMin,id:mid});
@@ -6751,6 +6775,7 @@ function matchStart(id, clubA, clubB){
   MATCH.id=id; MATCH.mode=NET.on?'online':'ai'; MATCH.role=NET.on?NET.role:'solo'; MATCH.net=NET.on?(NET.srv?'server':'host'):null;
   MATCH.team=HUMAN; MATCH.clubs=[clubA,clubB]; MATCH.len=Math.round(clock);
   MATCH.played=0; MATCH.startedAt=Date.now(); MATCH.summary=null; MATCH.sent=false; MATCH.reward=null;
+  MATCH.stake=(NET.on && NET.srv && STK.live && STK.live.id===id) ? STK.live.n : 0;
   MATCH.difficulty = NET.on ? null : DIFF;   /* в сетевом матче соперник — человек */
   NET.dc={self:0, selfLeft:false, opp:false, oppLeft:false}; NET.w=0; netBanner();
   statsReset();
@@ -6814,6 +6839,21 @@ EV.on('match:start', function(){ sumFlush(); });
 /* монеты: баланс знает только сервер (GET /v1/profile, ответ на итог матча); здесь — копия для показа */
 var COINS=null;   /* null — неизвестен: вне Telegram или сервер ещё ни разу не ответил */
 try{ var _c0=localStorage.getItem('bvr_coins'); if(_c0 && isFinite(+_c0)) COINS=Math.max(0, Math.floor(+_c0)); }catch(e){}
+/* ---------- ставка на матч с другом (только серверная схема; правила — server/coins.js, docs/EVENTS.md) ----------
+   Хост выбирает ставку на подготовке, гость её принимает; сервер проверяет баланс обоих и при старте блокирует ставку,
+   итог решает только результат комнаты. Ставятся только монеты — звёзды никогда. STK — что прислала комната. */
+var STAKES=[0,10,25,50,100];
+var STK={n:0, ok:[0,0], live:null, auth:false};
+function stakeOn(){ return !!(ONLINE && NET.on && NET.srv && NET.stk && STK.auth); }
+function stakeLabel(n){ return n>0 ? curHtml('coin', n) : mEsc(T('stNone')); }
+function stakeStep(d){
+  if(!stakeOn() || NET.role!=='host') return;
+  /* суммы больше известного баланса пропускаем (сервер всё равно проверит) */
+  var opts=STAKES.filter(function(v){ return COINS===null || v<=COINS; }); if(!opts.length) opts=[0];
+  var i=opts.indexOf(STK.n); if(i<0) i=0;
+  netSend({t:'stake', n:opts[(i+d+opts.length)%opts.length]});
+}
+
 /* звёзды (Telegram Stars) — только донат, баланс тоже с сервера (/v1/profile); в ставках и обмене не участвуют */
 var STARS=null;
 try{ var _s0=localStorage.getItem('bvr_stars'); if(_s0 && isFinite(+_s0)) STARS=Math.max(0, Math.floor(+_s0)); }catch(e){}
@@ -6853,7 +6893,7 @@ EV.on('match:rewardNone', function(e){ if(e.id===MATCH.id && RW.id===e.id && RW.
    фильтров и теней; prefers-reduced-motion — сразу итог. Вне Telegram и в автотестах итог не отправляется — блока нет. */
 var RW_LATER_MS=8000;
 var RW={id:'', st:null, res:null, played:'', timer:0, raf:0, fly:[], t:[]};
-function rwTotal(res){ return res.coins|0; }
+function rwTotal(res){ return (res.coins|0)+(res.stake && res.stake.delta|0); }
 function rwFrom(res){ return Math.max(0, res.balance-rwTotal(res)); }
 function rwRows(res){
   var h='', p=res.parts||{};
@@ -6861,6 +6901,11 @@ function rwRows(res){
   var lab={win:'rwWin', draw:'rwDraw', loss:'rwLoss', left:'rwLeft'}[p.res];
   if(lab) h+=row(T(lab), curHtml('coin', (p.base>0?'+':'')+(p.base|0)));
   if(p.bonus>0) h+=row(T('rwBonus'), curHtml('coin', '+'+p.bonus));
+  var st=res.stake;
+  if(st && st.n>0){
+    var sk={win:'rwStWin', loss:'rwStLoss', back:'rwStBack'}[st.out]||'rwStWait';
+    h+=row(T(sk), curHtml('coin', st.out==='win'||st.out==='back' ? '+'+st.delta : st.out==='loss' ? '−'+st.n : st.n));
+  }
   if(res.verdict==='capped') h+='<div class="rw-note">'+mEsc(T('rwCap'))+'</div>';
   return h;
 }

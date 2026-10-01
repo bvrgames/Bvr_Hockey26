@@ -53,6 +53,7 @@ export class MatchRoom {
     this.cfg = null;
     this.ended = false;
     this.onEnd = null;    // (result) once per match when the clock runs out: { id, len, score, left }; the stats API trusts it
+    this.onStop = null;   // (id) the match stopped without a result: both players gone for GONE_MS
     this.stat = { steps: 0, snaps: 0, maxStepMs: 0 };
     this.sim = BVRSim.create({
       emit: (n, e) => {
@@ -158,7 +159,11 @@ export class MatchRoom {
         if (!P.away && (!P.conn || now - P.lastIn > AWAY_MS)) this.setAway(t, true);
         if (P.away && !P.left && now - P.awayAt > GONE_MS) P.left = true;
       }
-      if (this.port[0].left && this.port[1].left) { this.running = false; return false; }   // nobody left to play for
+      if (this.port[0].left && this.port[1].left) {                 // nobody left to play for: no result (onStop)
+        this.running = false;
+        if (this.onStop) this.onStop(this.cfg && this.cfg.id);
+        return false;
+      }
     }
     for (let i = 0; i < n; i++) {
       const t0 = Date.now();
