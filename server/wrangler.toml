@@ -2,6 +2,12 @@ name = "bvr-hockey-relay"
 main = "worker.js"
 compatibility_date = "2025-01-01"
 
+# the developer's page (admin-ui.js) is imported as text: the Worker hands it to ADMIN_IDS only (coins.js «admin»)
+[[rules]]
+type = "Text"
+globs = ["**/admin-ui.js"]
+fallthrough = false
+
 [[durable_objects.bindings]]
 name = "ROOMS"
 class_name = "Room"
@@ -10,7 +16,7 @@ class_name = "Room"
 tag = "v1"
 new_sqlite_classes = ["Room"]
 
-# coins and player stats (server/api.js); schema — migrations/, secret BOT_TOKEN — `wrangler secret put BOT_TOKEN`
+# coins and player stats (server/api.js); schema — migrations/, secrets BOT_TOKEN, TG_WEBHOOK_SECRET, ADMIN_IDS — `wrangler secret put …`
 [[d1_databases]]
 binding = "DB"
 database_name = "bvr-hockey"

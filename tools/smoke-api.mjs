@@ -259,6 +259,17 @@ function summary(o = {}) {
   calls.length = 0;
   await hook({ update_id: 5, message: { message_id: 3, from: B1, chat: { id: B1.id }, date: now, text: '/terms' } });
   ok(calls.some((c) => c.method === 'sendMessage' && /Telegram id/.test(c.params.text)), '/terms answers with the terms (Telegram id, name, stats)');
+
+  // ---- the developer's page: only ADMIN_IDS by the verified Telegram id
+  const adeps = { ...sdeps, adminIds: '42, 9101', adminUi: 'function BVRDev(K){ return {}; }' };
+  const ago = async (path, idata) => (await handleCoins(req('GET', path, idata), adeps)).status;
+  ok((await ago('/v1/admin/me', null)) === 403, 'admin core: unsigned → 403');
+  ok((await ago('/v1/admin/me', initData(B2))) === 403, 'admin core: another player → 403');
+  ok((await ago('/v1/admin/me', initData(B1, { token: 'WRONG' }))) === 403, 'admin core: the admin id signed by another bot → 403');
+  ok((await ago('/v1/admin/me', initData(B2, { tamper: { user: JSON.stringify(B1) } }))) === 403, 'admin core: a player who put the admin id into initData → 403');
+  ok((await ago('/v1/admin/me', initData({ id: 9101, first_name: 'X', username: 'B1' }))) === 200, 'admin core: the admin id → 200');
+  ok((await handleCoins(req('GET', '/v1/admin/me', initData(B1)), { ...adeps, adminIds: '' })).status === 403, 'admin core: no ADMIN_IDS → 403 to all');
+  ok((await ago('/v1/admin/ui.js', initData(B1))) === 200 && (await ago('/v1/admin/ui.js', initData(B2))) === 403, 'admin core: the page text only to the admin');
 }
 
 const t0 = Date.now();
@@ -277,7 +288,9 @@ const botSrv = createServer((rq, rs) => { let b = ''; rq.on('data', (c) => { b +
   rs.writeHead(200, { 'content-type': 'application/json' }); rs.end(JSON.stringify({ ok: true, result }));
 }); });
 await new Promise((res) => botSrv.listen(BOT_PORT, '127.0.0.1', res));
-const VARS = ['--var', `BOT_TOKEN:${TOKEN}`, '--var', `TG_API:http://127.0.0.1:${BOT_PORT}`, '--var', `TG_WEBHOOK_SECRET:${HOOK_SECRET}`];
+const ADMIN = { id: 777000999, first_name: 'Dev', username: 'dev_admin', language_code: 'ru' };
+const VARS = ['--var', `BOT_TOKEN:${TOKEN}`, '--var', `TG_API:http://127.0.0.1:${BOT_PORT}`, '--var', `TG_WEBHOOK_SECRET:${HOOK_SECRET}`,
+  '--var', `ADMIN_IDS:123, ${ADMIN.id}`, '--var', 'ADMIN_CACHE:0'];
 try {
   execFileSync(join(ROOT, 'node_modules', '.bin', 'wrangler'), ['d1', 'migrations', 'apply', 'DB', '--local', '--persist-to', persist],
     { cwd: join(ROOT, 'server'), stdio: VERBOSE ? 'inherit' : 'pipe', env: { ...process.env, WRANGLER_SEND_METRICS: 'false', CI: '1' } });
@@ -425,6 +438,7 @@ try {
        sc && sc.params.commands.map((c) => c.command).join() === 'paysupport,terms', `setup: setWebhook + setMyCommands ${JSON.stringify([r.status, sw && sw.params, sc && sc.params])}`);
   }
 
+
   // a socket to a room that keeps every message; next() waits for one that matches
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const roomSock = (code, q) => new Promise((res, rej) => {
@@ -528,6 +542,64 @@ try {
     H.ws.close(); G.ws.close();
   }
 
+  // ---------- the developer's page: 403 on every /v1/admin/* to all but ADMIN_IDS; the admin gets the data
+  {
+    const get = async (path, idata, pf) => { const h = {}; if (idata) h['X-Telegram-Init-Data'] = idata; if (pf) h['X-Tg-Platform'] = pf;
+      const r = await fetch(API + path, { headers: h }); const t = await r.text(); let j = null; try { j = JSON.parse(t); } catch (e) {} return { status: r.status, j, t, ct: r.headers.get('content-type') || '' }; };
+    const S1 = { id: A.id + 20, first_name: 'Star', last_name: 'Buyer', language_code: 'en' };
+    const P = [`/v1/admin/me`, `/v1/admin/ui.js`, `/v1/admin/overview`, `/v1/admin/players?q=Star&sort=coins`, `/v1/admin/player?id=${S1.id}`, `/v1/admin/payments?status=paid`, `/v1/admin/nothing`];
+    const forged = initData(ADMIN, { token: 'ANOTHER_BOT' }), tampered = initData(A, { tamper: { user: JSON.stringify(ADMIN) } });
+    for (const path of P) {
+      const got = [(await get(path, null)).status, (await get(path, ia)).status, (await get(path, forged)).status, (await get(path, tampered)).status];
+      ok(got.every((x) => x === 403), `admin: ${path} → 403 unsigned / a player / signed by another bot / admin id put in (${got})`);
+      const body = (await get(path, ia)).t;
+      ok(!/Разработчик|BVRDev|overview|players/.test(body), `admin: a player's 403 on ${path} says nothing (${body.slice(0, 60)})`);
+    }
+    // who the player is: username, language, premium, platform, last seen — from initData and X-Tg-Platform
+    const T1 = { id: A.id + 30, first_name: 'Track', username: 'track_me', language_code: 'id', is_premium: true };
+    await get('/v1/profile', initData(T1), 'android');
+    await get('/v1/profile', initData({ id: A.id + 31, first_name: 'Ios' }), 'ios');
+    await get('/v1/profile', initData({ id: A.id + 32, first_name: 'Desk' }), 'tdesktop');
+    await get('/v1/profile', initData({ id: A.id + 33, first_name: 'Odd' }), 'Bad Value!');
+    let r = await get('/v1/admin/me', initData(ADMIN));
+    ok(r.status === 200 && r.j.id === ADMIN.id && r.j.label, `admin: me → 200 ${r.t}`);
+    r = await get('/v1/admin/ui.js', initData(ADMIN));
+    ok(r.status === 200 && /javascript/.test(r.ct) && /function BVRDev\(K\)/.test(r.t), `admin: ui.js is the page's text (${r.status} ${r.ct} ${r.t.length} B)`);
+    r = await get('/v1/admin/overview', initData(ADMIN));
+    const o = r.j;
+    ok(r.status === 200 && o.players.total >= 10 && o.players.new1 === o.players.total && o.newByDay.length === 30 && o.newByDay[29] === o.players.total,
+      `admin: overview players ${JSON.stringify(o && o.players)}`);
+    ok(o.matches.day.ai >= 10 && o.matches.day.server >= 2 && o.matches.n30 >= 12 && o.matches.avgLen > 0 && o.matches.done > 0.5 && o.matches.byDay.ai[29] === o.matches.day.ai,
+      `admin: overview matches ${JSON.stringify(o.matches.day)} n30 ${o.matches.n30} avg ${o.matches.avgLen} done ${o.matches.done}`);
+    ok(o.coins.issued > 100 && o.coins.circ > 0 && o.stakes.n >= 1 && o.stars.buys === 2 && o.stars.sold === 50 + 120 && o.stars.xall === 50 + 100 + 50 && o.stars.refunds === 2 && o.stars.unmatched === 1,
+      `admin: overview coins / stakes / stars ${JSON.stringify([o.coins, o.stakes, o.stars])}`);
+    ok(o.platforms.android >= 1 && o.platforms.ios >= 1 && o.platforms.pc >= 1 && o.langs.some((l) => l[0] === 'id'), `admin: platforms and languages ${JSON.stringify([o.platforms, o.langs])}`);
+    r = await get('/v1/admin/players?q=track_me', initData(ADMIN));
+    const t1 = r.j && r.j.rows[0];
+    ok(r.status === 200 && r.j.total === 1 && t1.id === T1.id && t1.username === 'track_me' && t1.platform === 'android' && t1.lang === 'id' && t1.seen > 0, `admin: search by username, the stored player ${JSON.stringify(t1)}`);
+    ok((await get('/v1/admin/players?q=' + T1.id, initData(ADMIN))).j.rows[0].id === T1.id, 'admin: search by id');
+    ok((await get('/v1/admin/players?q=%25', initData(ADMIN))).j.total === 0, 'admin: % in the search is a plain character');
+    r = await get('/v1/admin/players?sort=bought', initData(ADMIN));
+    ok(r.j.rows[0].id === S1.id && r.j.rows[0].bought === 150 && r.j.total >= 10 && r.j.size === 50, `admin: sorted by Stars bought ${JSON.stringify(r.j.rows[0])}`);
+    r = await get('/v1/admin/players?sort=seen&page=1', initData(ADMIN));
+    ok(r.status === 200 && r.j.page === 1 && Array.isArray(r.j.rows), 'admin: a second page');
+    r = await get(`/v1/admin/player?id=${A.id + 31}`, initData(ADMIN));
+    ok(r.j.user && r.j.user.platform === 'ios', `admin: the platform header is stored ${JSON.stringify(r.j.user)}`);
+    ok((await get(`/v1/admin/player?id=${A.id + 33}`, initData(ADMIN))).j.user.platform === null, 'admin: a malformed platform is not stored');
+    ok((await get(`/v1/admin/player?id=${T1.id}`, initData(ADMIN))).j.user.premium === 1, 'admin: premium stored');
+    r = await get(`/v1/admin/player?id=${S1.id}`, initData(ADMIN));
+    const c = r.j;
+    ok(c.user.stars === 0 && c.user.bought === 150 && c.orders.length === 2 && c.orders.every((x) => x.status === 'refunded' && x.charge) &&
+       c.ledger.filter((l) => l.currency === 'stars').length === 4, `admin: the player's card: orders and ledger ${JSON.stringify([c.user, c.orders.map((x) => x.status), c.ledger.length])}`);
+    r = await get(`/v1/admin/player?id=${SH.id}`, initData(ADMIN));
+    ok(r.j.stakes.length >= 1 && r.j.matches.length >= 2 && r.j.matches.some((m) => m.net === 'server'), `admin: card with stakes and server matches ${JSON.stringify([r.j.stakes.length, r.j.matches.map((m) => m.net)])}`);
+    r = await get('/v1/admin/payments', initData(ADMIN));
+    ok(r.j.total === 3 && r.j.rows.some((x) => x.status === 'unmatched') && r.j.rows.filter((x) => x.status === 'refunded' && x.charge && x.name === 'Star Buyer').length === 2,
+      `admin: payments ${JSON.stringify(r.j.rows.map((x) => x.status + ':' + (x.charge || '')))}`);
+    ok((await get('/v1/admin/payments?status=refunded', initData(ADMIN))).j.total === 2, 'admin: payments filtered by status');
+    ok((await get('/v1/admin/player?id=abc', initData(ADMIN))).status === 422, 'admin: a bad id → 422');
+  }
+
   // the game itself: queue on start, profile, reward on the result screen
   {
     const E = { id: A.id + 4, first_name: 'Game' };
@@ -535,6 +607,7 @@ try {
     const tg = fakeTelegram().replace(/initData:'[^']*'/, 'initData:' + JSON.stringify(initData(E)));
     const srv = await startServer(port + 1);
     const g = await openGame('chromium', { tg });
+    const adminReqs = []; g.page.on('request', (q) => { if (/\/v1\/admin\//.test(q.url())) adminReqs.push(q.url().replace(API, '')); });
     try {
       await g.page.addInitScript((q) => { try { if (!sessionStorage.getItem('seeded')) { localStorage.setItem('bvr_pending_matches', JSON.stringify([q])); sessionStorage.setItem('seeded', '1'); } } catch (e) {} }, queued);
       await g.page.goto(`http://127.0.0.1:${port + 1}/index.html?nomusic&api=${encodeURIComponent(API)}`, { waitUntil: 'load', timeout: 120000 });
@@ -571,6 +644,10 @@ try {
       ok(rw.st === 'done' && flew === 0 && /0$/.test(rw.text), `game: 0 coins → no flying coins ${JSON.stringify(rw)} flew ${flew}`);
       await g.page.waitForFunction(() => __hk.coins().q === 0, null, { timeout: 10000 }).catch(() => {});
       ok((await g.page.evaluate(() => __hk.coins())).coins === 45, `game: the queued match went out with the next one ${JSON.stringify(await g.page.evaluate(() => __hk.coins().coins))}`);
+      // a regular player: no item, no texts, no requests to the developer's page beyond the one /v1/admin/me (403)
+      await g.page.waitForTimeout(1500);
+      const ex = await g.page.evaluate(() => ({ ...__hk.ext(), html: document.getElementById('start').innerHTML }));
+      ok(!ex.ok && ex.item === 0 && !/Разработчик|BVRDev/.test(ex.html) && adminReqs.join() === '/v1/admin/me', `admin: a player has no item and asks only /me ${JSON.stringify([ex.ok, ex.item, adminReqs])}`);
       // ---- stars: «+» at the stars in the wallet → packs from the server → invoice → Telegram says 'paid' → the client
       // waits for the webhook's payment, then the stars fly into the wallet; 'cancelled' credits nothing
       await g.page.evaluate(() => { __hk.result(); __hk.menu('main'); });
@@ -601,9 +678,39 @@ try {
       await g.page.waitForTimeout(500);
       sb = await g.page.evaluate(() => __hk.sb());
       ok(sb.st === 'cancel' && sb.text.length > 5 && (await g.page.evaluate(() => __hk.coins().stars)) === 50, `stars: 'cancelled' → a calm message, nothing credited ${JSON.stringify(sb)}`);
-      const errs = g.logs.filter(isError).filter((e) => !/ERR_FAILED/.test(e.text));   // the request aborted on purpose above
+      // the request aborted on purpose above; the 403 of /v1/admin/me (a regular player) is the expected answer
+      const errs = g.logs.filter(isError).filter((e) => !/ERR_FAILED/.test(e.text) && !/status of 403/.test(e.text));
       ok(!errs.length, `game: page errors ${JSON.stringify(errs).slice(0, 400)}`);
     } finally { await g.browser.close(); srv.close(); }
+    // the admin: the item comes with the server's label, the page is loaded from the Worker and shows the overview
+    {
+      const srv3 = await startServer(port + 1);
+      const tga = fakeTelegram().replace(/initData:'[^']*'/, 'initData:' + JSON.stringify(initData(ADMIN)));
+      const ga = await openGame('chromium', { w: 844, h: 390, tg: tga });
+      try {
+        await ga.page.addInitScript(() => { try { localStorage.setItem('bvr_onboard', '1'); } catch (e) {} });
+        await ga.page.goto(`http://127.0.0.1:${port + 1}/index.html?nomusic&api=${encodeURIComponent(API)}`, { waitUntil: 'load', timeout: 120000 });
+        await ga.page.waitForFunction(() => window.__hk && __hk.ext && __hk.ext().item === 1, null, { timeout: 20000 }).catch(() => {});
+        ok((await ga.page.evaluate(() => __hk.ext().item)) === 1, 'admin: the item is in the admin\'s main menu');
+        await ga.page.click('#start section.cur [data-act="ext"]');
+        await ga.page.waitForFunction(() => /Игроки/.test((document.querySelector('#start section[data-s="ext"]') || {}).textContent || '') && /всего/.test(document.querySelector('#start section[data-s="ext"]').textContent), null, { timeout: 15000 }).catch(() => {});
+        const tx = await ga.page.evaluate(() => ({ e: __hk.ext(), top: __hk.menuState().stack.join('>'), t: document.querySelector('#start section[data-s="ext"]').textContent.slice(0, 200) }));
+        ok(tx.e.mod && tx.top === 'main>ext' && /Обзор/.test(tx.t) && /всего/.test(tx.t), `admin: the page opened on the overview ${JSON.stringify(tx)}`);
+        await ga.page.click('#start section.cur .mtab[data-tab="1"]');
+        await ga.page.waitForFunction(() => document.querySelectorAll('#start section.cur .xd-r.mf').length > 0, null, { timeout: 10000 }).catch(() => {});
+        await ga.page.fill('#xq', 'track_me');
+        await ga.page.waitForFunction(() => document.querySelectorAll('#start section.cur .xd-r.mf').length === 1, null, { timeout: 10000 }).catch(() => {});
+        await ga.page.click('#start section.cur .xd-r.mf');
+        await ga.page.waitForFunction(() => /последние матчи/i.test(document.querySelector('#start section.cur').textContent), null, { timeout: 10000 }).catch(() => {});
+        const card = await ga.page.evaluate(() => document.querySelector('#start section.cur').textContent);
+        ok(/track_me/.test(card) && /Android/.test(card) && /последние матчи/i.test(card), `admin: search → the player's card ${card.slice(0, 160)}`);
+        await ga.page.evaluate(() => __tgBackClick());
+        await ga.page.waitForTimeout(300);
+        ok((await ga.page.evaluate(() => __hk.menuState().stack.join('>'))) === 'main>ext' && (await ga.page.evaluate(() => !!document.getElementById('xq'))), 'admin: «Назад» from the card returns to the list');
+        const ae = ga.logs.filter(isError);
+        ok(!ae.length, `admin: page errors ${JSON.stringify(ae).slice(0, 300)}`);
+      } finally { await ga.browser.close(); srv3.close(); }
+    }
     // outside Telegram (no initData, no openInvoice) there is no «+»
     const srv2 = await startServer(port + 1), g2 = await openGame('chromium');
     try {

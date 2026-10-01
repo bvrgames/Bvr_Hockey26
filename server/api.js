@@ -16,13 +16,17 @@
  * elsewhere (a VPS in Moscow: Node.js + SQLite or Postgres) means a new glue file and, for Postgres, a new store —
  * docs/EVENTS.md «Перенос API».
  *
- * Here: the secrets BOT_TOKEN and TG_WEBHOOK_SECRET (TG_API — another Bot API address, tests only), the D1 binding DB, numeric Worker vars overriding the limits (coins.js DEF), and where a
+ *   GET  /v1/admin/*  the developer's page, read only: 403 to all but the secret ADMIN_IDS (Telegram ids, comma separated)
+ *
+ * Here: the secrets BOT_TOKEN, TG_WEBHOOK_SECRET and ADMIN_IDS (TG_API — another Bot API address, tests only), the D1 binding DB, numeric Worker vars overriding the limits (coins.js DEF), and where a
  * server-mode match's own result comes from — the room's Durable Object (worker.js, saveResult): the client's score has
  * to match it (otherwise 422 'mismatch'); such matches pay from their own daily cap (ledger reason 'match_duo'). Matches
  * the server did not count (host mode, an unknown room) are paid like a match against the AI, from the AI cap.
  */
 import { handleCoins, handleBot, handleBotSetup, botApiFrom, confFrom } from './coins.js';
 import { d1Store } from './coins-d1.js';
+// the developer's page — served as text to ADMIN_IDS only (wrangler.toml [[rules]] type Text); never in the game's files
+import ADMIN_UI from './admin-ui.js';
 
 export { verifyInitData, checkSummary, matchReward } from './coins.js';
 
@@ -48,5 +52,7 @@ export async function handleApi(request, env) {
     store,
     roomResult: roomResultFrom(env),
     bot,
+    adminIds: env.ADMIN_IDS,
+    adminUi: ADMIN_UI,
   });
 }

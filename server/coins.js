@@ -12,6 +12,7 @@
  *     store,                  // the database, see STORE below (server/coins-d1.js — D1 / SQLite)
  *     roomResult(room, id),   // → { len, score } of a server-mode match the room counted itself, or null
  *     bot(method, params),    // the Bot API (botApiFrom below) — star invoices
+ *     adminIds,               // ADMIN_IDS: Telegram ids allowed on /v1/admin/* (comma separated), adminUi — its page (text)
  *     now,                    // optional, unix seconds (tests)
  *   }) → Response, or null when the path is not /v1/*
  *   handleBot(request, { secret, store, bot }) → the bot's webhook (/tg/webhook): star payments, /paysupport, /terms
@@ -46,6 +47,10 @@
  *                                              never below zero (short — what was already spent), ledger 'stars_refund'
  *   starUnmatched({ uid, name, charge, amount, payload, now })   a payment no order matches, kept as 'unmatched'
  *   starsBalance(uid) → stars
+ *   touch(user, platform, now)                 who the player is on every signed request (creates the row if new)
+ *   the developer's page (read only): adminOverview(t) → raw counts (coins.js overviewShape), adminPlayers({ q, id, sort,
+ *   page, size }) → { total, rows }, adminPlayer(id) → { user, matches, stakes, ledger, orders }, adminPayments({ status,
+ *   page, size }) → { total, rows }
  *
  * The client never adds coins: it says how the match went, the reward is decided here; the player is taken only from
  * the signed initData (user.id), the body says nothing about who sent it.
@@ -61,6 +66,7 @@ export const DEF = {
   AUTH_MAX_AGE: 86400,     // initData older than this (s) is refused
   STAKE_GRACE: 900,        // a stake still locked 2 × len + this (s) after the start, with no result from the room → refund
   INVOICES_HOUR: 20,       // star invoices one player may open per hour
+  ADMIN_CACHE: 60,         // the developer's overview is counted again at most this often (s)
 };
 const REWARD = { win: 10, draw: 5, loss: 3, left: 0 };
 const BONUS_MAX = 5;
@@ -73,7 +79,7 @@ export function confFrom(vars) {
 export const CORS = {
   'access-control-allow-origin': '*',
   'access-control-allow-methods': 'GET, POST, OPTIONS',
-  'access-control-allow-headers': 'Content-Type, X-Telegram-Init-Data',
+  'access-control-allow-headers': 'Content-Type, X-Telegram-Init-Data, X-Tg-Platform',
   'access-control-max-age': '86400',
 };
 function json(status, body) {
@@ -471,6 +477,79 @@ export async function handleBotSetup(request, d) {
   return json(200, { installed: target, before: pub, info: await d.bot('getWebhookInfo', {}), commands: await d.bot('getMyCommands', {}) });
 }
 
+// ---------- the developer's page: read only, ADMIN_IDS only (docs/EVENTS.md «Страница разработчика»)
+// Who is a developer: the numeric Telegram user.id from the verified initData, listed in ADMIN_IDS (a Worker secret /
+// an environment variable, comma separated) — never the username, never anything the client says. Everyone else —
+// unsigned, a forged or a changed initData, any other id — gets 403 on every /v1/admin/* and nothing else.
+// Heavy counts (the overview) are made at most once per ADMIN_CACHE seconds per process; lists are paged (50).
+export function adminIds(v) {
+  return new Set(String(v || '').split(',').map((s) => +s.trim()).filter((n) => Number.isSafeInteger(n) && n > 0));
+}
+const PAGE = 50;
+let OVERVIEW = null;     // { at, data } — the last overview of this process
+const PLATFORMS = { ios: 'ios', android: 'android', android_x: 'android', macos: 'pc', tdesktop: 'pc', unigram: 'pc', weba: 'web', webk: 'web', web: 'web' };
+export const PLATFORM_RE = /^[a-z_]{1,16}$/;
+
+// the store's raw counts → what the page shows: 30 UTC days ending today, match kinds ai / server / host
+export function overviewShape(r, now) {
+  const today = Math.floor(now / 86400), d0 = today - 29, z = () => new Array(30).fill(0);
+  const newByDay = z(), byDay = { ai: z(), server: z(), host: z() };
+  for (const x of r.newByDay) if (x.d >= d0 && x.d <= today) newByDay[x.d - d0] = x.n;
+  for (const x of r.matchesByDay) {
+    if (x.d < d0 || x.d > today) continue;
+    const k = x.mode === 'ai' ? 'ai' : x.net === 'server' ? 'server' : 'host';
+    byDay[k][x.d - d0] += x.n;
+  }
+  const platforms = { ios: 0, android: 0, pc: 0, web: 0, other: 0 };
+  for (const x of r.platforms) platforms[PLATFORMS[x.k] || 'other'] += x.n;
+  const u = r.users, s = r.stars, k = r.stakes, n0 = (v) => v || 0;
+  return {
+    at: now, d0,
+    players: { total: n0(u.total), new1: n0(u.new1), new7: n0(u.new7), new30: n0(u.new30), act1: n0(u.act1), act7: n0(u.act7), act30: n0(u.act30) },
+    newByDay,
+    matches: { day: { ai: byDay.ai[29], server: byDay.server[29], host: byDay.host[29] }, byDay,
+               n30: n0(r.matchStats.n), avgLen: Math.round(n0(r.matchStats.avg_len)), done: r.matchStats.cnt ? n0(r.matchStats.done) / r.matchStats.cnt : 0 },
+    coins: { issued: n0(r.coins.issued), spent: n0(r.coins.spent), circ: n0(r.coins.circ), staked: n0(k.lockedPot) },
+    stakes: { n: n0(k.n), pot: n0(k.pot), refunds: n0(k.refunds), refundPot: n0(k.refundPot) },
+    stars: { buys: n0(s.buys), sold: n0(s.sold), x1: n0(s.x1), x30: n0(s.x30), xall: n0(s.xall), refunds: n0(s.refunds), refundX: n0(s.refundX), unmatched: n0(s.unmatched) },
+    platforms, langs: r.langs.map((x) => [x.k || '', x.n]),
+  };
+}
+async function adminRoute(route, request, d, user, now) {
+  const q = new URL(request.url).searchParams, page = Math.max(0, Math.min(10000, parseInt(q.get('page'), 10) || 0));
+  switch (route) {
+    case 'GET /v1/admin/me': return json(200, { id: user.id, name: user.name, label: 'Разработчик' });
+    case 'GET /v1/admin/ui.js':
+      if (!d.adminUi) return json(404, { reason: 'ui' });
+      return new Response(d.adminUi, { status: 200, headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'private, no-store', ...CORS } });
+    case 'GET /v1/admin/overview': {
+      if (!OVERVIEW || now - OVERVIEW.at >= d.conf('ADMIN_CACHE')) {
+        const t1 = now - (now % 86400);
+        const raw = await d.store.adminOverview({ now, today: t1, d7: t1 - 6 * 86400, d30: t1 - 29 * 86400, a1: now - 86400, a7: now - 7 * 86400, a30: now - 30 * 86400 });
+        OVERVIEW = { at: now, data: overviewShape(raw, now) };
+      }
+      return json(200, OVERVIEW.data);
+    }
+    case 'GET /v1/admin/players': {
+      let s = (q.get('q') || '').trim().slice(0, 64); if (s[0] === '@') s = s.slice(1);
+      const sort = ['seen', 'matches', 'coins', 'stars', 'bought', 'new'].includes(q.get('sort')) ? q.get('sort') : 'seen';
+      const r = await d.store.adminPlayers({ q: s, id: /^\d{1,16}$/.test(s) ? +s : null, sort, page, size: PAGE });
+      return json(200, { total: r.total, page, size: PAGE, rows: r.rows });
+    }
+    case 'GET /v1/admin/player': {
+      const id = +q.get('id');
+      if (!Number.isSafeInteger(id) || id <= 0) return json(422, { reason: 'id' });
+      return json(200, await d.store.adminPlayer(id));
+    }
+    case 'GET /v1/admin/payments': {
+      const st = ['paid', 'pending', 'refunded', 'failed', 'unmatched'].includes(q.get('status')) ? q.get('status') : null;
+      const r = await d.store.adminPayments({ status: st, page, size: PAGE });
+      return json(200, { total: r.total, page, size: PAGE, rows: r.rows });
+    }
+  }
+  return json(404, { reason: 'route' });
+}
+
 async function postMatch(request, d, user, now) {
   const { store, conf } = d;
   let s = null;
@@ -536,6 +615,15 @@ export async function handleCoins(request, d) {
   if (!path.startsWith('/v1/')) return null;
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
   const route = request.method + ' ' + path;
+  // the developer's page: 403 to everyone but ADMIN_IDS — unsigned, forged and other ids alike, before anything else
+  if (path.startsWith('/v1/admin/')) {
+    const now = d.now || Math.floor(Date.now() / 1000), conf = d.conf || confFrom(null);
+    const user = d.botToken ? await verifyInitData(request.headers.get('X-Telegram-Init-Data'), d.botToken, now, conf('AUTH_MAX_AGE')) : null;
+    if (!user || !adminIds(d.adminIds).has(user.id)) return json(403, { reason: 'forbidden' });
+    if (!d.store) return json(503, { reason: 'not configured' });
+    try { return await adminRoute(route, request, { ...d, conf }, user, now); }
+    catch (e) { console.error('admin', route, e && e.stack || e); return json(500, { reason: 'server' }); }
+  }
   const R = {
     'POST /v1/match': (dd, user, now) => postMatch(request, dd, user, now),
     'GET /v1/profile': (dd, user, now) => getProfile(dd, user, now),
@@ -550,6 +638,9 @@ export async function handleCoins(request, d) {
   const user = await verifyInitData(request.headers.get('X-Telegram-Init-Data'), d.botToken, now, conf('AUTH_MAX_AGE'));
   if (!user) return json(401, { reason: 'auth' });
   try {
+    // who the player is, for the developer's page: name, username, language, premium, the Telegram platform, last seen
+    const pf = request.headers.get('X-Tg-Platform');
+    if (d.store.touch) await d.store.touch(user, pf && PLATFORM_RE.test(pf) ? pf : null, now);
     return await R(dd, user, now);
   } catch (e) {
     console.error('api', route, e && e.stack || e);

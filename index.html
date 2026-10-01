@@ -5598,7 +5598,8 @@ var MSCR={
     return mHead('', '<div class="mlang mf mlast" data-adj="lang" data-ord="2">'+lg+'</div>', true)+
       '<div class="mleft"><div class="mlist">'+mItem('quick',T('mQuick'),qd)+mItem('mode',T('mMode'),T('mModeD'))+
       mItem('train',T('mTrain'),T('mTrainD')+' · '+T('tMedalsP')+' '+tMedals()+' / 30')+
-      mItem('shop',T('mShop'),T('mShopD'))+mItem('rules',T('mRules'),T('mRulesD'))+mItem('settings',T('mSettings'),T('mSettingsD'))+'</div></div>'+
+      mItem('shop',T('mShop'),T('mShopD'))+mItem('rules',T('mRules'),T('mRulesD'))+mItem('settings',T('mSettings'),T('mSettingsD'))+
+      (EXT && EXT.ok ? mItem('ext',EXT.label) : '')+'</div></div>'+
       '<div class="mright"><div class="mprof mglass mf mlast" data-act="profile" data-ord="1">'+mAvatar()+'<span class="pn"><b>'+mEsc(mUserName())+'</b>'+
       '<i>'+mEsc(T('mProfile'))+' · '+PROF.w+'–'+PROF.d+'–'+PROF.l+'</i></span>'+
       '<span class="pmini">'+[['pMatches',PROF.m],['pWins',PROF.w],['pGoals',PROF.g],['pBest',PROF.best]].map(function(x){ return '<span><b>'+x[1]+'</b>'+mEsc(T(x[0]))+'</span>'; }).join('')+'</span></div>'+
@@ -5660,6 +5661,7 @@ var MSCR={
       '<div class="mnote dim" style="margin-top:8px">'+mEsc(PROF.m ? T('pStatsNote') : T('pNone'))+'</div></div>'+
       '<div class="mright"><div class="mstats">'+g+'</div></div>';
   },
+  ext:function(){ return EXT && EXT.mod ? EXT.mod.render() : mHead(''); },   /* (EXT объявлен ниже: при сборке меню его ещё нет) */
   stars:function(){
     var h='';
     (PACKS||[]).forEach(function(p){
@@ -5938,6 +5940,7 @@ MENU.adjEl=function(el, d, ev){
   if(ADJ[a]){ ADJ[a](el, d, ev); mFeedback(true); }
 };
 MENU.tabs=function(d){
+  if(MENU.layer()==='menu' && MENU.top()==='ext' && EXT.mod){ EXT.mod.tabs(d); return; }
   if(MENU.layer()==='menu' && MENU.top()==='rules' && !MENU.ctrlOnly){ MENU.rulesTab=(MENU.rulesTab+d+2)%2; MENU.show(); }
 };
 MENU.back=function(){
@@ -5945,6 +5948,7 @@ MENU.back=function(){
   if(L==='menu' && MENU.top()==='welcome'){ onboardDone(); }
   if(L==='pause'){ setPaused(false); return; }
   if(L!=='menu' || MENU.stack.length<2) return;
+  if(MENU.top()==='ext' && EXT.mod && EXT.mod.back()) return;     /* карточка игрока → список */
   var leaving=MENU.stack.pop();
   if(MENU.top()==='@pause'){ closePauseSub(); return; }
   if(leaving==='friend'){ netLeave(); ONLINE=false; }
@@ -5980,7 +5984,7 @@ MENU.paintHints=function(){
   function hint(pad, key, txt){ return '<span class="mh">'+(v==='pad'?pad:key)+mEsc(T(txt))+'</span>'; }
   if(v!=='touch'){
     var adjS=(top==='prep'||top==='settings'||top==='rules');
-    if(top==='rules' && !MENU.ctrlOnly) h+=hint(mg('LB')+mg('RB'), mk('Q')+mk('E'), 'mTabs');
+    if((top==='rules' && !MENU.ctrlOnly) || top==='ext') h+=hint(mg('LB')+mg('RB'), mk('Q')+mk('E'), 'mTabs');
     if(adjS) h+=hint(mg('◀▶'), mk('← →'), 'mChange');
     h+=hint(mg('A'), mk('Enter'), 'mSelect');
     if(top!=='main') h+=hint(mg('B'), mk('Esc'), 'mBack');
@@ -6095,6 +6099,8 @@ var ACT={
   shop:function(){ MENU.go('shop'); },
   topup:function(){ if(starsBuyOK()){ if(!sbBusy()) SB.st=null; MENU.go('stars'); if(!PACKS) packsFetch(); } },
   sbuy:function(el){ sbBuy(el.getAttribute('data-pack')); },
+  ext:function(){ extOpen(); },
+  x:function(el, ev){ if(EXT.mod) EXT.mod.act(el.getAttribute('data-x'), el, ev); },
   resume:function(){ setPaused(false); },
   pctrl:function(){ openPauseSub('rules'); },
   pset:function(){ openPauseSub('settings'); },
@@ -6128,6 +6134,7 @@ var ADJ={
   sfx:function(el, d, ev){ VOL.sfx=barVal(ev, el, VOL.sfx, d); prefSet('sfx', String(VOL.sfx)); applySfx(); MENU.build(MENU.top()); MENU.refocus(); },
   vib:function(){ VIBRO=!VIBRO; prefSet('vibro', VIBRO?'1':'0'); if(VIBRO) buzz(12,'soft'); MENU.build(MENU.top()); MENU.refocus(); },
   tab:function(el, d, ev){ var t=mPick(ev,'data-tab'); MENU.rulesTab = t!==null ? +t : (MENU.rulesTab+d+2)%2; MENU.show(); },
+  x:function(el, d, ev){ if(EXT.mod) EXT.mod.adj(el.getAttribute('data-x'), el, d, ev); },
   dev:function(el, d, ev){ var t=mPick(ev,'data-dev'); MENU.dev = t!==null ? +t : (curDev()+d+3)%3; MENU.build('rules'); MENU.refocus(); }
 };
 
@@ -6564,7 +6571,7 @@ function menu3dStop(){
     '<input id="rcode" maxlength="6" autocapitalize="characters" autocorrect="off" spellcheck="false" enterkeyhint="go">'+
     '<div id="netst"></div><div id="netlink"></div>';
   MENU.hold={srv:document.getElementById('srv'), rcode:document.getElementById('rcode'), netst:document.getElementById('netst'), netlink:document.getElementById('netlink')};
-  for(var id in MSCR){ var s=document.createElement('section'); s.className='mscr'+(id==='prep'||id==='shop'||id==='stars'?' wide':''); s.setAttribute('data-s',id); box.appendChild(s); MENU.sec[id]=s; }
+  for(var id in MSCR){ var s=document.createElement('section'); s.className='mscr'+(id==='prep'||id==='shop'||id==='stars'||id==='ext'?' wide':''); s.setAttribute('data-s',id); box.appendChild(s); MENU.sec[id]=s; }
   ['start','pausescr','overscr'].forEach(function(i){ var el=document.getElementById(i); el.addEventListener('click', mClick); el.addEventListener('pointerdown', mPointer); });
   if(tgBackOK()){ try{ TG.BackButton.onClick(tgBack); }catch(e){} }
   selFromLast();
@@ -6854,7 +6861,7 @@ function sumFlush(){
   var q=sumQueue();
   q.forEach(function(sum){
     fetch(STATS_API+'/v1/match', {method:'POST', keepalive:true,
-      headers:{'Content-Type':'application/json', 'X-Telegram-Init-Data':TG.initData},
+      headers:apiHeaders(true),
       body:JSON.stringify(sum)})
     .then(function(r){
       /* 2xx — принят, 4xx — отвергнут навсегда (подпись, неправдоподобный итог, дубль): в обоих случаях убираем;
@@ -6909,7 +6916,14 @@ var SB={st:null, pack:null, order:null, got:0}, SB_WAIT_MS=30000;
 function starsBuyOK(){
   try{ return !!(STATS_API && inTelegram() && TG.openInvoice && (!TG.isVersionAtLeast || TG.isVersionAtLeast('6.1'))); }catch(e){ return false; }
 }
-function apiHeaders(json){ var h={'X-Telegram-Init-Data':TG.initData}; if(json) h['Content-Type']='application/json'; return h; }
+/* заголовки запросов к API: подпись Telegram и платформа (Telegram.WebApp.platform — для статистики, docs/EVENTS.md) */
+function apiHeaders(json){
+  var h={'X-Telegram-Init-Data':TG.initData}, pf='';
+  try{ pf=String(TG.platform||''); }catch(e){}
+  if(/^[a-z_]{1,16}$/.test(pf)) h['X-Tg-Platform']=pf;
+  if(json) h['Content-Type']='application/json';
+  return h;
+}
 function packsSet(p){
   if(!Array.isArray(p) || !p.length) return;
   var was=JSON.stringify(PACKS); PACKS=p;
@@ -7129,7 +7143,7 @@ function rwPlay(){
 /* профиль с сервера: баланс и статистика (копия, где больше матчей, — как с CloudStorage) */
 function profileFetch(){
   if(!STATS_API || !TG || !TG.initData) return;
-  fetch(STATS_API+'/v1/profile', {headers:{'X-Telegram-Init-Data':TG.initData}})
+  fetch(STATS_API+'/v1/profile', {headers:apiHeaders()})
   .then(function(r){ return r.ok ? r.json() : null; })
   .then(function(j){
     if(!j) return;
@@ -7139,7 +7153,38 @@ function profileFetch(){
   .catch(function(){});
 }
 /* при запуске: сначала неотправленные итоги, потом профиль (чтобы баланс был уже с ними) */
-setTimeout(function(){ sumFlush(); setTimeout(profileFetch, 1500); }, 0);
+setTimeout(function(){ sumFlush(); setTimeout(function(){ profileFetch(); extCheck(); }, 1500); }, 0);
+
+/* ---------- закрытый экран (страница разработчика) ----------
+   В игре нет ни его кода, ни текстов: сервер отвечает на /v1/admin/me 200 только тем, кто в ADMIN_IDS (по Telegram id
+   из проверенного initData), остальным — 403, и на этом всё. При 200 появляется пункт меню с подписью от сервера, а сам
+   экран сервер отдаёт текстом (/v1/admin/ui.js) — он выполняется с узким набором функций меню (K). Только просмотр. */
+var EXT={ok:false, label:'', mod:null, loading:false};
+function extCheck(){
+  if(!STATS_API || !inTelegram()) return;
+  fetch(STATS_API+'/v1/admin/me', {headers:apiHeaders()})
+  .then(function(r){ return r.status===200 ? r.json() : null; })
+  .then(function(j){ if(!j || !j.label) return; EXT.ok=true; EXT.label=String(j.label); if(MENU.ready){ MENU.build('main'); if(MENU.top()==='main') MENU.refocus(); } })
+  .catch(function(){});
+}
+function extApi(path){
+  return fetch(STATS_API+path, {headers:apiHeaders()}).then(function(r){ if(!r.ok) throw r.status; return r.json(); });
+}
+function extOpen(){
+  if(!EXT.ok) return;
+  if(EXT.mod){ MENU.go('ext'); return; }
+  if(EXT.loading) return;
+  EXT.loading=true;
+  fetch(STATS_API+'/v1/admin/ui.js', {headers:apiHeaders()})
+  .then(function(r){ if(!r.ok) throw r.status; return r.text(); })
+  .then(function(txt){
+    var K={api:extApi, esc:mEsc, head:mHead, sec:MENU.sec.ext,
+           rebuild:function(){ if(MENU.top()==='ext'){ MENU.build('ext'); MENU.refocus(); } }, refocus:function(){ MENU.refocus(); }};
+    EXT.mod=new Function('K', txt+'\nreturn BVRDev(K);')(K);
+    EXT.loading=false; MENU.go('ext');
+  })
+  .catch(function(e){ EXT.loading=false; console.warn('ext', e); });
+}
 
 /* ============================================================
    СОБЫТИЯ ПО СЕТИ: хост кладёт события в снимки, гость их проигрывает.
@@ -7295,6 +7340,8 @@ window.__hk={hs:function(){return HS;},net:function(){return NET;},setCam:functi
   /* монеты и профиль: баланс, статистика, длина очереди неотправленных итогов (tools/smoke-api.mjs) */
   coins:function(){return {coins:COINS, stars:STARS, prof:PROF, q:sumQueue().length};},
   /* пополнение звёзд (tools/smoke-api.mjs, stars-shots.mjs): состояние покупки, пакеты, видна ли кнопка */
+  /* закрытый экран: есть ли пункт меню и загружен ли модуль (tools/smoke-api.mjs, dev-shots.mjs) */
+  ext:function(){ return {ok:EXT.ok, mod:!!EXT.mod, item:document.querySelectorAll('#start [data-act="ext"]').length}; },
   sb:function(){ return {st:SB.st, order:SB.order, got:SB.got, packs:PACKS, ok:starsBuyOK(), btn:document.querySelectorAll('#start .mtopup').length,
     fly:document.querySelectorAll('.rw-fx').length, text:(document.querySelector('#start [data-paint="sbSt"]')||{}).textContent||''}; },
   /* экран итога для теста начисления (tools/smoke-api.mjs, wallet-shots.mjs): матч id «отправлен», ответа ещё нет */

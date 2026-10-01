@@ -145,6 +145,85 @@ export function d1Store(db) {
                     VALUES (?, ?, '?', 0, ?, 'unmatched', ?, ?, ?, ?)`).bind('u_' + p.charge.slice(0, 60), p.uid, p.amount, p.charge, p.now, p.now, 'payload ' + p.payload),
       ]);
     },
+    // ---- players: who the player is, refreshed on every signed request (coins.js touch). A row is rewritten only when
+    // something changed or last_seen is 5 minutes old — no D1 write per request.
+    async touch(u, platform, now) {
+      await db.prepare(`INSERT INTO users (user_id, name, username, language_code, is_premium, platform, created_at, updated_at, last_seen)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(user_id) DO UPDATE SET name = excluded.name, username = excluded.username, language_code = excluded.language_code,
+                          is_premium = excluded.is_premium, platform = COALESCE(excluded.platform, users.platform), last_seen = excluded.last_seen
+                        WHERE users.last_seen IS NULL OR users.last_seen < excluded.last_seen - 300 OR users.name IS NOT excluded.name
+                          OR users.username IS NOT excluded.username OR users.language_code IS NOT excluded.language_code
+                          OR users.is_premium IS NOT excluded.is_premium OR (excluded.platform IS NOT NULL AND users.platform IS NOT excluded.platform)`)
+        .bind(u.id, u.name, u.username, u.lang, u.premium, platform, now, now, now).run();
+    },
+    // ---- the developer's page (coins.js «admin»): read only; one D1 batch per page
+    async adminOverview(t) {
+      const seen = 'COALESCE(last_seen, updated_at)';
+      const r = await db.batch([
+        db.prepare(`SELECT COUNT(*) AS total, SUM(created_at >= ?) AS new1, SUM(created_at >= ?) AS new7, SUM(created_at >= ?) AS new30,
+                    SUM(${seen} >= ?) AS act1, SUM(${seen} >= ?) AS act7, SUM(${seen} >= ?) AS act30, SUM(coins) AS circ FROM users`)
+          .bind(t.today, t.d7, t.d30, t.a1, t.a7, t.a30),
+        db.prepare('SELECT created_at / 86400 AS d, COUNT(*) AS n FROM users WHERE created_at >= ? GROUP BY d').bind(t.d30),
+        db.prepare(`SELECT created_at / 86400 AS d, mode, COALESCE(json_extract(summary, '$.net'), '') AS net, COUNT(DISTINCT match_id) AS n
+                    FROM matches WHERE created_at >= ? GROUP BY d, mode, net`).bind(t.d30),
+        db.prepare(`SELECT COUNT(DISTINCT match_id) AS n, COUNT(*) AS cnt, AVG(len) AS avg_len, SUM(result != 'left') AS done FROM matches WHERE created_at >= ?`).bind(t.d30),
+        db.prepare(`SELECT SUM(CASE WHEN delta > 0 AND reason IN ('match_ai', 'match_duo', 'admin', 'reward') THEN delta ELSE 0 END) AS issued,
+                    SUM(CASE WHEN reason = 'purchase' THEN -delta ELSE 0 END) AS spent FROM ledger WHERE currency = 'coins'`),
+        db.prepare(`SELECT COUNT(*) AS n, SUM(amount) * 2 AS pot, SUM(outcome = 'refund') AS refunds, SUM(CASE WHEN outcome = 'refund' THEN amount * 2 ELSE 0 END) AS refundPot,
+                    SUM(CASE WHEN status = 'locked' THEN amount * 2 ELSE 0 END) AS lockedPot FROM stakes`),
+        db.prepare(`SELECT SUM(status IN ('paid', 'refunded')) AS buys, SUM(CASE WHEN status IN ('paid', 'refunded') THEN stars ELSE 0 END) AS sold,
+                    SUM(CASE WHEN status IN ('paid', 'refunded', 'unmatched') AND paid_at >= ? THEN price ELSE 0 END) AS x1,
+                    SUM(CASE WHEN status IN ('paid', 'refunded', 'unmatched') AND paid_at >= ? THEN price ELSE 0 END) AS x30,
+                    SUM(CASE WHEN status IN ('paid', 'refunded', 'unmatched') THEN price ELSE 0 END) AS xall,
+                    SUM(status = 'refunded') AS refunds, SUM(CASE WHEN status = 'refunded' THEN price ELSE 0 END) AS refundX,
+                    SUM(status = 'unmatched') AS unmatched FROM star_orders`).bind(t.today, t.d30),
+        db.prepare('SELECT COALESCE(platform, \'\') AS k, COUNT(*) AS n FROM users GROUP BY k'),
+        db.prepare('SELECT COALESCE(language_code, \'\') AS k, COUNT(*) AS n FROM users GROUP BY k ORDER BY n DESC LIMIT 8'),
+      ]);
+      const R = (i) => r[i].results, F = (i) => r[i].results[0] || {};
+      return { users: F(0), newByDay: R(1), matchesByDay: R(2), matchStats: F(3), coins: { ...F(4), circ: F(0).circ }, stakes: F(5), stars: F(6), platforms: R(7), langs: R(8) };
+    },
+    async adminPlayers({ q, id, sort, page, size }) {
+      const where = q ? "WHERE (u.user_id = ? OR u.name LIKE ? ESCAPE '\\' OR u.username LIKE ? ESCAPE '\\')" : '';
+      const like = '%' + q.replace(/[\\%_]/g, (c) => '\\' + c) + '%';
+      const args = q ? [id === null ? -1 : id, like, like] : [];
+      const order = { seen: 'seen DESC', matches: 'u.matches DESC', coins: 'u.coins DESC', stars: 'u.stars DESC', bought: 'bought DESC', new: 'u.created_at DESC' }[sort];
+      const r = await db.batch([
+        db.prepare(`SELECT COUNT(*) AS n FROM users u ${where}`).bind(...args),
+        db.prepare(`SELECT u.user_id AS id, u.name, u.username, u.created_at AS created, COALESCE(u.last_seen, u.updated_at) AS seen, u.matches, u.wins, u.draws, u.losses,
+                    u.coins, u.stars, u.platform, u.language_code AS lang,
+                    (SELECT COALESCE(SUM(price), 0) FROM star_orders o WHERE o.user_id = u.user_id AND o.status IN ('paid', 'refunded')) AS bought
+                    FROM users u ${where} ORDER BY ${order}, u.user_id DESC LIMIT ? OFFSET ?`).bind(...args, size, page * size),
+      ]);
+      return { total: r[0].results[0].n, rows: r[1].results };
+    },
+    async adminPlayer(id) {
+      const r = await db.batch([
+        db.prepare(`SELECT user_id AS id, name, username, language_code AS lang, is_premium AS premium, platform, created_at AS created,
+                    COALESCE(last_seen, updated_at) AS seen, matches, wins, draws, losses, goals, goals_against, coins, stars, online,
+                    (SELECT COALESCE(SUM(price), 0) FROM star_orders o WHERE o.user_id = users.user_id AND o.status IN ('paid', 'refunded')) AS bought
+                    FROM users WHERE user_id = ?`).bind(id),
+        db.prepare(`SELECT match_id AS id, mode, json_extract(summary, '$.net') AS net, role, len, score_my AS my, score_op AS op, result, reward, verdict, created_at AS at
+                    FROM matches WHERE user_id = ? ORDER BY created_at DESC LIMIT 20`).bind(id),
+        db.prepare(`SELECT s.match_id AS id, s.amount, s.status, s.outcome, s.created_at AS at, CASE WHEN s.host_uid = ? THEN 'host' ELSE 'guest' END AS role,
+                    CASE WHEN s.host_uid = ? THEN s.guest_uid ELSE s.host_uid END AS oppId, o.name AS opp
+                    FROM stakes s LEFT JOIN users o ON o.user_id = (CASE WHEN s.host_uid = ? THEN s.guest_uid ELSE s.host_uid END)
+                    WHERE s.host_uid = ? OR s.guest_uid = ? ORDER BY s.created_at DESC LIMIT 20`).bind(id, id, id, id, id),
+        db.prepare(`SELECT id, delta, currency, reason, ref, balance_after AS balance, created_at AS at FROM ledger WHERE user_id = ? ORDER BY id DESC LIMIT 50`).bind(id),
+        db.prepare(`SELECT * FROM star_orders WHERE user_id = ? ORDER BY created_at DESC LIMIT 50`).bind(id),
+      ]);
+      return { user: r[0].results[0] || null, matches: r[1].results, stakes: r[2].results, ledger: r[3].results, orders: r[4].results.map(orderRow) };
+    },
+    async adminPayments({ status, page, size }) {
+      const where = status ? 'WHERE o.status = ?' : '', args = status ? [status] : [];
+      const r = await db.batch([
+        db.prepare(`SELECT COUNT(*) AS n FROM star_orders o ${where}`).bind(...args),
+        db.prepare(`SELECT o.*, u.name, u.username FROM star_orders o LEFT JOIN users u ON u.user_id = o.user_id ${where}
+                    ORDER BY o.created_at DESC, o.id LIMIT ? OFFSET ?`).bind(...args, size, page * size),
+      ]);
+      return { total: r[0].results[0].n, rows: r[1].results.map((x) => ({ ...orderRow(x), name: x.name, username: x.username })) };
+    },
     async starsBalance(uid) { const r = await one('SELECT stars FROM users WHERE user_id = ?', uid); return r ? r.stars : 0; },
     async balance(uid) { const r = await one('SELECT coins FROM users WHERE user_id = ?', uid); return r ? r.coins : 0; },
     async profile(uid) {

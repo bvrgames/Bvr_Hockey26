@@ -85,7 +85,7 @@ try {
       await page.waitForFunction(() => window.__tgInvoiceClose && __hk.sb().st === 'open', null, { timeout: 10000 });
       await page.evaluate(() => __tgInvoiceClose('cancelled')); await page.waitForTimeout(300);
       await page.screenshot({ path: `shots/stars/cancel-${lang}.png` });
-      const errs = g.logs.filter(isError);
+      const errs = g.logs.filter(isError).filter((e) => !/status of 403/.test(e.text));   // /v1/admin/me → 403: a regular player
       ok(!errs.length, `${lang}: no page errors ${JSON.stringify(errs).slice(0, 300)}`);
     } finally { await g.browser.close(); }
   }
