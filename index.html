@@ -5970,6 +5970,7 @@ MENU.repaint=function(){
 };
 MENU.show=function(noBuild){
   var top=MENU.top();
+  if(top==='main' && typeof EXT!=='undefined' && EXT && EXT.st==='err') extCheck();   /* закрытый экран: сеть подвела раньше */
   if(!noBuild && MSCR[top]) MENU.build(top);
   for(var id in MENU.sec) MENU.sec[id].classList.toggle('cur', id===top);
   goPaint();
@@ -7158,14 +7159,36 @@ setTimeout(function(){ sumFlush(); setTimeout(function(){ profileFetch(); extChe
 /* ---------- закрытый экран (страница разработчика) ----------
    В игре нет ни его кода, ни текстов: сервер отвечает на /v1/admin/me 200 только тем, кто в ADMIN_IDS (по Telegram id
    из проверенного initData), остальным — 403, и на этом всё. При 200 появляется пункт меню с подписью от сервера, а сам
-   экран сервер отдаёт текстом (/v1/admin/ui.js) — он выполняется с узким набором функций меню (K). Только просмотр. */
-var EXT={ok:false, label:'', mod:null, loading:false};
+   экран сервер отдаёт текстом (/v1/admin/ui.js) — он выполняется с узким набором функций меню (K). Только просмотр.
+   Ответ на /v1/admin/me: 200 — пункт есть; 4xx (403 — не разработчик, 401) — окончательно, больше не спрашиваем до
+   перезапуска (обычный игрок делает ровно один запрос). Сеть / 5xx / нет ответа за EXT_TIMEOUT — повтор через 2, 5 и
+   12 с, потом ещё по разу при каждом возврате в главное меню (не больше EXT_MAX запросов за запуск). */
+var EXT={ok:false, label:'', mod:null, loading:false, st:null, n:0, t:0};   /* st: null | 'wait' | 'ok' | 'no' | 'err' */
+var EXT_RETRY=[2000, 5000, 12000], EXT_TIMEOUT=10000, EXT_MAX=8;
 function extCheck(){
-  if(!STATS_API || !inTelegram()) return;
-  fetch(STATS_API+'/v1/admin/me', {headers:apiHeaders()})
-  .then(function(r){ return r.status===200 ? r.json() : null; })
-  .then(function(j){ if(!j || !j.label) return; EXT.ok=true; EXT.label=String(j.label); if(MENU.ready){ MENU.build('main'); if(MENU.top()==='main') MENU.refocus(); } })
-  .catch(function(){});
+  if(!STATS_API || !inTelegram() || EXT.st==='wait' || EXT.st==='ok' || EXT.st==='no' || EXT.n>=EXT_MAX) return;
+  EXT.st='wait'; EXT.n++; clearTimeout(EXT.t);
+  var ac=null, to=0, done=false;
+  try{ ac=new AbortController(); }catch(e){}
+  var fail=function(){
+    if(done) return; done=true; clearTimeout(to);
+    EXT.st='err';
+    var k=EXT.n-1; if(k<EXT_RETRY.length) EXT.t=setTimeout(extCheck, EXT_RETRY[k]);   /* дальше — при возврате в главное меню */
+  };
+  to=setTimeout(function(){ if(ac) try{ ac.abort(); }catch(e){} fail(); }, EXT_TIMEOUT);
+  fetch(STATS_API+'/v1/admin/me', ac ? {headers:apiHeaders(), signal:ac.signal} : {headers:apiHeaders()})
+  .then(function(r){
+    if(done) return null;
+    if(r.status>=500){ fail(); return null; }
+    done=true; clearTimeout(to);
+    if(r.status!==200){ EXT.st='no'; return null; }
+    return r.json().then(function(j){
+      if(!j || !j.label){ EXT.st='no'; return; }
+      EXT.st='ok'; EXT.ok=true; EXT.label=String(j.label);
+      if(MENU.ready){ MENU.build('main'); if(MENU.top()==='main' && MENU.layer()==='menu') MENU.refocus(); }
+    }, function(){ EXT.st='no'; });
+  })
+  .catch(fail);
 }
 function extApi(path){
   return fetch(STATS_API+path, {headers:apiHeaders()}).then(function(r){ if(!r.ok) throw r.status; return r.json(); });
@@ -7341,7 +7364,7 @@ window.__hk={hs:function(){return HS;},net:function(){return NET;},setCam:functi
   coins:function(){return {coins:COINS, stars:STARS, prof:PROF, q:sumQueue().length};},
   /* пополнение звёзд (tools/smoke-api.mjs, stars-shots.mjs): состояние покупки, пакеты, видна ли кнопка */
   /* закрытый экран: есть ли пункт меню и загружен ли модуль (tools/smoke-api.mjs, dev-shots.mjs) */
-  ext:function(){ return {ok:EXT.ok, mod:!!EXT.mod, item:document.querySelectorAll('#start [data-act="ext"]').length}; },
+  ext:function(){ return {ok:EXT.ok, mod:!!EXT.mod, st:EXT.st, n:EXT.n, item:document.querySelectorAll('#start [data-act="ext"]').length}; },
   sb:function(){ return {st:SB.st, order:SB.order, got:SB.got, packs:PACKS, ok:starsBuyOK(), btn:document.querySelectorAll('#start .mtopup').length,
     fly:document.querySelectorAll('.rw-fx').length, text:(document.querySelector('#start [data-paint="sbSt"]')||{}).textContent||''}; },
   /* экран итога для теста начисления (tools/smoke-api.mjs, wallet-shots.mjs): матч id «отправлен», ответа ещё нет */

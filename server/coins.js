@@ -102,23 +102,34 @@ function sameBytes(a, b) {
 // Telegram Mini Apps initData check (core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app).
 // Returns { id, name } or null.
 export async function verifyInitData(initData, botToken, nowSec, maxAge = DEF.AUTH_MAX_AGE) {
-  if (!initData || !botToken || initData.length > 4096) return null;
+  return (await checkInitData(initData, botToken, nowSec, maxAge)).user;
+}
+// the same with the reason of a refusal, for the owner's logs: { user } or { user: null, why: 'none' | 'format' | 'hash'
+// (signed for another bot token — e.g. BOT_TOKEN is outdated after a token was revoked in @BotFather) | 'expired' |
+// 'future' | 'user', age (s) }
+export async function checkInitData(initData, botToken, nowSec, maxAge = DEF.AUTH_MAX_AGE) {
+  const no = (why, age) => ({ user: null, why, age });
+  if (!initData || !botToken) return no('none');
+  if (initData.length > 4096) return no('format');
   const p = new URLSearchParams(initData);
   const hash = p.get('hash');
-  if (!hash || !/^[0-9a-f]{64}$/.test(hash)) return null;
+  if (!hash || !/^[0-9a-f]{64}$/.test(hash)) return no('format');
   p.delete('hash');
   const dcs = [...p.entries()].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)).map(([k, v]) => k + '=' + v).join('\n');
   const secret = await hmac('WebAppData', botToken);
   const want = enc.encode(hex(await hmac(secret, dcs)));
-  if (!sameBytes(want, enc.encode(hash))) return null;
   const at = +p.get('auth_date');
-  if (!(at > 0) || nowSec - at > maxAge || at - nowSec > 300) return null;
+  if (!sameBytes(want, enc.encode(hash))) return no('hash', at > 0 ? nowSec - at : null);
+  if (!(at > 0) || nowSec - at > maxAge) return no('expired', at > 0 ? nowSec - at : null);
+  if (at - nowSec > 300) return no('future', nowSec - at);
   let u = null; try { u = JSON.parse(p.get('user') || 'null'); } catch (e) {}
-  if (!u || !Number.isSafeInteger(u.id) || u.id <= 0) return null;
+  if (!u || !Number.isSafeInteger(u.id) || u.id <= 0) return no('user');
   const name = ((u.first_name || '') + ' ' + (u.last_name || '')).trim().slice(0, 64) || (u.username || '').slice(0, 64);
   const str = (v, n) => (typeof v === 'string' && v ? v.slice(0, n) : null);
-  return { id: u.id, name, username: str(u.username, 64), lang: str(u.language_code, 16), premium: u.is_premium ? 1 : 0 };
+  return { user: { id: u.id, name, username: str(u.username, 64), lang: str(u.language_code, 16), premium: u.is_premium ? 1 : 0 } };
 }
+// one line in `wrangler tail` per refused signature: why (no id — it is not proven when the signature is wrong)
+function authLog(path, c) { console.warn('auth refused', JSON.stringify({ path, why: c.why, age: c.age })); }
 
 const int = (v) => Number.isInteger(v) && v >= 0 && v < 1e6;
 const TEAM_KEYS = ['shots', 'sog', 'goals', 'passes', 'passesDone', 'saves', 'hits'];
@@ -453,6 +464,10 @@ export async function handleBotSetup(request, d) {
   const got = request.headers.get('X-Setup-Secret') || '';
   if (request.method !== 'POST' || !d.secret || !sameBytes(enc.encode(got), enc.encode(d.secret))) return json(403, { reason: 'secret' });
   if (!d.bot) return json(503, { reason: 'not configured' });
+  try { return await botSetup(url, d); }
+  catch (e) { console.error('bot setup', e && e.message); return json(502, { reason: 'bot', error: String(e && e.message) }); }   // e.g. Unauthorized: BOT_TOKEN revoked
+}
+async function botSetup(url, d) {
   const target = (d.publicUrl || url.origin) + BOT_PATH;
   const info = await d.bot('getWebhookInfo', {});
   const cmds = await d.bot('getMyCommands', {});
@@ -618,8 +633,9 @@ export async function handleCoins(request, d) {
   // the developer's page: 403 to everyone but ADMIN_IDS — unsigned, forged and other ids alike, before anything else
   if (path.startsWith('/v1/admin/')) {
     const now = d.now || Math.floor(Date.now() / 1000), conf = d.conf || confFrom(null);
-    const user = d.botToken ? await verifyInitData(request.headers.get('X-Telegram-Init-Data'), d.botToken, now, conf('AUTH_MAX_AGE')) : null;
-    if (!user || !adminIds(d.adminIds).has(user.id)) return json(403, { reason: 'forbidden' });
+    const c = await checkInitData(request.headers.get('X-Telegram-Init-Data'), d.botToken, now, conf('AUTH_MAX_AGE')), user = c.user;
+    if (!user) { if (c.why !== 'none') authLog(path, c); return json(403, { reason: 'forbidden' }); }
+    if (!adminIds(d.adminIds).has(user.id)) return json(403, { reason: 'forbidden' });
     if (!d.store) return json(503, { reason: 'not configured' });
     try { return await adminRoute(route, request, { ...d, conf }, user, now); }
     catch (e) { console.error('admin', route, e && e.stack || e); return json(500, { reason: 'server' }); }
@@ -635,8 +651,8 @@ export async function handleCoins(request, d) {
   if (!d.store || !d.botToken) return json(503, { reason: 'not configured' });
   const conf = d.conf || confFrom(null), dd = { ...d, conf };
   const now = d.now || Math.floor(Date.now() / 1000);
-  const user = await verifyInitData(request.headers.get('X-Telegram-Init-Data'), d.botToken, now, conf('AUTH_MAX_AGE'));
-  if (!user) return json(401, { reason: 'auth' });
+  const c = await checkInitData(request.headers.get('X-Telegram-Init-Data'), d.botToken, now, conf('AUTH_MAX_AGE')), user = c.user;
+  if (!user) { if (c.why !== 'none') authLog(path, c); return json(401, { reason: 'auth' }); }
   try {
     // who the player is, for the developer's page: name, username, language, premium, the Telegram platform, last seen
     const pf = request.headers.get('X-Tg-Platform');

@@ -270,6 +270,12 @@ function summary(o = {}) {
   ok((await ago('/v1/admin/me', initData({ id: 9101, first_name: 'X', username: 'B1' }))) === 200, 'admin core: the admin id → 200');
   ok((await handleCoins(req('GET', '/v1/admin/me', initData(B1)), { ...adeps, adminIds: '' })).status === 403, 'admin core: no ADMIN_IDS → 403 to all');
   ok((await ago('/v1/admin/ui.js', initData(B1))) === 200 && (await ago('/v1/admin/ui.js', initData(B2))) === 403, 'admin core: the page text only to the admin');
+  // why a signature is refused (the owner's log line «auth refused»): another bot token (e.g. revoked in @BotFather), stale
+  const { checkInitData } = await import('../server/coins.js');
+  const nowS = Math.floor(Date.now() / 1000);
+  ok((await checkInitData(initData(B1, { token: 'REVOKED' }), TOKEN, nowS)).why === 'hash', 'auth: initData signed by another token → why hash');
+  ok((await checkInitData(initData(B1, { authDate: nowS - 90000 }), TOKEN, nowS)).why === 'expired', 'auth: a day-old initData → why expired');
+  ok((await checkInitData('', TOKEN, nowS)).why === 'none' && (await checkInitData(initData(B1), TOKEN, nowS)).user.id === B1.id, 'auth: none / ok');
 }
 
 const t0 = Date.now();
@@ -646,8 +652,10 @@ try {
       ok((await g.page.evaluate(() => __hk.coins())).coins === 45, `game: the queued match went out with the next one ${JSON.stringify(await g.page.evaluate(() => __hk.coins().coins))}`);
       // a regular player: no item, no texts, no requests to the developer's page beyond the one /v1/admin/me (403)
       await g.page.waitForTimeout(1500);
+      await g.page.evaluate(() => { __hk.menu('settings'); __hk.menu('main'); __hk.menu('profile'); __hk.menu('main'); });
+      await g.page.waitForTimeout(2500);
       const ex = await g.page.evaluate(() => ({ ...__hk.ext(), html: document.getElementById('start').innerHTML }));
-      ok(!ex.ok && ex.item === 0 && !/Разработчик|BVRDev/.test(ex.html) && adminReqs.join() === '/v1/admin/me', `admin: a player has no item and asks only /me ${JSON.stringify([ex.ok, ex.item, adminReqs])}`);
+      ok(!ex.ok && ex.item === 0 && ex.st === 'no' && !/Разработчик|BVRDev/.test(ex.html) && adminReqs.join() === '/v1/admin/me', `admin: a player has no item and asks only /me once, 403 is not repeated (menu visited) ${JSON.stringify([ex, adminReqs].map((x) => x.html ? { ...x, html: 0 } : x))}`);
       // ---- stars: «+» at the stars in the wallet → packs from the server → invoice → Telegram says 'paid' → the client
       // waits for the webhook's payment, then the stars fly into the wallet; 'cancelled' credits nothing
       await g.page.evaluate(() => { __hk.result(); __hk.menu('main'); });
@@ -688,10 +696,26 @@ try {
       const tga = fakeTelegram().replace(/initData:'[^']*'/, 'initData:' + JSON.stringify(initData(ADMIN)));
       const ga = await openGame('chromium', { w: 844, h: 390, tg: tga });
       try {
+        // the first 4 /v1/admin/me fail on the network: retried after 2 and 5 s (no item yet), then 12 s; after that —
+        // once more on coming back to the main menu, and that one gets through
+        let meFail = 4, meN = 0;
+        await ga.page.route(/\/v1\/admin\/me/, (rt) => { meN++; if (meFail-- > 0) rt.abort(); else rt.continue(); });
         await ga.page.addInitScript(() => { try { localStorage.setItem('bvr_onboard', '1'); } catch (e) {} });
         await ga.page.goto(`http://127.0.0.1:${port + 1}/index.html?nomusic&api=${encodeURIComponent(API)}`, { waitUntil: 'load', timeout: 120000 });
+        await ga.page.waitForFunction(() => window.__hk && __hk.ext && __hk.ext().n >= 3, null, { timeout: 20000 }).catch(() => {});
+        let ee = await ga.page.evaluate(() => __hk.ext());
+        ok(ee.n === 3 && ee.item === 0 && meN === 3, `admin: a network error is retried (3 tries in ~9 s) ${JSON.stringify([ee, meN])}`);
+        await ga.page.waitForFunction(() => __hk.ext().n === 4 && __hk.ext().st === 'err', null, { timeout: 20000 }).catch(() => {});
+        await ga.page.waitForTimeout(1000);
+        ee = await ga.page.evaluate(() => __hk.ext());
+        ok(ee.n === 4 && ee.st === 'err' && ee.item === 0, `admin: after the retries — waits for the main menu ${JSON.stringify(ee)}`);
+        await ga.page.evaluate(() => { __hk.menu('settings'); __hk.menu('main'); });
         await ga.page.waitForFunction(() => window.__hk && __hk.ext && __hk.ext().item === 1, null, { timeout: 20000 }).catch(() => {});
-        ok((await ga.page.evaluate(() => __hk.ext().item)) === 1, 'admin: the item is in the admin\'s main menu');
+        ee = await ga.page.evaluate(() => __hk.ext());
+        ok(ee.item === 1 && ee.n === 5 && meN === 5, `admin: back in the main menu → asked again, the item is in the admin's main menu ${JSON.stringify([ee, meN])}`);
+        await ga.page.evaluate(() => { __hk.menu('settings'); __hk.menu('main'); });
+        await ga.page.waitForTimeout(500);
+        ok(meN === 5, 'admin: no more /me once it is known');
         await ga.page.click('#start section.cur [data-act="ext"]');
         await ga.page.waitForFunction(() => /Игроки/.test((document.querySelector('#start section[data-s="ext"]') || {}).textContent || '') && /всего/.test(document.querySelector('#start section[data-s="ext"]').textContent), null, { timeout: 15000 }).catch(() => {});
         const tx = await ga.page.evaluate(() => ({ e: __hk.ext(), top: __hk.menuState().stack.join('>'), t: document.querySelector('#start section[data-s="ext"]').textContent.slice(0, 200) }));
@@ -707,7 +731,7 @@ try {
         await ga.page.evaluate(() => __tgBackClick());
         await ga.page.waitForTimeout(300);
         ok((await ga.page.evaluate(() => __hk.menuState().stack.join('>'))) === 'main>ext' && (await ga.page.evaluate(() => !!document.getElementById('xq'))), 'admin: «Назад» from the card returns to the list');
-        const ae = ga.logs.filter(isError);
+        const ae = ga.logs.filter(isError).filter((e) => !/ERR_FAILED/.test(e.text));   // /v1/admin/me aborted on purpose above
         ok(!ae.length, `admin: page errors ${JSON.stringify(ae).slice(0, 300)}`);
       } finally { await ga.browser.close(); srv3.close(); }
     }

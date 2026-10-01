@@ -294,7 +294,13 @@ EV.emit('shot', { p: 3, t: 0, ... });                 // возвращает pa
 на `<Worker>/tg/webhook` с `secret_token`, команды `/paysupport`, `/terms` **добавляются** к уже заданным
 (`getMyCommands` → `setMyCommands`). Если у бота уже другой вебхук — `409`, ничего не меняется.
 
-Секреты Worker'а: `BOT_TOKEN`, `TG_WEBHOOK_SECRET` (`wrangler secret put`). Схема — `migrations/0003_stars.sql`.
+Секреты Worker'а: `BOT_TOKEN`, `TG_WEBHOOK_SECRET` (`wrangler secret put`).
+
+**Перевыпуск токена бота в @BotFather** ломает всё сразу: подпись initData сходится только с новым токеном (каждый
+`/v1/*` → 401, `/v1/admin/*` → 403, монеты не начисляются), а Telegram **снимает вебхук**. После перевыпуска:
+`cd server && ../node_modules/.bin/wrangler secret put BOT_TOKEN` (новый токен; деплой не нужен), затем
+`POST /tg/setup?do=install` (вебхук обратно). Отказ подписи виден в `wrangler tail` строкой
+`auth refused {"path", "why": "hash"}` (`hash` — подпись другого токена, `expired` — initData старше суток). Схема — `migrations/0003_stars.sql`.
 Правила — `coins.js` (`STAR_PACKS`, `BOT_TEXTS`, `botApiFrom`, `checkoutCheck`, `onBotUpdate`, `handleBot`,
 `handleBotSetup`), SQL — `coins-d1.js` (`starOrderNew`, `starOrderGet`, `starPaid`, `starRefund`, `starUnmatched`…),
 склейка — `api.js` / `worker.js`. Ручной возврат: `refundStarPayment(user_id, telegram_payment_charge_id)` из Bot API
@@ -308,7 +314,9 @@ EV.emit('shot', { p: 3, t: 0, ... });                 // возвращает pa
 **`403` на каждый `/v1/admin/*`**, тело `{reason:'forbidden'}` без подробностей. Нет `ADMIN_IDS` — `403` всем.
 
 **Обычному игроку не уходит ничего:** в `index.html` нет ни кода страницы, ни её текстов. Клиент в Telegram один раз
-спрашивает `GET /v1/admin/me`; `403` — и всё. `200` (`{ id, name, label }`) — в главном меню появляется пункт с
+спрашивает `GET /v1/admin/me`; `403` (и любой 4xx) — и всё, до перезапуска не повторяется. Сетевая ошибка, 5xx или нет
+ответа 10 с — повтор через 2, 5 и 12 с, потом по разу при каждом возврате в главное меню (не больше 8 запросов за
+запуск). `200` (`{ id, name, label }`) — в главном меню появляется пункт с
 подписью из ответа; по нажатию клиент берёт **сам экран у Worker'а** — `GET /v1/admin/ui.js` (текст
 `server/admin-ui.js`, тоже только `ADMIN_IDS`, `cache-control: no-store`) и выполняет его с узким набором функций
 меню (`K`: запрос к API с подписью, шапка, перерисовка). Экран — `MSCR.ext` (пустой контейнер), действия `x`.

@@ -105,6 +105,9 @@
   `pre_checkout_query` — проверка заказа, `successful_payment` — один раз, `refunded_payment` — списание не ниже нуля
   (`refund_short`), `/paysupport`, `/terms` (тексты `BOT_TEXTS`). Подключение вебхука — `POST /tg/setup` (docs/EVENTS.md
   «Звёзды»). Скриншоты — `node tools/stars-shots.mjs`.
+  **Перевыпустили токен бота** (02.10 так пропал пункт «Разработчик»: подпись initData не сходилась, все запросы 401/403)
+  — новый `BOT_TOKEN` в секрет Worker'а и `POST /tg/setup?do=install` (Telegram снимает вебхук при перевыпуске);
+  в `wrangler tail` такой отказ — `auth refused … "why":"hash"`.
 
 - **Страница разработчика (02.10).** Только просмотр, только `ADMIN_IDS` (секрет Worker'а, Telegram id из проверенного
   initData; сейчас `454163382`): `/v1/admin/*` всем остальным — 403. В игре кода и текстов страницы нет: клиент
