@@ -138,7 +138,7 @@ for (const S of SETUPS) {
 // ---------- the menu (docs/MENU_PLAN.md): every screen and the pause, landscape setups, RU / EN / ID.
 // Nothing under Telegram's buttons or outside the device safe area, texts fit their items, the screen content stays
 // above the footer (now playing + button hints) and the two columns do not overlap.
-const MENU_SCREENS = [['main'], ['mode'], ['prep'], ['friend'], ['settings'], ['profile'], ['shop'], ['rules', 0], ['rules', 1], ['pause']];
+const MENU_SCREENS = [['main'], ['mode'], ['prep'], ['friend'], ['settings'], ['profile'], ['shop'], ['train'], ['rules', 0], ['rules', 1], ['pause'], ['lesson', 4], ['lesson', 8]];
 for (const S of SETUPS.filter((x) => !x.name.startsWith('port'))) {
   const g = await openGame(browserName, { w: S.w, h: S.h, mobile: true, tg: fakeTelegram({ fullscreen: true, safe: S.safe, content: S.content, lang: S.tgLang }) });
   const { page } = g;
@@ -150,6 +150,30 @@ for (const S of SETUPS.filter((x) => !x.name.startsWith('port'))) {
       await page.evaluate(`__hk.lang('${lang}')`);
       for (const [scr, key] of MENU_SCREENS) {
         const tag = `menu ${S.name} ${lang} ${scr}${key !== undefined ? ' tab ' + key : ''}`;
+        if (scr === 'lesson') {
+          // a lesson screen: task, counter, medal thresholds, button tip (and the tactics buttons in lesson 9)
+          await page.evaluate(`__hk.menu('main'); __hk.train(${key})`); await page.waitForTimeout(400);
+          const r = await page.evaluate(({ sa, band, cw, rw }) => {
+            const W = innerWidth, H = innerHeight, out = [];
+            const vis = (e) => { if (!e) return null; const cs = getComputedStyle(e); if (cs.display === 'none' || cs.visibility === 'hidden') return null; const b = e.getBoundingClientRect(); return b.width > 0 && b.height > 0 ? b : null; };
+            const zones = [{ n: 'tg-close', x: sa.left || 0, y: sa.top || 0, w: cw, h: band }, { n: 'tg-right', x: W - (sa.right || 0) - rw, y: sa.top || 0, w: rw, h: band }];
+            const hit = (a, z) => a.left < z.x + z.w && z.x < a.right && a.top < z.y + z.h && z.y < a.bottom;
+            const boxes = ['.lh-task', '.lh-cnt', '.lh-med', '.lh-tip', '.lh-tac'].map((q) => [q, vis(document.querySelector('#lhud ' + q))]).filter((x) => x[1]);
+            const pads = ['bA', 'bB', 'bX', 'bY', 'bRT', 'bPause'].map((id) => [id, vis(document.getElementById(id))]).filter((x) => x[1]);
+            for (const [q, b] of boxes) {
+              for (const z of zones) if (hit(b, z)) out.push(`${q} under ${z.n}`);
+              if (b.left < (sa.left || 0) - 0.5 || b.right > W - (sa.right || 0) + 0.5 || b.top < (sa.top || 0) - 0.5 || b.bottom > H - (sa.bottom || 0) + 0.5) out.push(`${q} outside the safe area`);
+              for (const [id, pb] of pads) if (hit(b, { x: pb.left, y: pb.top, w: pb.width, h: pb.height })) out.push(`${q} overlaps #${id}`);
+            }
+            for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) { const a = boxes[i][1], b = boxes[j][1]; if (hit(a, { x: b.left, y: b.top, w: b.width, h: b.height })) out.push(`${boxes[i][0]} overlaps ${boxes[j][0]}`); }
+            const t = document.getElementById('lhTask'); if (t && t.scrollWidth > t.clientWidth + 1) out.push('task text cut');
+            return out;
+          }, { sa: S.safe, band: S.content.top, cw: CLOSE_W[S.tgLang], rw: RIGHT_W });
+          for (const x of r) fails.push(`${tag}: ${x}`);
+          if (browserName === 'chromium' && lang === 'ru' && S.name === 'land') await page.screenshot({ path: `shots/ui/tg-menu-lesson${key}.png` });
+          await page.evaluate("__hk.menu('main')");
+          continue;
+        }
         if (scr === 'pause') {
           await page.evaluate("__hk.menu('main'); __hk.start()");
           await page.waitForFunction('__hk.st()==="face" || __hk.st()==="play"', null, { timeout: 60000 });
@@ -170,6 +194,8 @@ for (const S of SETUPS.filter((x) => !x.name.startsWith('port'))) {
           const fb = foot && vis(foot);
           for (const e of els) {
             const b = vis(e); if (!b) continue;
+            // rows scrolled out of a scrolling list (the lessons) are not on screen
+            const sc = e.closest('.mles'); if (sc) { const cb = sc.getBoundingClientRect(); if (b.bottom <= cb.top + 1 || b.top >= cb.bottom - 1) continue; }
             for (const z of zones) if (hit(b, z)) out.push(`${name(e)} under ${z.n}`);
             if (b.left < (sa.left || 0) - 0.5 || b.right > W - (sa.right || 0) + 0.5 || b.top < (sa.top || 0) - 0.5 || b.bottom > H - (sa.bottom || 0) + 0.5)
               out.push(`${name(e)} outside the safe area ${Math.round(b.left)},${Math.round(b.top)} ${Math.round(b.width)}x${Math.round(b.height)}`);

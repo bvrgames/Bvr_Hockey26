@@ -313,6 +313,51 @@
   .mshop i{font:600 10.5px/1.25 system-ui;font-style:normal;color:var(--mdim)}
   .mshop .soon{position:absolute;top:8px;right:8px;font:italic 800 10px/1 var(--msport);padding:3px 6px;border-radius:999px;color:var(--mcyan);border:1px solid rgba(143,216,255,.35)}
 
+  /* медали */
+  .md{display:inline-block;width:15px;height:15px;border-radius:50%;flex:none;vertical-align:middle;box-shadow:inset 0 -2px 0 rgba(0,0,0,.25),0 0 0 1px rgba(255,255,255,.25)}
+  .md.g{background:radial-gradient(circle at 35% 30%,#fff3b0,#f2b92c 55%,#a8740c)}
+  .md.s{background:radial-gradient(circle at 35% 30%,#fff,#c3ccd8 55%,#7d8796)}
+  .md.b{background:radial-gradient(circle at 35% 30%,#ffd9b0,#c9803c 55%,#80471a)}
+  .md.e{background:rgba(255,255,255,.08);box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.25)}
+  .md.big{width:clamp(48px,15vh,72px);height:clamp(48px,15vh,72px)}
+  /* тренировка: список уроков и карточка */
+  .mles{position:relative;display:flex;flex-direction:column;gap:1px;overflow-y:auto;max-height:100%;scrollbar-width:none;padding:6px 0 10px;
+    -webkit-mask-image:linear-gradient(180deg,transparent 0,#000 10px,#000 calc(100% - 14px),transparent);mask-image:linear-gradient(180deg,transparent 0,#000 10px,#000 calc(100% - 14px),transparent)}
+  .mles::-webkit-scrollbar{display:none}
+  .mles .mi{display:flex;align-items:center;gap:9px;font-size:clamp(15px,4.4vh,19px)}
+  .mles .mi .n{width:20px;text-align:right;color:var(--mmute);font-size:.8em}
+  .mles .mi .t{flex:1;overflow:hidden;text-overflow:ellipsis}
+  .mles .mi.ok .t::after{content:' ✓';color:#5ad07f}
+  .mles .mi .d{display:none!important}
+  .mles .mi.on::after{right:-4px}
+  .mlcard .goal{display:flex;flex-direction:column;gap:4px;font:600 11.5px/1.3 system-ui;color:var(--mdim)}
+  .mlcard .goal div{display:flex;align-items:center;gap:8px}
+  .mlcard .best{font:italic 800 13px/1 var(--msport);text-transform:uppercase;color:var(--mgold)}
+  .mlcard .mbtn{margin-top:4px}
+  /* урок: экран поверх матча */
+  #lhud{display:none}
+  body.training #lhud{display:block}
+  body.training #hud,body.training #hud2,body.training #legend,body.training #tacbadge,body.training #chip{display:none!important}
+  #lhud>div{position:absolute;z-index:7;pointer-events:none;background:rgba(6,14,28,.82);border-radius:12px;color:#f2f7ff}
+  #lhud .lh-task{top:var(--mt);left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:3px;
+    padding:6px 16px 7px;max-width:56vw;text-align:center;border:1px solid rgba(143,216,255,.25)}
+  #lhNum{font:italic 800 11px/1 var(--msport);letter-spacing:.08em;color:var(--mcyan);text-transform:uppercase;white-space:nowrap}
+  #lhTask{font:italic 800 clamp(13px,4.2vh,17px)/1.1 var(--msport);text-transform:uppercase}
+  #lhMsg{font:italic 800 13px/1 var(--msport);text-transform:uppercase;min-height:0}
+  #lhMsg.good{color:#5ad07f}#lhMsg.bad{color:#ff8a7a}
+  #lhud .lh-cnt{top:var(--mt);left:var(--ml);display:flex;flex-direction:column;gap:2px;padding:6px 12px}
+  #lhCnt{font:italic 800 19px/1 var(--msport);white-space:nowrap}
+  #lhTime{font:700 11px/1 system-ui;color:var(--mdim);font-variant-numeric:tabular-nums}
+  #lhud .lh-med{top:calc(var(--mt) + 52px);left:var(--ml);display:flex;flex-direction:column;gap:3px;padding:6px 10px;font:700 10px/1.2 system-ui;color:var(--mdim)}
+  #lhud .lh-med:empty{display:none}
+  #lhud .lh-med div{display:flex;align-items:center;gap:6px;white-space:nowrap}
+  #lhud .lh-med .md{width:12px;height:12px}
+  #lhud .lh-tip{bottom:calc(var(--mb) + 6px);left:50%;transform:translateX(-50%);padding:6px 14px;font:italic 800 13px/1.1 var(--msport);
+    text-transform:uppercase;border:1px solid rgba(255,209,102,.4);max-width:44vw;text-align:center}
+  #lhud .lh-tac{top:calc(var(--mt) + 64px);left:50%;transform:translateX(-50%);display:none;gap:6px;padding:5px;pointer-events:auto;background:rgba(6,14,28,.6)}
+  #lhud .lh-tac span{padding:8px 12px;border-radius:9px;font:italic 800 13px/1 var(--msport);text-transform:uppercase;background:rgba(255,255,255,.1);cursor:pointer}
+  #lhud .lh-tac span.on{color:#241703;background:linear-gradient(180deg,var(--mgold),var(--mgold2))}
+
   /* язык на главном — сбоку, небольшой */
   .mlang{margin-left:auto;display:flex;gap:4px;padding:3px;border-radius:10px}
   .mlang .chip{flex:0 0 auto;padding:5px 8px;font:italic 800 12px/1 var(--msport);border-radius:7px;border:0;color:var(--mdim);background:rgba(255,255,255,.07);opacity:1}
@@ -400,6 +445,14 @@
   <div id="toast"></div>
   <div id="netban"></div>
   <div id="tacbadge"></div>
+  <!-- урок тренировки: задача, счётчик и время, пороги медалей, подсказка кнопки, кнопки тактики (для касания) -->
+  <div id="lhud">
+    <div class="lh-task"><span id="lhNum"></span><b id="lhTask"></b><i id="lhMsg"></i></div>
+    <div class="lh-cnt"><b id="lhCnt"></b><span id="lhTime"></span></div>
+    <div class="lh-med" id="lhMed"></div>
+    <div class="lh-tip" id="lhTip"></div>
+    <div class="lh-tac" id="ltac"><span data-tac="1"></span><span data-tac="0"></span><span data-tac="2"></span></div>
+  </div>
   <div id="legend" class="padhint"></div>
   <div id="power"><i></i></div>
 
@@ -432,6 +485,7 @@
       <div class="mhead"><div class="mcrumb"><div class="mbrand sm">BVR Hockey <b>26</b></div><div class="mtitle" id="oTitle">МАТЧ ОКОНЧЕН</div></div></div>
       <div class="mleft"><div class="mlist">
         <div class="mi mf" id="oAgain" data-act="again"></div>
+        <div class="mi mf" id="oNext" data-act="lnext" style="display:none"></div>
         <div class="mi mf" id="oMenu" data-act="menu"></div>
       </div></div>
       <div class="mright"><div class="mcard mglass mres"><div id="oScore">0 : 0</div><div id="oWinner">—</div></div></div>
@@ -1121,7 +1175,15 @@ ru:{
   pStatsNote:'Статистика хранится в твоём Telegram и переезжает с тобой на другие устройства.',
   shKits:'Форма команд', shKitsD:'Ретро, зимняя, ночная', shSticks:'Клюшки', shSticksD:'Цвет обмотки и крюка',
   shGoal:'Празднование гола', shGoalD:'Сирена, салют, камера', shIce:'Лёд арены', shIceD:'Рисунок в центральном круге',
-  shSoon:'Покупки откроются, когда заработают монеты: их дают за матчи, немного каждый день.'
+  shSoon:'Покупки откроются, когда заработают монеты: их дают за матчи, немного каждый день.',
+  tLesson:'Урок', tFree:'Свободная тренировка', tFreeD:'Лёд без соперников — пробуй всё, шайба вернётся сама', tStart:'Начать урок',
+  tBest:'Лучшее', tNotYet:'ещё не пройден', tDone:'Выполнено', tFail:'Не получилось', tRetry:'Ещё раз', tNext:'Следующий урок',
+  tToList:'К урокам', tNoMedal:'без медали', tBronze:'Бронза', tSilver:'Серебро', tGold:'Золото', tMedalsP:'Медали', tTries:'попытка',
+  tSec:'с', tOf:'из', tTriesN:'попыток', tGate:'ворота!', tGateMiss:'мимо ворот', tNice:'есть!', tMiss:'мимо', tNeedLead:'нужен пас в разрез — Y',
+  tNeedLob:'нужен навес — X', tHit:'в мишень!', tWeak:'слабо — держи B дольше', tSave:'сейв!', tConceded:'гол в ворота', tGoal:'гол!',
+  tSave2:'вратарь отбил', tLost:'потеря', tPen:'удаление: силовой против игрока без шайбы',
+  tq0:'Соперник давит — включи Оборону', tq1:'Нужен гол — включи Атаку', tq2:'Игра ровная — включи Стандарт',
+  tDoneW:'Выполнено'
 },
 en:{
   fpsOn:'FPS: ON', fpsOff:'FPS: OFF',
@@ -1197,7 +1259,15 @@ en:{
   pStatsNote:'Your stats live in your Telegram account and follow you to other devices.',
   shKits:'Team kits', shKitsD:'Retro, winter, night', shSticks:'Sticks', shSticksD:'Tape and blade colours',
   shGoal:'Goal celebration', shGoalD:'Horn, fireworks, camera', shIce:'Arena ice', shIceD:'Centre circle art',
-  shSoon:'The shop opens once coins arrive: you earn them in matches, a little every day.'
+  shSoon:'The shop opens once coins arrive: you earn them in matches, a little every day.',
+  tLesson:'Lesson', tFree:'Free skate', tFreeD:'Empty ice — try everything, the puck comes back by itself', tStart:'Start lesson',
+  tBest:'Best', tNotYet:'not done yet', tDone:'Complete', tFail:'Not this time', tRetry:'Retry', tNext:'Next lesson',
+  tToList:'To lessons', tNoMedal:'no medal', tBronze:'Bronze', tSilver:'Silver', tGold:'Gold', tMedalsP:'Medals', tTries:'try',
+  tSec:'s', tOf:'of', tTriesN:'tries', tGate:'gate!', tGateMiss:'missed the gate', tNice:'nice!', tMiss:'miss', tNeedLead:'use a through pass — Y',
+  tNeedLob:'use a lob — X', tHit:'target hit!', tWeak:'too soft — hold B longer', tSave:'save!', tConceded:'goal against', tGoal:'goal!',
+  tSave2:'saved', tLost:'turnover', tPen:'penalty: a hit on a player without the puck',
+  tq0:'They press — switch to Defence', tq1:'We need a goal — switch to Attack', tq2:'Even game — switch to Balanced',
+  tDoneW:'Complete'
 },
 id:{
   fpsOn:'FPS: AKTIF', fpsOff:'FPS: MATI',
@@ -1275,7 +1345,15 @@ id:{
   pStatsNote:'Statistikmu tersimpan di akun Telegram dan ikut ke perangkat lain.',
   shKits:'Seragam tim', shKitsD:'Retro, musim dingin, malam', shSticks:'Tongkat', shSticksD:'Warna lakban dan bilah',
   shGoal:'Selebrasi gol', shGoalD:'Sirene, kembang api, kamera', shIce:'Es arena', shIceD:'Gambar di lingkaran tengah',
-  shSoon:'Toko dibuka saat koin tersedia: kamu mendapatkannya dari laga, sedikit setiap hari.'
+  shSoon:'Toko dibuka saat koin tersedia: kamu mendapatkannya dari laga, sedikit setiap hari.',
+  tLesson:'Pelajaran', tFree:'Latihan bebas', tFreeD:'Es kosong — coba semuanya, keping kembali sendiri', tStart:'Mulai pelajaran',
+  tBest:'Terbaik', tNotYet:'belum selesai', tDone:'Selesai', tFail:'Belum berhasil', tRetry:'Ulangi', tNext:'Pelajaran berikutnya',
+  tToList:'Ke daftar', tNoMedal:'tanpa medali', tBronze:'Perunggu', tSilver:'Perak', tGold:'Emas', tMedalsP:'Medali', tTries:'percobaan',
+  tSec:'d', tOf:'dari', tTriesN:'percobaan', tGate:'gerbang!', tGateMiss:'lewat gerbang', tNice:'bagus!', tMiss:'meleset', tNeedLead:'pakai umpan terobosan — Y',
+  tNeedLob:'pakai umpan lambung — X', tHit:'kena sasaran!', tWeak:'terlalu pelan — tahan B lebih lama', tSave:'selamat!', tConceded:'kebobolan', tGoal:'gol!',
+  tSave2:'ditepis kiper', tLost:'kehilangan keping', tPen:'penalti: benturan ke pemain tanpa keping',
+  tq0:'Lawan menekan — pilih Bertahan', tq1:'Butuh gol — pilih Menyerang', tq2:'Laga seimbang — pilih Seimbang',
+  tDoneW:'Selesai'
 }};
 var LANG='ru';
 try{ var _sl=localStorage.getItem('bvr_lang'); if(_sl && STRINGS[_sl]) LANG=_sl; }catch(e){}
@@ -1818,7 +1896,7 @@ function releaseAll(){
 var stage=document.getElementById('stage');
 function tDown(e){
   /* пропускаем касания по меню, паузе и экрану результата */
-  if(e.target.closest && e.target.closest('#start,#pausescr,#overscr')) return;
+  if(e.target.closest && e.target.closest('#start,#pausescr,#overscr,#ltac')) return;
   e.preventDefault();
   for(var i=0;i<e.changedTouches.length;i++){
     var t=e.changedTouches[i]; inDown(t.identifier,t.clientX,t.clientY);
@@ -1864,7 +1942,7 @@ function netTimeReset(){
 
 /* мышь — для отладки на компьютере */
 stage.addEventListener('mousedown',function(e){
-  if(e.target.closest && e.target.closest('#start,#pausescr,#overscr')) return;
+  if(e.target.closest && e.target.closest('#start,#pausescr,#overscr,#ltac')) return;
   inDown('m',e.clientX,e.clientY);
 });
 window.addEventListener('mousemove',function(e){ inMove('m',e.clientX,e.clientY); });
@@ -1957,12 +2035,15 @@ function setTactic(team,t){
   if(TACTIC[team]===t) return;
   TACTIC[team]=t;
   if(team===HUMAN){
+    if(typeof paintTacBadge==='function') setTimeout(paintTacBadge,0);
     toast(T('tactic')+': '+T(TACNAME[t]));
     SFX.swap(); buzz(12,'soft');
     paintTacBadge();
   }
 }
 function paintTacBadge(){
+  var lt=document.getElementById('ltac');
+  if(lt) Array.prototype.forEach.call(lt.children, function(b){ var t=+b.getAttribute('data-tac'); b.textContent=T(TACNAME[t]); b.classList.toggle('on', TACTIC[HUMAN]===t); });
   var e=document.getElementById('tacbadge');
   if(e) e.textContent = (state==='menu')?'':(T('tactic')+' · '+T(TACNAME[TACTIC[HUMAN]]));
 }
@@ -1974,6 +2055,10 @@ function toast(txt,dur){
   e.textContent=txt; e.style.opacity=1; toastT=dur||1.8;
 }
 
+document.getElementById('ltac').addEventListener('click', function(e){
+  var b=e.target.closest && e.target.closest('[data-tac]'); if(!b) return;
+  setTactic(HUMAN, +b.getAttribute('data-tac')); paintTacBadge();
+});
 /* ---------- пауза ---------- */
 function togglePause(){
   if(state==='menu'||state==='over') return;
@@ -2159,6 +2244,7 @@ function showResult(){
   setText('oWinner', w);
   setText('oAgain', T('again'));
   setText('oMenu', T('mainMenu'));
+  var onx=document.getElementById('oNext'); if(onx) onx.style.display='none';
   MENU.foc.result=0;
   /* гость реванш не начинает — его запускает хост */
   var ag=document.getElementById('oAgain'); if(ag) ag.style.display=(NET.on && NET.role==='guest')?'none':'';
@@ -2169,12 +2255,13 @@ function hideResult(){
 }
 function backToMenu(){
   hideResult(); setPaused(false);
-  if(state!=='menu' && state!=='over') EV.emit('match:abort',{score:score.slice()});
+  if(state!=='menu' && state!=='over' && !TRAIN.on) EV.emit('match:abort',{score:score.slice()});
   state='menu';
   var st=document.getElementById('start');
   st.style.display='block';
-  /* из сетевого матча — к подготовке в той же комнате (реванш), иначе в главное меню */
-  MENU.setStack(ONLINE && NET.on ? ['main','mode','friend','prep'] : ['main']);
+  /* из урока — к списку уроков; из сетевого матча — к подготовке в той же комнате (реванш); иначе в главное меню */
+  var wasTrain=TRAIN.on; trainStop();
+  MENU.setStack(wasTrain ? ['main','train'] : (ONLINE && NET.on ? ['main','mode','friend','prep'] : ['main']));
   netStatus(NET.status||T('notConnected'));
   paintTacBadge();
 }
@@ -2267,6 +2354,8 @@ function camUpdate(dt){
   var FOCUS_MARGIN = 1.0;
   var focusTargetX = clamp(carrier ? carrier.x : targetFocusX, -RL + FOCUS_MARGIN, RL - FOCUS_MARGIN);
   var focusTargetZ = clamp(carrier ? carrier.z : targetFocusZ, -RW + FOCUS_MARGIN, RW - FOCUS_MARGIN);
+  /* урок тренировки может держать в кадре нужное место (ворота — не под экранными кнопками справа) */
+  if(TRAIN.on && TRAIN.L && TRAIN.L.cam){ var cf=TRAIN.L.cam(focusTargetX, focusTargetZ); focusTargetX=cf[0]; focusTargetZ=cf[1]; }
 
   // Smooth focus (gain 6 = ~0.4-0.5s, smooth on possession change/faceoff)
   cam.focusX = lerp(cam.focusX, focusTargetX, Math.min(1, dt * 6));
@@ -3815,8 +3904,9 @@ function render(){
   var _to=pfNow();
   if(RSKIP.ovl) return;
   /* пустую накладку не трогаем: чистка и загрузка холста на весь экран — лишняя работа компоновщику */
-  if(!spray.length && !stick.on && !OVL_DIRTY){ pfAdd('ovl',_to); return; }
-  OVL_DIRTY = spray.length>0 || stick.on;
+  var _tr=TRAIN.on && TRAIN.L && TRAIN.L.draw && !TRAIN.res;
+  if(!spray.length && !stick.on && !OVL_DIRTY && !_tr){ pfAdd('ovl',_to); return; }
+  OVL_DIRTY = spray.length>0 || stick.on || _tr;
   sctx.setTransform(DPR,0,0,DPR,0,0);
   sctx.clearRect(0,0,W,H);
   for(var s2=0;s2<spray.length;s2++){
@@ -3827,6 +3917,7 @@ function render(){
     sctx.beginPath(); sctx.arc(q3[0],q3[1],Math.max(1,F/q3[2]*0.05),0,6.283); sctx.fill();
   }
   sctx.globalAlpha=1;
+  if(_tr) TRAIN.L.draw(sctx);
   if(stick.on){
     var m=Math.max(38,H*0.11);
     sctx.globalAlpha=0.26; sctx.strokeStyle='#fff'; sctx.lineWidth=2;
@@ -5135,6 +5226,7 @@ function frameStepInner(dt){
   var _vs=viewSize();
   if(_vs[0]!==VW || _vs[1]!==VH) layout();
 
+  if(TRAIN.on && TRAIN.bot && TRAIN.L && TRAIN.L.bot && !PAUSED && state==='play') TRAIN.L.bot(dt);
   readInput();
   MENU.tick(dt);        /* после readInput: Esc / Start, открывшие паузу, меню в этом кадре уже не видит нажатыми */
   MUSIC.tick(dt);
@@ -5190,6 +5282,7 @@ function frameStepInner(dt){
   } else {
     var _ts2=pfNow();
     sim(dt);
+    if(TRAIN.on) trainTick(dt);
     pfAdd('sim',_ts2);
     if(netHost()){
       var _tn2=pfNow();
@@ -5375,7 +5468,7 @@ var MSCR={
     var qd=clubName(CLUBS[LAST.my])+' — '+clubName(CLUBS[LAST.op])+' · '+T(diffKey()).toLowerCase()+' · '+T('min'+LAST.min);
     return mHead('', '<div class="mlang mf mlast" data-adj="lang" data-ord="2">'+lg+'</div>', true)+
       '<div class="mleft"><div class="mlist">'+mItem('quick',T('mQuick'),qd)+mItem('mode',T('mMode'),T('mModeD'))+
-      mItem('train',T('mTrain'),T('mTrainD'),'<span class="soon">'+mEsc(T('soon'))+'</span>','dis')+
+      mItem('train',T('mTrain'),T('mTrainD')+' · '+T('tMedalsP')+' '+tMedals()+' / 30')+
       mItem('shop',T('mShop'),T('mShopD'))+mItem('rules',T('mRules'),T('mRulesD'))+mItem('settings',T('mSettings'),T('mSettingsD'))+'</div></div>'+
       '<div class="mright"><div class="mprof mglass mf mlast" data-act="profile" data-ord="1">'+mAvatar()+'<span class="pn"><b>'+mEsc(mUserName())+'</b>'+
       '<i>'+mEsc(T('mProfile'))+' · '+PROF.w+'–'+PROF.d+'–'+PROF.l+'</i></span></div>'+
@@ -5411,6 +5504,15 @@ var MSCR={
       mRow('sfx',T('mSfx'),mBar('sfx',VOL.sfx),'',' data-info="mSfxD"')+mRow('vib',T('mVib'),mTog(VIBRO),'',' data-info="mVibD"');
     return mHead(T('mSettings'))+'<div class="mleft"><div class="mopts">'+rows+'</div></div>'+
       '<div class="mright"><div class="mcard mglass" data-paint="setR"></div></div>';
+  },
+  train:function(){
+    var it='';
+    for(var i=0;i<11;i++){
+      var pr=TPROG.l[LESSONS[i].key]||{}, md=i<10 ? '<span class="md '+(['e','b','s','g'][pr.m|0])+'"></span>' : '';
+      it+='<div class="mi mf'+(pr.done?' ok':'')+'" data-act="lesson" data-i="'+i+'"><span class="n">'+(i<10?i+1:'∞')+'</span><span class="t">'+mEsc(LT(i).n)+'</span>'+md+'</div>';
+    }
+    return mHead(T('mTrain'), '<span class="mpill">'+mEsc(T('tMedalsP'))+' '+tMedals()+' / 30</span>')+
+      '<div class="mleft"><div class="mles">'+it+'</div></div><div class="mright"><div class="mcard mglass mlcard" data-paint="lessonR"></div></div>';
   },
   profile:function(){
     var st=[['pMatches',PROF.m],['pWins',PROF.w],['pDraws',PROF.d],['pLosses',PROF.l],['pGoals',PROF.g+' : '+PROF.ga],['pBest',PROF.best],['pOnline',PROF.online]];
@@ -5570,6 +5672,16 @@ var MPAINT={
     el.innerHTML='<h3>'+mEsc(row?row.textContent:T('mGfx'))+'</h3><div class="mnote">'+mEsc(T(k))+'</div>'+
       '<div class="mnote dim" style="margin-top:6px">'+mEsc(T('mDevD'))+'</div>';
   },
+  lessonR:function(el){
+    var f=MENU.focusedEl('train'), i=f && f.getAttribute('data-i')!==null ? +f.getAttribute('data-i') : 0;
+    var L=LESSONS[i], lt=LT(i), pr=TPROG.l[L.key]||{};
+    if(L.free){ el.innerHTML='<h3>'+mEsc(lt.n)+'</h3><div class="mnote">'+mEsc(T('tFreeD'))+'</div><button class="mbtn mf" data-act="lstart" data-i="'+i+'">'+mEsc(T('tStart'))+'</button>'; return; }
+    var g='<div>✓ '+mEsc(T('tDone'))+': '+mEsc(lt.d)+'</div>';
+    ['b','s','g'].forEach(function(c,k){ g+='<div><span class="md '+c+'"></span>'+mEsc([T('tBronze'),T('tSilver'),T('tGold')][k])+': '+mEsc(k===0 && L.kind==='time' ? lt.d : tTh(L,k))+'</div>'; });
+    el.innerHTML='<h3>'+mEsc(T('tLesson')+' '+(i+1)+' · '+lt.n)+'</h3><div class="mnote">'+mEsc(lt.t)+' · '+mEsc(lt.h)+'</div><div class="goal">'+g+'</div>'+
+      '<div class="best">'+mEsc(T('tBest'))+': '+(pr.best!==undefined ? mEsc(tFmt(L,pr.best))+' · '+mEsc([T('tNoMedal'),T('tBronze'),T('tSilver'),T('tGold')][pr.m|0]) : mEsc(T('tNotYet')))+'</div>'+
+      '<button class="mbtn mf" data-act="lstart" data-i="'+i+'">'+mEsc(T('tStart'))+'</button>';
+  },
   ruleR:function(el){
     var f=MENU.focusedEl('rules'), i=f&&f.getAttribute('data-i')!==null ? +f.getAttribute('data-i') : 0;
     el.innerHTML=RULE_ICON[i]+'<h3>'+mEsc(T(RULES[i][0]))+'</h3><div class="mnote">'+mEsc(T(RULES[i][1]))+'</div>';
@@ -5623,11 +5735,17 @@ MENU.setFocus=function(i, L){
   var k=MENU.key(L), was=MENU.foc[k];
   MENU.foc[k]=i;
   for(var j=0;j<it.length;j++) it[j].classList.toggle('on', j===i);
+  /* в прокручиваемом списке (уроки) выбранный пункт всегда виден */
+  var el=it[i], sc=el.closest && el.closest('.mles');
+  if(sc){ var top=el.offsetTop, h=el.offsetHeight;
+    if(top-8<sc.scrollTop) sc.scrollTop=Math.max(0,top-8);
+    else if(top+h+12>sc.scrollTop+sc.clientHeight) sc.scrollTop=top+h+12-sc.clientHeight; }
   if(was!==i && L==='menu') MENU.onFocus(k);
 };
 /* правая часть экрана зависит от выбранного пункта */
 MENU.onFocus=function(id){
   var s=MENU.sec[id]; if(!s) return;
+  if(id==='train'){ var fl=MENU.focusedEl('train'); if(fl && fl.getAttribute('data-act')==='lstart') return; }
   if(id==='friend'){ var a=MENU.focusedAct('friend'); if(a==='create'||a==='joinf'){ if(a!==MENU.friendMode){ MENU.friendMode=a; MENU.paintParts(s); MENU.refocus(); } } }
   else MENU.paintParts(s);
 };
@@ -5809,13 +5927,17 @@ var ACT={
   go:function(){ goStart(); },
   topic:function(){},
   noop:function(){},
+  train:function(){ MENU.go('train'); },
+  lesson:function(el){ trainStart(+el.getAttribute('data-i')); },
+  lstart:function(el){ trainStart(+el.getAttribute('data-i')); },
+  lnext:function(){ if(TRAIN.i<9) trainStart(TRAIN.i+1); },
   profile:function(){ MENU.go('profile'); },
   shop:function(){ MENU.go('shop'); },
   resume:function(){ setPaused(false); },
   pctrl:function(){ openPauseSub('rules'); },
   pset:function(){ openPauseSub('settings'); },
   menu:function(){ backToMenu(); },
-  again:function(){ startMatchAgain(); }
+  again:function(){ if(TRAIN.on) trainStart(TRAIN.i); else startMatchAgain(); }
 };
 function barVal(ev, el, cur, d){
   var bar=ev && ev.target && ev.target.closest && ev.target.closest('.mbar');
@@ -6038,6 +6160,483 @@ function mFontLoad(){
     try{ document.fonts.add(new FontFace('BVR Sport','url('+f[0]+') format("woff2")',{style:'italic', weight:'800', unicodeRange:f[1], display:'swap'})); }catch(e){}
   });
 }
+
+/* уроки: [название, задача на экране, что значит «выполнено», подсказка кнопки]; последний — свободная тренировка */
+var LTX={
+ru:[['Катание и ускорение','Проедь через 6 ворот-флажков','все 6 ворот','Держи RT — ускорение'],
+  ['Пас','Отдай 5 точных пасов партнёрам в кругах','5 точных пасов','Стик на партнёра и A — пас'],
+  ['Пас в разрез','Партнёр уходит в отрыв — пас на ход','4 паса на ход','Y — пас в разрез'],
+  ['Навес','Навес партнёру — шайба летит по воздуху','3 навеса','X — навес'],
+  ['Бросок с зарядом','Попади в горящую мишень','3 попадания из 8','Держи B — заряд, отпусти — бросок; стик — куда'],
+  ['Отбор и силовой','Отбери шайбу у соперника','3 отбора','B — отбор клюшкой · X на ходу — силовой'],
+  ['Смена игрока','Подбери шайбу ближайшим игроком','5 подборов','LB — смена игрока'],
+  ['Выход вратаря','Соперник выходит один на один — не пропусти','5 атак из 8 без гола','Держи Y — вратарь идёт на игрока'],
+  ['Тактика','Включай тактику, которую просит тренер','3 смены','Крестовина или 1 2 3 · на экране — кнопки сверху'],
+  ['Итог: атака 2 на 1','Ты и партнёр против защитника — забей','1 гол из 5 атак','A — пас · B — бросок'],
+  ['Свободная тренировка','Пробуй всё — шайба вернётся сама','','Пауза → Главное меню — выход']],
+en:[['Skating and sprint','Skate through 6 flag gates','all 6 gates','Hold RT to sprint'],
+  ['Pass','Make 5 clean passes to teammates in circles','5 clean passes','Stick at a teammate, A to pass'],
+  ['Through pass','A teammate breaks away — lead him','4 passes in stride','Y — through pass'],
+  ['Lob pass','Lob it to your teammate — the puck flies','3 lobs','X — lob pass'],
+  ['Charged shot','Hit the lit target','3 hits of 8','Hold B to charge, release to shoot; stick to aim'],
+  ['Poke and body check','Take the puck from the opponent','3 takeaways','B — poke check · X at speed — body check'],
+  ['Switch player','Get the puck with the nearest player','5 pick-ups','LB — switch player'],
+  ['Goalie charge','A breakaway — keep it out','5 of 8 rushes without a goal','Hold Y — the goalie charges the carrier'],
+  ['Tactics','Switch to the tactics the coach asks for','3 switches','D-pad or 1 2 3 · on screen — buttons at the top'],
+  ['Final: 2-on-1 rush','You and a teammate against a defender — score','1 goal in 5 rushes','A — pass · B — shot'],
+  ['Free skate','Try everything — the puck comes back','','Pause → Main menu to leave']],
+id:[['Meluncur dan lari','Lewati 6 gerbang bendera','semua 6 gerbang','Tahan RT — lari cepat'],
+  ['Umpan','Berikan 5 umpan tepat ke rekan di lingkaran','5 umpan tepat','Arahkan stik ke rekan, A — umpan'],
+  ['Umpan terobosan','Rekan lepas dari lawan — umpan ke depannya','4 umpan sambil lari','Y — umpan terobosan'],
+  ['Umpan lambung','Umpan lambung ke rekan — keping melayang','3 umpan lambung','X — umpan lambung'],
+  ['Tembakan bertenaga','Kenai sasaran yang menyala','3 kena dari 8','Tahan B untuk mengisi, lepas untuk menembak; stik — arah'],
+  ['Rebut dan benturan','Rebut keping dari lawan','3 rebutan','B — rebut tongkat · X sambil lari — benturan'],
+  ['Ganti pemain','Ambil keping dengan pemain terdekat','5 ambilan','LB — ganti pemain'],
+  ['Kiper maju','Lawan lepas sendirian — jangan kebobolan','5 dari 8 serangan tanpa gol','Tahan Y — kiper maju ke pembawa keping'],
+  ['Taktik','Pilih taktik yang diminta pelatih','3 kali ganti','D-pad atau 1 2 3 · di layar — tombol di atas'],
+  ['Final: serangan 2 lawan 1','Kamu dan rekan melawan bek — cetak gol','1 gol dari 5 serangan','A — umpan · B — tembak'],
+  ['Latihan bebas','Coba semuanya — keping kembali sendiri','','Jeda → Menu utama untuk keluar']]};
+/* ============================================================
+   ТРЕНИРОВКА (docs/MENU_PLAN.md, этап 5)
+   10 уроков и свободная тренировка — офлайн, на той же симуляции (shared/sim.js не меняется). Урок расставляет
+   игроков (лишние — boxed: их нет на льду), держит «прибитых» на месте или ведёт по маршруту (TRAIN.pins — после
+   каждого шага), сам решает, что такое попытка, и перехватывает гол и свисток: вместо вбрасывания — новая попытка.
+   Медали: бронза — урок выполнен, серебро и золото — по времени, точности или числу попыток. Лучшая медаль урока —
+   в CloudStorage + localStorage ('train'). TRAIN.bot — скрипт ввода для автотеста (tools/smoke-train.mjs): ведёт
+   своего игрока стиком и кнопками, как человек.
+   ============================================================ */
+var TRAIN={on:false, i:-1, L:null, t:0, n:0, miss:0, tries:0, d:{}, pins:[], res:null, bot:false, msg:'', msgT:0, hud:''};
+var TPROG={l:{}};
+prefGet('train', function(v){
+  var o=null; try{ o=JSON.parse(v); }catch(e){}
+  if(!o || !o.l) return;
+  for(var k in o.l){ var a=o.l[k], b=TPROG.l[k]; if(a && (!b || (a.m|0)>(b.m|0) || ((a.m|0)===(b.m|0) && (a.done && !b.done)))) TPROG.l[k]=a; }
+  if(typeof MENU!=='undefined' && MENU.ready) MENU.repaint();
+});
+function tMedals(){ var s=0; for(var k in TPROG.l) s+=TPROG.l[k].m|0; return s; }
+
+/* ---------- расстановка ---------- */
+function tAD(){ return attackDir(HUMAN); }
+function tX(x){ return tAD()*x; }
+function tYaw(back){ return (tAD()>0)!==!!back ? 0 : Math.PI; }
+function tMine(){ return players.filter(function(p){ return p.team===HUMAN && !p.goalie; }); }
+function tTheirs(){ return players.filter(function(p){ return p.team!==HUMAN && !p.goalie; }); }
+function tGK(team){ for(var i=0;i<players.length;i++) if(players[i].goalie && players[i].team===team) return players[i]; return null; }
+function tOff(p){ p.boxed=1; p.x=0; p.z=-90; p.vx=0; p.vz=0; p.down=0; }
+function tOn(p, x, z, yaw){ p.boxed=0; p.down=0; p.os=0; p.x=x; p.z=z; p.vx=0; p.vz=0; p.spd=0; if(yaw!==undefined) p.yaw=yaw; }
+/* оставить на льду: своих полевых n, чужих m, вратарей — по флагам; остальные — со льда */
+function tStage(n, m, gkMine, gkTheirs){
+  var a=tMine(), b=tTheirs(), i;
+  for(i=0;i<a.length;i++) if(i>=n) tOff(a[i]);
+  for(i=0;i<b.length;i++) if(i>=m) tOff(b[i]);
+  var g0=tGK(HUMAN), g1=tGK(1-HUMAN);
+  if(g0){ if(gkMine){ g0.boxed=0; g0.x=-tAD()*GOAL_X+tAD()*0.4; g0.z=0; } else tOff(g0); }
+  if(g1){ if(gkTheirs){ g1.boxed=0; g1.x=tAD()*GOAL_X-tAD()*0.4; g1.z=0; } else tOff(g1); }
+  return {mine:a.slice(0,n), theirs:b.slice(0,m)};
+}
+function tCtrl(p){ HS[HUMAN].ctrl=p; controlled=p; }
+function tGive(p){ puck.owner=p; puck.free=0; puck.vx=puck.vy=puck.vz=0; puck.y=0.05;
+  puck.x=p.x+Math.cos(p.yaw)*0.95; puck.z=p.z+Math.sin(p.yaw)*0.95; lastTouch=p; LASTPASS=null; }
+function tLoose(x, z, vx, vz){ puck.owner=null; puck.x=x; puck.z=z; puck.y=0.05; puck.vx=vx||0; puck.vz=vz||0; puck.vy=0; puck.free=0; }
+/* шайба остаётся у принявшего (на клюшке, без владельца — его ИИ ею не сыграет), потом возвращается игроку */
+function tHold(p){ puck.owner=null; puck.vx=puck.vy=puck.vz=0; puck.free=99; puck.x=p.x+Math.cos(p.yaw)*0.95; puck.z=p.z+Math.sin(p.yaw)*0.95; }
+function tPin(p, x, z, o){ o=o||{}; var q={p:p, x:x, z:z, yaw:o.yaw, soft:!!o.soft, vx:o.vx||0, vz:o.vz||0}; TRAIN.pins.push(q); return q; }
+function tPinsApply(dt){
+  for(var i=0;i<TRAIN.pins.length;i++){
+    var q=TRAIN.pins[i], p=q.p; if(p.boxed) continue;
+    if(q.soft && p===HS[HUMAN].ctrl) continue;
+    q.x+=q.vx*dt; q.z+=q.vz*dt;
+    if(q.soft){ var k=Math.min(1,dt*3); p.x+=(q.x-p.x)*k; p.z+=(q.z-p.z)*k; } else { p.x=q.x; p.z=q.z; }
+    p.vx=q.vx; p.vz=q.vz; p.spd=Math.hypot(q.vx,q.vz); p.down=0;
+    if(q.yaw!==undefined) p.yaw=q.yaw; else if(p.spd>0.5) p.yaw=Math.atan2(q.vz,q.vx);
+  }
+}
+function tFace(p, q){ return Math.atan2(q.z-p.z, q.x-p.x); }
+/* где игрок со скоростью v встретит свободную шайбу (её трение не учитываем — на коротком отрезке мало) */
+function tIntercept(p, v){
+  var ox=puck.x-p.x, oz=puck.z-p.z, a=puck.vx*puck.vx+puck.vz*puck.vz-v*v, b=2*(ox*puck.vx+oz*puck.vz), c=ox*ox+oz*oz, t=-1;
+  if(Math.abs(a)<1e-6) t = b<0 ? -c/b : -1;
+  else { var d=b*b-4*a*c; if(d>=0){ var r=Math.sqrt(d), t1=(-b-r)/(2*a), t2=(-b+r)/(2*a); t=Math.min(t1,t2)>0?Math.min(t1,t2):Math.max(t1,t2); } }
+  if(!(t>0) || t>2.5) return [puck.x, puck.z];
+  return [puck.x+puck.vx*t, puck.z+puck.vz*t];
+}
+
+/* ---------- ход урока ---------- */
+function tMsg(k, good){ TRAIN.msg=T(k); TRAIN.msgGood=!!good; TRAIN.msgT=1.6; if(good){ buzz(14,'soft'); SFX.swap(); } }
+function tWin(){ TRAIN.n++; }
+function trainTick(dt){
+  var L=TRAIN.L; if(!L || TRAIN.res) return;
+  /* гол / свисток: урок сам ставит новую попытку */
+  if(state==='goal' || state==='face'){ state='play'; stateT=0; score[0]=0; score[1]=0; if(L.stop) L.stop(); }
+  /* удаление (силовой против игрока без шайбы): без бокса, но попытка пропадает */
+  if(pen.length){ for(var i=0;i<pen.length;i++) pen[i].p.boxed=0; pen.length=0; tMsg('tPen'); if(L.stop) L.stop(); }
+  offWarn=-1; icing.armed=false; clock=99*60;
+  TRAIN.t+=dt; if(TRAIN.msgT>0) TRAIN.msgT-=dt;
+  tPinsApply(dt);
+  if(L.tick) L.tick(dt);
+  if(!TRAIN.res && L.limit && TRAIN.t>=L.limit) trainEnd(L.isDone ? L.isDone() : false);
+  trainHud();
+}
+EV.on('*', function(e, name){ if(TRAIN.on && TRAIN.L && !TRAIN.res && TRAIN.L.ev) TRAIN.L.ev(name, e); });
+
+/* медали: 'time' и 'tries' (число попыток) — меньше лучше, 'count' — больше лучше; бронза — урок выполнен */
+function tMedal(L, v){
+  if(!(L.isDone ? L.isDone() : true)) return 0;
+  var th=L.th;
+  if(L.kind==='count') return v>=th[2]?3:(v>=th[1]?2:1);
+  return v<=th[2]?3:(v<=th[1]?2:1);
+}
+function trainEnd(done){
+  var L=TRAIN.L; if(TRAIN.res) return;
+  var v=L.val ? L.val() : TRAIN.t, m=done ? tMedal(L, v) : 0;
+  TRAIN.res={done:!!done, medal:m, v:v};
+  if(L.key!=='free'){
+    var p=TPROG.l[L.key]||{m:0, done:false};
+    if(m>(p.m|0)) p.m=m;
+    if(done) p.done=true;
+    if(done && (p.best===undefined || (L.kind==='count' ? v>p.best : v<p.best))) p.best=v;
+    TPROG.l[L.key]=p; prefSet('train', JSON.stringify(TPROG));
+  }
+  IN.A=IN.B=IN.X=IN.Y=IN.RTb=IN.LB=false; stick.dx=0; stick.dz=0;
+  state='over';
+  if(done) buzz(30,'goal');
+  showTrainResult();
+}
+function tFmt(L, v){
+  if(L.kind==='count') return v+' '+T('tOf')+' '+(L.of||L.tries);
+  if(L.kind==='tries') return v+' '+T('tTriesN');
+  return (Math.round(v*10)/10).toFixed(1).replace('.', LANG==='en'?'.':',')+' '+T('tSec');
+}
+function tTh(L, k){
+  if(L.kind==='count') return L.th[k]+' '+T('tOf')+' '+(L.of||L.tries);
+  if(L.kind==='tries') return '≤ '+L.th[k]+' '+T('tTriesN');
+  return '≤ '+L.th[k]+' '+T('tSec');
+}
+
+/* ---------- уроки ---------- */
+function tBotMove(wx, wz, mag){
+  var Lw=Math.hypot(wx,wz); if(Lw<0.05){ stick.dx=0; stick.dz=0; return; }
+  wx/=Lw; wz/=Lw; mag=mag===undefined?1:mag;
+  stick.dx=(wx*_cyw - wz*_syw)*mag; stick.dz=(wx*_syw + wz*_cyw)*mag;
+}
+function tBotTap(k){ IN[k]=true; TRAIN.d.tap=k; TRAIN.d.tapT=0.07; }
+function tBotRelease(dt){ if(TRAIN.d.tap){ TRAIN.d.tapT-=dt; if(TRAIN.d.tapT<=0){ IN[TRAIN.d.tap]=false; TRAIN.d.tap=null; } } }
+function tDrawRing(c, x, z, r, col, w){
+  c.strokeStyle=col; c.lineWidth=w||3; c.beginPath();
+  for(var i=0;i<=24;i++){ var a=i/24*6.283, q=pt(x+Math.cos(a)*r, 0.03, z+Math.sin(a)*r); if(q[2]<1) return; if(i) c.lineTo(q[0],q[1]); else c.moveTo(q[0],q[1]); }
+  c.stroke();
+}
+function tDrawCone(c, x, z, col){
+  var a=pt(x,0,z), b=pt(x,1.1,z); if(a[2]<1) return;
+  var w=Math.max(3, F/a[2]*0.28);
+  c.fillStyle=col; c.beginPath(); c.moveTo(b[0],b[1]); c.lineTo(a[0]-w,a[1]); c.lineTo(a[0]+w,a[1]); c.closePath(); c.fill();
+  c.strokeStyle='rgba(0,0,0,.35)'; c.lineWidth=1; c.stroke();
+}
+function tDrawTarget(c, z, col){
+  var gx=tAD()*GOAL_X, q=pt(gx, 0.35, z); if(q[2]<1) return;
+  var r=Math.max(5, F/q[2]*0.3);
+  c.lineWidth=3; c.strokeStyle='#fff'; c.beginPath(); c.arc(q[0],q[1],r,0,6.283); c.stroke();
+  c.fillStyle=col; c.beginPath(); c.arc(q[0],q[1],r*0.45,0,6.283); c.fill();
+}
+
+var LESSONS=[
+/* 1. катание и ускорение: 6 ворот-флажков слаломом */
+{key:'skate', btn:'RT', kind:'time', th:[45,24,17], limit:45,
+ setup:function(){ var s=tStage(1,0,false,false), me=s.mine[0], D=TRAIN.d;
+   tOn(me, tX(-23), 0, tYaw()); tCtrl(me); tGive(me);
+   D.g=0; D.gates=[]; for(var i=0;i<6;i++) D.gates.push({x:tX(-16+i*7), z:(i%2?-4:4)}); D.px=me.x; },
+ isDone:function(){ return TRAIN.d.g>=6; },
+ tick:function(dt){ var me=HS[HUMAN].ctrl, D=TRAIN.d, g=D.gates[D.g];
+   if(g && (D.px-g.x)*(me.x-g.x)<=0 && D.px!==me.x){ if(Math.abs(me.z-g.z)<1.8){ D.g++; tMsg('tGate',true); if(D.g>=6) trainEnd(true); } else tMsg('tGateMiss'); }
+   D.px=me.x;
+   if(puck.owner!==me && !TRAIN.res){ D.lost=(D.lost||0)+dt; if(D.lost>1) { tGive(me); D.lost=0; } } else D.lost=0; },
+ main:function(){ return TRAIN.d.g+' / 6'; },
+ draw:function(c){ var D=TRAIN.d; D.gates.forEach(function(g,i){ var col=i<D.g?'#5ad07f':(i===D.g?'#ffd166':'#ff8a3d'); tDrawCone(c,g.x,g.z-1.8,col); tDrawCone(c,g.x,g.z+1.8,col); }); },
+ bot:function(dt){ var me=HS[HUMAN].ctrl, D=TRAIN.d, g=D.gates[D.g]; if(!g) return; var ad=tAD(), ahead=(g.x-me.x)*ad;
+   /* к воротам — через точку перед ними на их линии по ширине; проскочил мимо — назад к этой точке */
+   if(ahead<0 || (ahead<3.2 && Math.abs(me.z-g.z)>1.1)) tBotMove(g.x-ad*3.6-me.x, g.z-me.z);
+   else if(Math.abs(me.z-g.z)>1.1 && ahead>=3.2) tBotMove(g.x-ad*3.6-me.x, g.z-me.z);
+   else tBotMove(g.x+ad*3-me.x, g.z-me.z);
+   IN.RTb=true; }},
+
+/* 2. пас: 5 точных пасов партнёрам в кругах */
+{key:'pass', btn:'A', kind:'time', th:[60,25,18], limit:60, goal:5,
+ setup:function(){ var s=tStage(4,0,false,false), me=s.mine[0], D=TRAIN.d;
+   tOn(me, tX(-6), 0, tYaw()); tCtrl(me); tGive(me); D.me=me; D.mates=[];
+   [[6,-6],[10,0],[6,6]].forEach(function(xy,i){ var p=s.mine[i+1]; tOn(p, tX(xy[0]), xy[1]); p.yaw=tFace(p,me); tPin(p, p.x, p.z, {yaw:p.yaw}); D.mates.push(p); });
+   D.passT=-1; D.ret=0; },
+ isDone:function(){ return TRAIN.n>=5; },
+ val:function(){ return TRAIN.t; },
+ ev:function(n, e){ var D=TRAIN.d;
+   if(n==='pass' && e.t===HUMAN) D.passT=TRAIN.t;
+   if(n==='pass:recv' && e.t===HUMAN && players[e.p]!==D.me){ tWin(); tMsg('tNice',true); tHold(players[e.p]); D.ret=0.5; D.passT=-1; if(TRAIN.n>=5) trainEnd(true); } },
+ tick:function(dt){ var D=TRAIN.d;
+   if(D.ret>0){ D.ret-=dt; if(D.ret<=0){ tGive(D.me); tCtrl(D.me); } return; }
+   if(D.passT>=0 && TRAIN.t-D.passT>2.2){ TRAIN.miss++; tMsg('tMiss'); D.passT=-1; tGive(D.me); tCtrl(D.me); } },
+ main:function(){ return TRAIN.n+' / 5'; },
+ draw:function(c){ TRAIN.d.mates.forEach(function(p){ tDrawRing(c,p.x,p.z,1.4,'#ffd166'); }); },
+ bot:function(dt){ var D=TRAIN.d, me=D.me; tBotRelease(dt);
+   if(puck.owner!==me || D.ret>0){ stick.dx=stick.dz=0; D.bt=0; return; }
+   var tg=D.mates[TRAIN.n%3]; D.bt=(D.bt||0)+dt; tBotMove(tg.x-me.x, tg.z-me.z, 0.5);
+   if(D.bt>0.3){ tBotTap('A'); D.bt=-0.6; } }},
+
+/* 3. пас в разрез: партнёр уходит в отрыв, пас на ход */
+{key:'lead', btn:'Y', kind:'tries', th:[8,6,4], tries:8, of:8,
+ setup:function(){ var s=tStage(2,0,false,false), D=TRAIN.d; D.me=s.mine[0]; D.mate=s.mine[1]; this.next(); },
+ next:function(){ var D=TRAIN.d; TRAIN.pins=[];
+   /* пас на ход в симуляции — на 0.55 с хода партнёра и ещё 3.2 м вперёд: партнёр успевает, если пасующий дальше
+      ~19 м от этой точки, а партнёр уже разогнался */
+   tOn(D.me, tX(-14), -6, tYaw()); tCtrl(D.me); tGive(D.me);
+   tOn(D.mate, tX(-9), 6, tYaw()); D.q=tPin(D.mate, D.mate.x, 6, {vx:tAD()*9}); D.at=0; D.over=0; D.lead=false; D.flying=false; },
+ isDone:function(){ return TRAIN.n>=4; },
+ val:function(){ return TRAIN.tries; },
+ stop:function(){ TRAIN.d.over=0.01; },
+ ev:function(n, e){ var D=TRAIN.d; if(D.over) return;
+   if(n==='pass' && e.t===HUMAN){ D.lead=!!e.lead; D.flying=true; }
+   if(n==='pass:recv' && players[e.p]===D.mate){ tHold(D.mate); D.q.vx=0; D.q.vz=0; D.flying=false;
+     if(D.lead){ tWin(); tMsg('tNice',true); } else tMsg('tNeedLead'); D.over=0.8; } },
+ tick:function(dt){ var D=TRAIN.d; D.at+=dt;
+   /* пас в пути: партнёр едет на точку встречи с шайбой (до 9.5 м/с — ускорение), как живой игрок */
+   if(!D.over && D.flying && !puck.owner){ var it=tIntercept(D.mate, 9.5);
+     var dx=it[0]-D.q.x, dz=it[1]-D.q.z, Lq=Math.hypot(dx,dz)||1, sp=Math.min(9.5, Lq/Math.max(dt,0.016));
+     D.q.vx=dx/Lq*sp; D.q.vz=dz/Lq*sp; }
+   if(!D.over && (D.mate.x-tX(22))*tAD()>0){ tMsg('tMiss'); D.over=0.6; }
+   if(D.over){ D.over-=dt; if(D.over<=0){ TRAIN.tries++; if(TRAIN.n>=4) trainEnd(true); else if(TRAIN.tries>=8) trainEnd(false); else this.next(); } } },
+ main:function(){ return TRAIN.n+' / 4 · '+T('tTries')+' '+(TRAIN.tries+1)+'/8'; },
+ bot:function(dt){ var D=TRAIN.d; tBotRelease(dt); if(D.over || puck.owner!==D.me){ stick.dx=stick.dz=0; return; }
+   tBotMove(D.mate.x+tAD()*4-D.me.x, D.mate.z-D.me.z, 0.45); if(D.at>0.55 && !D.sent){ tBotTap('Y'); D.sent=true; } if(D.at<0.1) D.sent=false; }},
+
+/* 4. навес: шайба над клюшкой защитника */
+{key:'lob', btn:'X', kind:'tries', th:[8,5,3], tries:8, of:8,
+ setup:function(){ var s=tStage(2,0,false,false), D=TRAIN.d; D.me=s.mine[0]; D.mate=s.mine[1]; this.next(); },
+ next:function(){ var D=TRAIN.d; TRAIN.pins=[];
+   tOn(D.me, tX(-7), 0, tYaw()); tCtrl(D.me); tGive(D.me);
+   tOn(D.mate, tX(8), (TRAIN.tries%2?3:-3)); D.mate.yaw=tFace(D.mate, D.me); tPin(D.mate, D.mate.x, D.mate.z, {yaw:D.mate.yaw});
+   D.over=0; D.lift=false; D.passT=-1; },
+ isDone:function(){ return TRAIN.n>=3; },
+ val:function(){ return TRAIN.tries; },
+ stop:function(){ TRAIN.d.over=0.01; },
+ ev:function(n, e){ var D=TRAIN.d; if(D.over) return;
+   if(n==='pass' && e.t===HUMAN){ D.lift=!!e.lift; D.passT=TRAIN.t; }
+   if(n==='pass:recv' && players[e.p]===D.mate){ tHold(D.mate); if(D.lift){ tWin(); tMsg('tNice',true); } else tMsg('tNeedLob'); D.over=0.8; } },
+ tick:function(dt){ var D=TRAIN.d;
+   if(!D.over && D.passT>=0 && TRAIN.t-D.passT>2.5){ tMsg('tMiss'); D.over=0.4; }
+   if(D.over){ D.over-=dt; if(D.over<=0){ TRAIN.tries++; if(TRAIN.n>=3) trainEnd(true); else if(TRAIN.tries>=8) trainEnd(false); else this.next(); } } },
+ main:function(){ return TRAIN.n+' / 3 · '+T('tTries')+' '+(TRAIN.tries+1)+'/8'; },
+ draw:function(c){ tDrawRing(c, TRAIN.d.mate.x, TRAIN.d.mate.z, 1.4, '#ffd166'); },
+ bot:function(dt){ var D=TRAIN.d; tBotRelease(dt); if(D.over || puck.owner!==D.me){ stick.dx=stick.dz=0; D.bt=0; return; }
+   D.bt=(D.bt||0)+dt; tBotMove(D.mate.x-D.me.x, D.mate.z-D.me.z, 0.4); if(D.bt>0.3){ tBotTap('X'); D.bt=-2; } }},
+
+/* 5. бросок с зарядом: мишени слева и справа в воротах, 8 шайб */
+{key:'shot', btn:'B', kind:'count', th:[3,5,7], tries:8, of:8,
+ cam:function(){ return [tX(24), 0]; },
+ setup:function(){ var s=tStage(1,0,false,false), D=TRAIN.d; D.me=s.mine[0]; D.side=1; this.next(); },
+ next:function(){ var D=TRAIN.d;
+   tOn(D.me, tX(15), 0, tYaw()); tCtrl(D.me); tGive(D.me); D.tz=D.side*0.68; D.side=-D.side; D.shotT=-1; D.pow=0; D.over=0; D.bt=0;
+   /* бросок сам целит в угол, открытый вратарём (shotAim): невидимого вратаря ставим с другой стороны — горящая
+      мишень в открытом углу, стиком её надо «дожать» (без стика шайба уходит в 0.4 м от центра — мимо) */
+   var g1=tGK(1-HUMAN); if(g1){ g1.boxed=1; g1.x=0; g1.z=D.tz>0?-90:90; } },
+ isDone:function(){ return TRAIN.n>=3; },
+ val:function(){ return TRAIN.n; },
+ stop:function(){ var D=TRAIN.d; if(!D.over){ D.over=0.6; } },
+ ev:function(n, e){ var D=TRAIN.d; if(D.over) return;
+   if(n==='shot' && e.t===HUMAN){ D.shotT=TRAIN.t; D.pow=e.power; }
+   if(n==='goal' && e.t===HUMAN){
+     if(Math.abs(e.z-D.tz)<0.22 && D.pow>=0.45){ tWin(); tMsg('tHit',true); }
+     else if(Math.abs(e.z-D.tz)<0.22) tMsg('tWeak'); else tMsg('tMiss');
+     D.over=0.7; }
+   if(n==='post'){ tMsg('tMiss'); D.over=0.7; } },
+ tick:function(dt){ var D=TRAIN.d;
+   if(!D.over && D.shotT>=0 && TRAIN.t-D.shotT>2.2){ tMsg('tMiss'); D.over=0.3; }
+   if(!D.over && D.shotT<0 && puck.owner!==D.me){ D.lost=(D.lost||0)+dt; if(D.lost>1.5){ D.lost=0; tGive(D.me); } } else D.lost=0;
+   if(D.over){ D.over-=dt; if(D.over<=0){ TRAIN.tries++; if(TRAIN.tries>=8) trainEnd(TRAIN.n>=3); else this.next(); } } },
+ main:function(){ return TRAIN.n+' · '+T('tTries')+' '+Math.min(8,TRAIN.tries+1)+'/8'; },
+ draw:function(c){ var D=TRAIN.d; tDrawTarget(c, D.tz, '#e8736f'); tDrawTarget(c, -D.tz, 'rgba(255,255,255,.25)'); },
+ bot:function(dt){ var D=TRAIN.d; if(D.over || puck.owner!==D.me){ stick.dx=stick.dz=0; IN.B=false; return; }
+   D.bt+=dt; tBotMove(tAD()*0.66, D.tz>0?0.75:-0.75, 0.35);
+   if(D.bt>0.15 && D.bt<0.85) IN.B=true; else if(D.bt>=0.85){ IN.B=false; } }},
+
+/* 6. отбор и силовой: соперник ведёт шайбу по кругу */
+{key:'poke', btn:'B', kind:'time', th:[60,40,25], limit:60,
+ setup:function(){ var s=tStage(1,1,false,false), D=TRAIN.d; D.me=s.mine[0]; D.foe=s.theirs[0];
+   tOn(D.me, tX(-6), 0, tYaw()); tCtrl(D.me); D.a=0; this.next(); },
+ next:function(){ var D=TRAIN.d; TRAIN.pins=[]; D.cx=tX(4); D.r=6; D.w=0.75;
+   tOn(D.foe, D.cx+Math.cos(D.a)*D.r, Math.sin(D.a)*D.r); D.q=tPin(D.foe, D.foe.x, D.foe.z); tGive(D.foe); D.ret=0; },
+ isDone:function(){ return TRAIN.n>=3; },
+ stop:function(){ var D=TRAIN.d; if(!D.ret) D.ret=0.8; },
+ tick:function(dt){ var D=TRAIN.d;
+   if(D.ret>0){ D.ret-=dt; if(D.ret<=0){ if(TRAIN.n>=3) trainEnd(true); else this.next(); } return; }
+   /* соперник катится по кругу (скорость ~4.5 м/с), шайба у него на клюшке */
+   D.a+=D.w*dt; var nx=D.cx+Math.cos(D.a)*D.r, nz=Math.sin(D.a)*D.r;
+   D.q.vx=(nx-D.q.x)/dt; D.q.vz=(nz-D.q.z)/dt; D.q.x=nx-D.q.vx*dt; D.q.z=nz-D.q.vz*dt;
+   if(puck.owner===D.me){ tWin(); tMsg('tNice',true); tHold(D.me); D.q.vx=D.q.vz=0; D.ret=0.8; return; }
+   if(puck.owner && puck.owner!==D.foe && puck.owner!==D.me) tGive(D.foe);
+   if(!puck.owner && Math.hypot(puck.vx,puck.vz)<0.5 && Math.hypot(puck.x-D.me.x,puck.z-D.me.z)>8) tGive(D.foe); },
+ main:function(){ return TRAIN.n+' / 3'; },
+ bot:function(dt){ var D=TRAIN.d, me=D.me; tBotRelease(dt); if(D.ret>0){ stick.dx=stick.dz=0; return; }
+   var tx=puck.x, tz=puck.z; tBotMove(tx-me.x, tz-me.z, 1); IN.RTb=true;
+   D.bt=(D.bt||0)+dt; if(Math.hypot(tx-me.x,tz-me.z)<1.7 && D.bt>0.35){ tBotTap('B'); D.bt=0; } }},
+
+/* 7. смена игрока: шайба катится к одному из партнёров — подбери её ближайшим */
+{key:'switch', btn:'LB', kind:'time', th:[90,2.4,1.7], limit:90,
+ setup:function(){ var s=tStage(3,0,false,false), D=TRAIN.d; D.ps=s.mine; D.times=[]; D.home=[[-10,-6],[-10,6],[6,0]];
+   D.home.forEach(function(xy,i){ var p=s.mine[i]; tOn(p, tX(xy[0]), xy[1], tYaw()); tPin(p, p.x, p.z, {soft:true}); });
+   D.k=0; this.next(); },
+ next:function(){ var D=TRAIN.d;
+   for(var i=0;i<3;i++){ var q=TRAIN.pins[i]; q.x=tX(D.home[i][0]); q.z=D.home[i][1]; }
+   var ti=(D.k*2+1)%3, tg=D.ps[ti]; D.k++;
+   /* ведёт другой игрок: переключиться — часть задания */
+   tCtrl(D.ps[(ti+1)%3]);
+   /* шайба из центральной зоны (в 8–9 м от всех) катится к партнёру и останавливается за 3 м до него */
+   var sx=tX(-2), sz=0, dx=tg.x-sx, dz=tg.z-sz, L=Math.hypot(dx,dz), dist=Math.max(1,L-3);
+   /* трение шайбы 0.996 за шаг 1/60 с: путь до остановки ≈ 4.17·v0 */
+   tLoose(sx, sz, dx/L*0.24*dist, dz/L*0.24*dist); puck.free=0.4;
+   D.t0=TRAIN.t; D.ret=0; },
+ isDone:function(){ return TRAIN.d.times.length>=5; },
+ val:function(){ var a=TRAIN.d.times, s=0; for(var i=0;i<a.length;i++) s+=a[i]; return a.length?Math.round(s/a.length*10)/10:99; },
+ stop:function(){ TRAIN.d.ret=0.5; },
+ tick:function(dt){ var D=TRAIN.d;
+   if(D.ret>0){ D.ret-=dt; if(D.ret<=0){ if(D.times.length>=5) trainEnd(true); else this.next(); } return; }
+   if(puck.owner && puck.owner.team===HUMAN && puck.owner===HS[HUMAN].ctrl){ D.times.push(TRAIN.t-D.t0); tWin(); tMsg('tNice',true); tHold(puck.owner); D.ret=0.6; } },
+ main:function(){ return TRAIN.d.times.length+' / 5'; },
+ bot:function(dt){ var D=TRAIN.d, me=HS[HUMAN].ctrl; tBotRelease(dt); if(D.ret>0){ stick.dx=stick.dz=0; return; }
+   var best=null, bd=1e9; D.ps.forEach(function(p){ var d=Math.hypot(p.x-puck.x,p.z-puck.z); if(d<bd){ bd=d; best=p; } });
+   if(best!==me && !D.tap){ tBotTap('LB'); }
+   /* к шайбе подводим крюк, а не корпус: подбор — от конца клюшки */
+   var dx=puck.x-me.x, dz=puck.z-me.z, L=Math.hypot(dx,dz)||1;
+   tBotMove(dx-dx/L*0.8, dz-dz/L*0.8, L>3?1:0.6); IN.RTb=L>3; }},
+
+/* 8. выход вратаря: соперник один на один, держи Y */
+{key:'goalie', btn:'Y', kind:'count', th:[5,6,7], tries:8, of:8,
+ setup:function(){ var s=tStage(1,1,true,false), D=TRAIN.d; D.me=s.mine[0]; D.foe=s.theirs[0]; D.gk=tGK(HUMAN);
+   tOn(D.me, tX(12), 9, tYaw()); tCtrl(D.me); tPin(D.me, D.me.x, D.me.z); this.next(); },
+ next:function(){ var D=TRAIN.d; tOn(D.foe, tX(-2), (TRAIN.tries%3-1)*4, tYaw(true)); tGive(D.foe);
+   D.gk.x=-tAD()*GOAL_X+tAD()*0.4; D.gk.z=0; D.over=0; D.at=0; D.shotT=-1; },
+ isDone:function(){ return TRAIN.n>=5; },
+ val:function(){ return TRAIN.n; },
+ stop:function(){ var D=TRAIN.d; if(!D.over){ D.over=0.7; } },
+ /* атака отбита, если не было гола: сейв, штанга, мимо (через 1.2 с после броска) или вышло время */
+ ev:function(n, e){ var D=TRAIN.d; if(D.over) return;
+   if(n==='save' && e.t===HUMAN){ tWin(); tMsg('tSave',true); D.over=0.9; }
+   if(n==='shot' && e.t!==HUMAN) D.shotT=D.at;
+   if(n==='goal' && e.t!==HUMAN){ tMsg('tConceded'); D.over=0.9; } },
+ tick:function(dt){ var D=TRAIN.d; D.at+=dt;
+   if(!D.over && ((D.shotT>=0 && D.at-D.shotT>1.2) || D.at>9 || (puck.owner && puck.owner.team===HUMAN))){ tWin(); tMsg('tSave',true); D.over=0.7; }
+   if(D.over){ D.over-=dt; if(D.over<=0){ TRAIN.tries++; if(TRAIN.tries>=8) trainEnd(TRAIN.n>=4); else this.next(); } } },
+ main:function(){ return TRAIN.n+' · '+T('tTries')+' '+Math.min(8,TRAIN.tries+1)+'/8'; },
+ bot:function(dt){ var D=TRAIN.d, o=puck.owner; IN.Y=!!(o && o===D.foe && Math.abs(o.x-(-tAD()*GOAL_X))<9.5); }},
+
+/* 9. тактика: включай тактику, которую просит тренер */
+{key:'tactic', btn:'✚', kind:'time', th:[90,3,1.5], limit:90,
+ setup:function(){ var D=TRAIN.d; D.k=0; D.times=[]; D.seq=[2,1,0]; D.wait=1.2; TACTIC[HUMAN]=0; D.ask=-1;
+   var me=HS[HUMAN].ctrl||tMine()[0]; tCtrl(me); placeFaceoff(0,0); },
+ isDone:function(){ return TRAIN.d.times.length>=3; },
+ val:function(){ var a=TRAIN.d.times, m=0; for(var i=0;i<a.length;i++) m=Math.max(m,a[i]); return a.length?Math.round(m*10)/10:99; },
+ stop:function(){ placeFaceoff(0,0); },
+ tick:function(dt){ var D=TRAIN.d;
+   if(D.ask<0){ D.wait-=dt; if(D.wait<=0){ D.ask=D.seq[D.k]; if(TACTIC[HUMAN]===D.ask) setTactic(HUMAN, (D.ask+1)%3); D.t0=TRAIN.t; } return; }
+   if(TACTIC[HUMAN]===D.ask){ D.times.push(TRAIN.t-D.t0); tWin(); tMsg('tNice',true); D.k++; D.ask=-1; D.wait=1.5; if(D.k>=3) trainEnd(true); } },
+ main:function(){ return TRAIN.d.times.length+' / 3'; },
+ task:function(){ var D=TRAIN.d; return D.ask<0 ? null : T(['tq2','tq0','tq1'][D.ask]); },
+ bot:function(dt){ var D=TRAIN.d; if(D.ask<0) return; D.bt=(D.bt||0)+dt; if(D.bt>0.6){ D.bt=0; setTactic(HUMAN, D.ask); } }},
+
+/* 10. итог: атака 2 на 1 */
+{key:'rush', btn:'A · B', kind:'count', th:[1,2,3], tries:5, of:5,
+ cam:function(fx, fz){ return [fx*tAD()>8 ? fx+tAD()*4 : fx, fz]; },
+ setup:function(){ var s=tStage(2,1,false,true), D=TRAIN.d; D.me=s.mine[0]; D.mate=s.mine[1]; D.def=s.theirs[0]; this.next(); },
+ next:function(){ var D=TRAIN.d;
+   tOn(D.me, tX(-2), -3, tYaw()); tOn(D.mate, tX(-3), 4, tYaw()); tOn(D.def, tX(13), 0, tYaw(true));
+   var g1=tGK(1-HUMAN); if(g1){ g1.x=tAD()*GOAL_X-tAD()*0.4; g1.z=0; }
+   tCtrl(D.me); tGive(D.me); D.over=0; D.at=0; D.bt=0; },
+ isDone:function(){ return TRAIN.n>=1; },
+ val:function(){ return TRAIN.n; },
+ stop:function(){ var D=TRAIN.d; if(!D.over) D.over=0.6; },
+ ev:function(n, e){ var D=TRAIN.d; if(D.over) return;
+   if(n==='goal' && e.t===HUMAN){ tWin(); tMsg('tGoal',true); D.over=1.0; }
+   if(n==='save' && e.t!==HUMAN){ tMsg('tSave2'); D.over=0.8; } },
+ tick:function(dt){ var D=TRAIN.d; D.at+=dt;
+   /* шайба у соперника (не у вратаря) — атака закончилась */
+   if(!D.over && puck.owner && puck.owner.team!==HUMAN && !puck.owner.goalie){ tMsg('tLost'); D.over=0.8; }
+   if(!D.over && D.at>12){ tMsg('tMiss'); D.over=0.4; }
+   if(D.over){ D.over-=dt; if(D.over<=0){ TRAIN.tries++; if(TRAIN.tries>=5) trainEnd(TRAIN.n>=1); else this.next(); } } },
+ main:function(){ return TRAIN.n+' · '+T('tTries')+' '+Math.min(5,TRAIN.tries+1)+'/5'; },
+ /* бот: заход под углом (z ≈ ±4) и бросок в дальний угол; защитник впереди вплотную — пас партнёру */
+ bot:function(dt){ var D=TRAIN.d, me=HS[HUMAN].ctrl, ad=tAD(); tBotRelease(dt); if(D.over){ stick.dx=stick.dz=0; IN.B=false; return; }
+   if(puck.owner===me){ var gx=ad*GOAL_X, side=me.z>=0?1:-1, ahead=(D.def.x-me.x)*ad, near=ahead>0 && ahead<3 && Math.abs(D.def.z-me.z)<2;
+     var mate=me===D.me?D.mate:D.me;
+     if(near && D.bt===0){ tBotMove(mate.x-me.x, mate.z-me.z, 0.4); tBotTap('A'); return; }
+     if((gx-me.x)*ad<10 && Math.abs(me.z)>2.2){ D.bt+=dt; tBotMove(ad*0.6, -side*0.8, 0.35); IN.B=D.bt<0.55; }
+     else { D.bt=0; IN.B=false; tBotMove(gx-ad*9-me.x, side*4.2-me.z, 1); IN.RTb=true; } }
+   else { D.bt=0; IN.B=false; IN.RTb=false; tBotMove(puck.x-me.x, puck.z-me.z, 1); } }},
+
+/* свободная тренировка: лёд без соперников, шайба возвращается сама */
+{key:'free', btn:'', kind:'time', th:[0,0,0], free:true,
+ setup:function(){ var s=tStage(1,0,false,true), D=TRAIN.d; D.me=s.mine[0]; tOn(D.me, 0, 0, tYaw()); tCtrl(D.me); tGive(D.me); D.lost=0; },
+ stop:function(){ tGive(TRAIN.d.me); },
+ tick:function(dt){ var D=TRAIN.d; if(puck.owner===D.me){ D.lost=0; return; } D.lost+=dt;
+   if(D.lost>3 || (puck.owner && puck.owner.goalie && D.lost>1)){ D.lost=0; tGive(D.me); } },
+ main:function(){ return ''; }}
+];
+
+/* ---------- старт, экран урока, итог ---------- */
+function trainStart(i){
+  audioInit();
+  if(!PLAYERS.done && !PLAYERS.failed){ if(!LOADING_ON){ loadingShow(true); playersReady(function(){ loadingShow(false); trainStart(i); }); } return; }
+  ONLINE=false; netLeave(); NET.on=false; HUMAN=TEST.side;
+  TEAM[0]=CLUBS[0]; TEAM[1]=CLUBS[3]; buildTeamMeshes();
+  MATCH_MIN=99; score[0]=0; score[1]=0; period=1; clock=99*60; pen.length=0;
+  reset(true); if(GLOK) marksClear();
+  TACTIC[0]=0; TACTIC[1]=0; gkRush[0]=false; gkRush[1]=false;
+  setPaused(false); hideResult();
+  TRAIN.on=true; TRAIN.i=i; TRAIN.L=LESSONS[i]; TRAIN.t=0; TRAIN.n=0; TRAIN.miss=0; TRAIN.tries=0; TRAIN.res=null;
+  TRAIN.d={}; TRAIN.pins=[]; TRAIN.msg=''; TRAIN.msgT=0; TRAIN.hud='';
+  IN.A=IN.B=IN.X=IN.Y=IN.RTb=IN.LB=false; stick.dx=0; stick.dz=0;
+  document.body.classList.add('training');
+  document.getElementById('start').style.display='none';
+  state='play'; stateT=0;
+  TRAIN.L.setup();
+  document.getElementById('ltac').style.display=TRAIN.L.key==='tactic'?'flex':'none';
+  paintTacBadge(); trainHud(true);
+}
+function trainStop(){
+  if(!TRAIN.on) return;
+  TRAIN.on=false; TRAIN.L=null; TRAIN.res=null; TRAIN.pins=[]; TRAIN.bot=false;
+  for(var i=0;i<players.length;i++) players[i].boxed=0;
+  IN.A=IN.B=IN.X=IN.Y=IN.RTb=IN.LB=false; stick.dx=0; stick.dz=0;
+  document.body.classList.remove('training');
+}
+function trainHud(force){
+  var L=TRAIN.L; if(!L) return;
+  var task=(L.task && L.task()) || LT(TRAIN.i).t;
+  var msg=TRAIN.msgT>0 ? TRAIN.msg : '';
+  var key=task+'|'+L.main()+'|'+Math.floor(TRAIN.t)+'|'+msg+'|'+LANG;
+  if(!force && key===TRAIN.hud) return; TRAIN.hud=key;
+  var lt=LT(TRAIN.i);
+  setText('lhNum', L.free ? T('tFree') : T('tLesson')+' '+(TRAIN.i+1)+' · '+lt.n);
+  setText('lhTask', task);
+  setText('lhCnt', L.main());
+  var tt=Math.floor(TRAIN.t), lim=L.limit ? Math.max(0, Math.ceil(L.limit-TRAIN.t)) : -1;
+  setText('lhTime', L.free ? '' : (lim>=0 ? Math.floor(lim/60)+':'+((lim%60)<10?'0':'')+(lim%60) : Math.floor(tt/60)+':'+((tt%60)<10?'0':'')+(tt%60)));
+  var m=document.getElementById('lhMed');
+  if(m) m.innerHTML = L.free ? '' : ['b','s','g'].map(function(c,k){ return '<div><span class="md '+c+'"></span>'+mEsc(tTh(L,k))+'</div>'; }).join('');
+  setText('lhTip', lt.h);
+  var e=document.getElementById('lhMsg'); if(e){ e.textContent=msg; e.className=msg?(TRAIN.msgGood?'good':'bad'):''; }
+}
+function showTrainResult(){
+  var L=TRAIN.L, r=TRAIN.res, lt=LT(TRAIN.i);
+  setText('oTitle', T('tLesson')+' '+(TRAIN.i+1)+' · '+lt.n);
+  var sc=document.getElementById('oScore');
+  if(sc) sc.innerHTML='<span class="md big '+(['e','b','s','g'][r.medal])+'"></span>';
+  var med=[T('tNoMedal'),T('tBronze'),T('tSilver'),T('tGold')][r.medal];
+  setText('oWinner', (r.done?'✓ '+T('tDone'):T('tFail'))+' · '+med+' · '+tFmt(L, r.v));
+  setText('oAgain', T('tRetry')); setText('oMenu', T('tToList'));
+  var nx=document.getElementById('oNext'); if(nx){ nx.textContent=T('tNext'); nx.style.display=(r.done && TRAIN.i<9)?'':'none'; }
+  document.getElementById('oAgain').style.display='';
+  MENU.foc.result=(r.done && TRAIN.i<9)?1:0;
+  var e=document.getElementById('overscr'); if(e) e.style.display='flex';
+}
+/* тексты уроков: название, задача, что значит «выполнено», подсказка кнопки */
+function LT(i){ var a=(LTX[LANG]||LTX.ru)[i]; return {n:a[0], t:a[1], d:a[2], h:a[3]}; }
 
 /* ---------- сборка меню ---------- */
 (function(){
@@ -6401,6 +7000,10 @@ window.__hk={hs:function(){return HS;},net:function(){return NET;},setCam:functi
   menuState:function(){ var L=MENU.layer(), it=MENU.items(L), f=it[Math.min(MENU.foc[MENU.key(L)]||0, it.length-1)];
     return {layer:L, stack:MENU.stack.slice(), focus:f?(f.getAttribute('data-act')||f.getAttribute('data-adj')||f.id):null, n:it.length,
             sel:{my:selMy, op:selOp, min:selMin, tac:selTac, diff:DIFF}, online:ONLINE, via:MENU.via, back:MENU.bb, matchMin:MATCH_MIN}; },
+  /* тренировка: train(i) — начать урок, trainBot(true) — скрипт ввода урока, trainState() — ход урока */
+  train:function(i){ trainStart(i); }, trainBot:function(on){ TRAIN.bot=!!on; },
+  trainState:function(){ return {on:TRAIN.on, i:TRAIN.i, key:TRAIN.L?TRAIN.L.key:null, n:TRAIN.n, tries:TRAIN.tries, t:+TRAIN.t.toFixed(2),
+    res:TRAIN.res, prog:JSON.parse(JSON.stringify(TPROG)), medals:tMedals()}; },
   music:function(){ return {off:MUSIC.off, blocked:MUSIC.blocked, name:MUSIC.name, playing:!!(MUSIC.el && !MUSIC.el.paused), cur:+MUSIC.cur.toFixed(2),
             vol:VOL.mus, routed:MUSIC.routed, src:MUSIC.el?MUSIC.el.currentSrc:''}; },
   tac:function(){return TACTIC;}, tacSet:function(t,v){TACTIC[t]=v;},

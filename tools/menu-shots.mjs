@@ -47,6 +47,12 @@ for (const o of ORIENT) {
     await page.evaluate("__hk.menu('main'); __hk.menu('settings')"); await page.waitForTimeout(200); await nav(['ArrowDown']); await shot('settings');
     await page.evaluate("__hk.menu('main'); __hk.menu('profile')"); await page.waitForTimeout(200); await shot('profile');
     await page.evaluate("__hk.menu('main'); __hk.menu('shop')"); await page.waitForTimeout(200); await shot('shop');
+    await page.evaluate("__hk.menu('main'); __hk.menu('train')"); await page.waitForTimeout(200); await nav(['ArrowDown','ArrowDown','ArrowDown','ArrowDown']); await shot('train');
+    for (const [i, n] of [[0, 'lesson-skate'], [4, 'lesson-shot'], [8, 'lesson-tactic']]) {
+      await page.evaluate(`__hk.train(${i}); __hk.trainBot(true)`); await page.waitForTimeout(1600); await page.evaluate('__hk.trainBot(false)'); await shot(n);
+    }
+    await page.evaluate('__hk.train(3); __hk.trainBot(true)'); await page.waitForFunction('__hk.trainState().res', null, { timeout: 30000 }); await page.waitForTimeout(400); await shot('lesson-result');
+    await page.evaluate("__hk.menu('main')"); await page.waitForTimeout(200);
     await page.evaluate("__hk.menu('main'); __hk.menu('rules')"); await page.waitForTimeout(200); await shot('rules-controls');
     await nav(['KeyE', 'ArrowDown', 'ArrowDown']); await shot('rules-hockey');
     await page.evaluate("__hk.menu('main')"); await page.waitForTimeout(200);
