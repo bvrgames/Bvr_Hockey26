@@ -17,6 +17,7 @@
     "smoke:online": "node tools/smoke-online.mjs",
     "relay": "node tools/relay-mock.mjs 8787",
     "balance": "node tools/balance.mjs",
+    "offball": "node tools/offball.mjs",
     "smoke:tg": "node tools/smoke-tg.mjs && node tools/smoke-tg.mjs --browser webkit",
     "smoke:quality": "node tools/smoke-quality.mjs && node tools/smoke-quality.mjs --browser webkit",
     "smoke:lag": "node tools/smoke-lag.mjs",

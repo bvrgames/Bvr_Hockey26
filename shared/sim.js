@@ -61,7 +61,7 @@ function create(env){
   var score=[0,0], period=1, clock=5*60, state='menu', stateT=0;
   function mkHS(){ return {ctrl:null, charge:0, pressT:0, pressCd:0, autoT:0,
     press:{on:false,x:0,z:0,d:0}, goalieCtl:false, prevCtl:null, pokeT:0,
-    aimX:1, aimZ:0}; }
+    aimX:1, aimZ:0, thruM:null, thruT:0}; }
   var HS=[mkHS(),mkHS()];
   var checkT=0, pokeT=0;
   var pen=[], offWarn=-1, lastTouch=null, prevZone=[0,0];
@@ -99,6 +99,7 @@ function create(env){
     /* puck pickup at stick end */
     pickupReachSkater: 0.85,  // was 1.05 (body center)
     pickupReachGoalie: 1.35,  // unchanged
+    leadReach: 1.15,          // the addressed receiver of a through pass (Y) reaches further — catching it in stride
     pickupHeight: 0.85,       // unchanged
     pickupMaxSpeed: 24,       // unchanged
     /* poke check */
@@ -219,15 +220,23 @@ function create(env){
     }
     return {x:p.dir, z:0};
   }
+  /* Кому пас. Обычный (A) — партнёру по направлению стика, из них — открытому (свободная линия, соперник
+     не вплотную). В разрез (Y) — тому, у кого лучший выход к воротам: thruMate (ниже, у игры без шайбы). */
   function bestMate(p, mode){
-    var d=aimDir(p), arr=teamOf(p.team), best=null, bs=-1e9;
+    var d=aimDir(p);
+    if(mode==='thru'){ var th=thruMate(p, d); return th ? th.m : null; }
+    return openMate(p, d);
+  }
+  function openMate(p, d){
+    var arr=teamOf(p.team), best=null, bs=-1e9;
     for(var i=0;i<arr.length;i++){
       var m=arr[i]; if(m===p) continue;
       var ddx=m.x-p.x, ddz=m.z-p.z, L=Math.hypot(ddx,ddz)||1;
       if(L>26) continue;
       var dot=(ddx/L)*d.x+(ddz/L)*d.z;
       var s=dot*2.2 - L*0.045;
-      if(mode==='thru') s += (m.x*p.dir)*0.05;
+      var lane=laneBlock(p.team, p.x,p.z, m.x+m.vx*0.3, m.z+m.vz*0.3);
+      s += clamp(nearestFoe(m),0,5)*0.22 - (lane<1.0?1.4:(lane<1.8?0.4:0));
       if(s>bs){bs=s;best=m;}
     }
     return best;
@@ -269,16 +278,18 @@ function create(env){
   /* target / pt — адресат и точка паса, выбранные ИИ; у человека не передаются */
   /* куда пасовать (без побочных эффектов) — общее для симуляции и предсказания гостя */
   function passAim(p,lead,target,pt){
-    var m=target||bestMate(p, lead?'thru':'norm');
+    var th=(lead && !pt) ? (target ? {m:target, pt:thruPoint(p,target)} : thruMate(p, aimDir(p))) : null;
+    var m=th ? th.m : (target||bestMate(p,'norm'));
     var tx,tz;
     if(pt){ tx=pt.x; tz=pt.z; }
+    else if(th){ tx=th.pt.x; tz=th.pt.z; }   /* в разрез — туда, где партнёр будет к прилёту шайбы */
     else if(m){
       tx=m.x + (lead? m.vx*0.55 + p.dir*3.2 : m.vx*0.30);
       tz=m.z + (lead? m.vz*0.55 : m.vz*0.30);
     } else {
       var d=aimDir(p); tx=p.x+d.x*12; tz=p.z+d.z*12;
     }
-    return {tx:tx, tz:tz, m:m};
+    return {tx:tx, tz:tz, m:m, v:th?th.pt.v:0};
   }
   /* куда бросать (без побочных эффектов) */
   function shotAim(p,aiZ){
@@ -296,12 +307,13 @@ function create(env){
   function doPass(p,power,lift,lead,target,pt){
     fx.act(p,'pass_forehand',0.45);
     var pa=passAim(p,lead,target,pt), m=pa.m, tx=pa.tx, tz=pa.tz;
+    if(pa.v) power=pa.v;                 /* в разрез — с силой под рывок партнёра */
     var dx=tx-puck.x, dz=tz-puck.z, L=Math.hypot(dx,dz)||1;
     puck.vx=dx/L*power; puck.vz=dz/L*power;
     puck.vy = lift?3.2:0;
     puck.owner=null; puck.free=0.16; lastTouch=p;
     if(p.x*p.dir < -1) { icing.armed=true; icing.team=p.team; } else icing.armed=false;
-    LASTPASS={from:p, to:m||null, t:SIMT, lead:!!lead};
+    LASTPASS={from:p, to:m||null, t:SIMT, lead:!!lead, x:tx, z:tz};
     emit('pass',{p:pIdx(p), t:p.team, to:m?pIdx(m):-1, x:r2(p.x), z:r2(p.z), power:r2(power), lift:!!lift, lead:!!lead});
   }
   /* aiZ — точка по ширине ворот, выбранная ИИ (может быть мимо створа); у человека не передаётся */
@@ -466,7 +478,7 @@ function create(env){
     if(ps && (mustAct || ps.gain>0.12)){
       /* промах паса растёт с дальностью */
       var e=LV.passErr*(0.6+ps.L/20)*(R()*2-1), a=R()*6.283;
-      doPass(p, ps.lead?20:18, ps.lift, ps.lead, ps.m, {x:ps.pt.x+Math.cos(a)*e, z:ps.pt.z+Math.sin(a)*e});
+      doPass(p, ps.v, ps.lift, ps.lead, ps.m, {x:ps.pt.x+Math.cos(a)*e, z:ps.pt.z+Math.sin(a)*e});
       return;
     }
     if(mustAct){ /* открытых нет: сброс в сторону ворот соперника */
@@ -495,10 +507,12 @@ function create(env){
       /* не отдаём за синюю, пока шайба не в зоне, — это офсайд */
       if(!inZone && m.x*p.dir>BLUE_X+0.3) continue;
       var fwd=(m.x-p.x)*p.dir;
-      var lead = LV.smart && fwd>1.0 && m.vx*p.dir>1.5 && (m.x*p.dir)>BLUE_X-6;
-      /* упреждение на время полёта шайбы; в разрез — ещё на шаг вперёд по ходу */
-      var tf=L/(lead?20:18)*1.05;
-      var txp=m.x+m.vx*tf+(lead? p.dir*1.2 : 0), tzp=m.z+m.vz*tf;
+      /* в разрез — нападающему впереди, который успевает рывком в свободное место (thruPoint) */
+      var tpt = (LV.smart && m.role<3 && fwd>0.5 && m.vx*p.dir>0.5 && (m.x*p.dir)>BLUE_X-6) ? thruPoint(p, m) : null;
+      var lead = !!tpt && foeGap(p.team, tpt.x, tpt.z, tpt.t)>2.0 && !thruOffside(p, m, tpt);
+      /* упреждение на время полёта шайбы */
+      var tf=L/18*1.05;
+      var txp=lead? tpt.x : m.x+m.vx*tf, tzp=lead? tpt.z : m.z+m.vz*tf;
       var lane=laneBlock(p.team, p.x,p.z, txp,tzp);
       var cover=nearestFoe(m);
       var mq=shotQuality(p.team, txp, tzp, LV);
@@ -506,9 +520,188 @@ function create(env){
       if(LV.smart){ if(lane<1.0) sc-=1.2; else if(lane<1.8) sc-=0.4; }
       else sc += R()*0.6;               /* слабый ИИ видит поле хуже */
       if(lead) sc+=0.25;
-      if(sc>bs){ bs=sc; best={m:m, lead:lead, lift:lane<1.0 && L>10, gain:mq-myQ+(lead?0.2:0), pt:{x:txp, z:tzp}, L:L}; }
+      if(sc>bs){ bs=sc; best={m:m, lead:lead, lift:lane<1.0 && L>10, gain:mq-myQ+(lead?0.2:0), pt:{x:txp, z:tzp}, L:L, v:lead?tpt.v:18}; }
     }
     return best;
+  }
+
+  /* ============================================================
+     ИГРА БЕЗ ШАЙБЫ: открывание и пас в разрез (обе команды, любой уровень)
+     Раньше партнёры владельца стояли в своих полосах на фиксированном
+     расстоянии от шайбы и не искали окно, а адресат паса в разрез ехал
+     «навстречу шайбе», а не на ход. Теперь:
+     · у каждого опорная точка по роли — крайние широко и вперёд, центр
+       в слоте, защитники у синей; вокруг неё кольцо кандидатов, и игрок
+       выбирает место подальше от соперников со свободной линией паса от
+       владельца, не на месте партнёра и не в офсайде (пока шайба не в
+       зоне — не дальше синей). Пересчёт раз в 0.3 с, между пересчётами
+       игрок «ищет окно» — покачивается около точки;
+     · пас в разрез идёт тому, у кого лучший выход к воротам и свободная
+       линия, в точку, где он будет к прилёту шайбы (thruPoint); адресат
+       сразу рвётся на перехват, а живой игрок с шайбой видит его заранее
+       (маркер в index.html — та же функция passTargets).
+     Случайных чисел здесь нет: порядок вызовов R() у остальной игры прежний.
+     ============================================================ */
+  var THRU_V=21, THRU_MIN=15;
+  /* куда рвётся партнёр: к воротам, с загибом в слот */
+  function runDir(m){
+    var dir=attackDir(m.team), tx=dir*(GOAL_X-6.5), tz=clamp(m.z*0.45,-5,5);
+    var dx=tx-m.x, dz=tz-m.z, L=Math.hypot(dx,dz);
+    if(L<2 || dx*dir<0){ dx=dir; dz=-m.z*0.08; L=Math.hypot(dx,dz)||1; }
+    return [dx/L, dz/L];
+  }
+  /* время рывка на s метров с начальной скоростью v0 по ходу. Рывок — как ускорение живого игрока: разгон
+     sprintAccel против трения (damping за кадр) — скорость v(t)=vt−(vt−v0)·e^(−kt), vt — потолок 9.5 м/с */
+  var RUN_K=(1-PLAYER_CFG.damping)*60, RUN_VT=Math.min(PLAYER_CFG.sprintMaxSpeed, PLAYER_CFG.sprintAccel/RUN_K);
+  function runDist(t, v0){ return RUN_VT*t - (RUN_VT-v0)/RUN_K*(1-Math.exp(-RUN_K*t)); }
+  function runTime(s, v0){
+    v0=clamp(v0,-3,RUN_VT); var a=0, b=4;
+    for(var i=0;i<22;i++){ var m=(a+b)/2; if(runDist(m,v0)<s) a=m; else b=m; }
+    return b;
+  }
+  function inRink(x, z, team){
+    var dir=attackDir(team);
+    x=clamp(x,-RL+2,RL-2); if(x*dir>GOAL_X-1.8) x=dir*(GOAL_X-1.8);
+    var hw=halfWidthAt(x)-2.2; z=clamp(z,-hw,hw);
+    return [x,z];
+  }
+  /* Точка встречи паса в разрез: партнёр m рвётся по runDir, шайба от p летит в свободное место впереди него
+     с такой силой (15…21 м/с; тише — перехватят или догонит сам пасующий), чтобы прийти туда вместе с ним. Из точек 2.5…9 м по ходу выбирается та, где
+     лучше бросать и дальше от соперников. Вернёт {x, z, t — время полёта, v — сила паса}. */
+  function thruPoint(p, m){
+    var dir=attackDir(m.team), from=stickEnd(p), LV=aiLevel(p.team), q=null, qs=-1e9;
+    /* куда рваться: к слоту, прямо вперёд (крайний — вдоль борта) или по своему ходу, если он вперёд */
+    var sp=Math.hypot(m.vx,m.vz), U=[runDir(m), [dir,0]];
+    if(sp>3 && m.vx*dir>0.3*sp) U.push([m.vx/sp, m.vz/sp]);
+    for(var k=0;k<U.length;k++){
+      var u=U[k], v0=m.vx*u[0]+m.vz*u[1];
+      for(var s=2.5; s<=9.01; s+=0.75){
+        var c=inRink(m.x+u[0]*s, m.z+u[1]*s, m.team), tr=runTime(s, v0);
+        var D=Math.hypot(c[0]-from[0], c[1]-from[1]), v=clamp(D/Math.max(tr,0.05)*1.05, THRU_MIN, THRU_V);
+        var tp=D/v*1.05, miss=Math.abs(tp-tr);
+        var sc=shotQuality(m.team, c[0], c[1], LV)*1.5 + clamp(foeGap(m.team, c[0], c[1], tp),0,5)*0.3 + s*0.04
+               - miss*1.5 - (miss>0.25?3:0);             /* не успевает к шайбе — не годится */
+        if(sc>qs){ qs=sc; q={x:c[0], z:c[1], t:tp, v:v, miss:miss}; }
+      }
+    }
+    return q;
+  }
+  /* пас из средней зоны в зону атаки, а партнёр пересечёт синюю раньше шайбы — офсайд */
+  function thruOffside(p, m, pt){
+    var dir=attackDir(p.team);
+    if(p.x*dir>BLUE_X || pt.x*dir<=BLUE_X) return false;
+    var from=stickEnd(p), ux=Math.abs(pt.x-from[0])/(Math.hypot(pt.x-from[0],pt.z-from[1])||1);
+    var tPuck=(BLUE_X-from[0]*dir)/Math.max(1, THRU_V*ux);
+    var tMate=Math.max(0, BLUE_X-m.x*dir)/Math.max(4, m.vx*dir+2);
+    return tMate < tPuck+0.08;
+  }
+  /* перекрыта ли линия паса — соперники с упреждением их хода на dt */
+  function laneBlockAt(team, ax,az, bx,bz, dt){
+    var fo=teamOf(team===0?1:0), m=99;
+    for(var i=0;i<fo.length;i++){ var d=segDist(fo[i].x+fo[i].vx*dt, fo[i].z+fo[i].vz*dt, ax,az, bx,bz); if(d<m) m=d; }
+    return m;
+  }
+  /* ближайший полевой соперник к точке — с упреждением его хода на dt */
+  function foeGap(team, x, z, dt){
+    var fo=teamOf(team===0?1:0), m=99;
+    for(var i=0;i<fo.length;i++){ var d=Math.hypot(fo[i].x+fo[i].vx*dt-x, fo[i].z+fo[i].vz*dt-z); if(d<m) m=d; }
+    return m;
+  }
+  /* адресат паса в разрез: лучший выход к воротам, свободная линия, немного — по направлению стика d */
+  function thruMate(p, d){
+    var arr=teamOf(p.team), dir=attackDir(p.team), LV=aiLevel(p.team), best=null, bs=-1e9;
+    for(var i=0;i<arr.length;i++){
+      var m=arr[i]; if(m===p || m.down>0) continue;
+      var pt=thruPoint(p, m), L=Math.hypot(pt.x-p.x, pt.z-p.z);
+      if(L>30) continue;
+      var lane=Math.min(laneBlock(p.team, p.x,p.z, pt.x,pt.z), laneBlockAt(p.team, p.x,p.z, pt.x,pt.z, Math.min(0.3, pt.t*0.5)));
+      var gap=foeGap(p.team, pt.x,pt.z, pt.t);
+      var dot=d ? ((pt.x-p.x)*d.x+(pt.z-p.z)*d.z)/(L||1) : 0;
+      var fwd=(pt.x-p.x)*dir;
+      var s=shotQuality(p.team, pt.x, pt.z, LV)*2.0 + clamp(gap,0,6)*0.3 + dot*0.8 + clamp(fwd,-6,10)*0.12;
+      if(fwd<0) s-=1.0;                                   /* в разрез — вперёд, а не назад */
+      if(lane<1.0) s-=2.5; else if(lane<1.8) s-=0.8;
+      if(m.role>=3) s-=0.6;                               /* защитник в разрез — в последнюю очередь */
+      if(pt.miss>0.3) s-=3.0;                             /* к шайбе не успевает */
+      if(thruOffside(p, m, pt)) s-=2.0;
+      if(s>bs){ bs=s; best={m:m, pt:pt, s:s, lane:lane, gap:gap}; }
+    }
+    return best;
+  }
+  /* для подсказки над партнёрами: кому уйдёт пас по Y и по A при направлении стика d (или «вперёд») */
+  function passTargets(p, d){
+    d=d||{x:attackDir(p.team), z:0};
+    var th=thruMate(p, d);
+    return {thru:th?th.m:null, norm:openMate(p, d)};
+  }
+
+  /* точка на пути летящей шайбы, куда игрок p успеет со скоростью v (трение шайбы — как в шаге) */
+  /* null — шайба уходит быстрее, чем он успеет */
+  function interceptPt(p){
+    var x=puck.x, z=puck.z, vx=puck.vx, vz=puck.vz, t=0, k=0.996*0.996;
+    var v0=Math.max(0, p.vx*(x-p.x)+p.vz*(z-p.z))/(Math.hypot(x-p.x, z-p.z)||1);
+    for(var i=0;i<54;i++){
+      t+=1/30; vx*=k; vz*=k; x+=vx/30; z+=vz/30;
+      if(Math.hypot(x-p.x, z-p.z)<=runDist(t, v0)+0.8) return inRink(x, z, p.team);
+    }
+    return null;
+  }
+
+  /* куда открываться партнёру владельца c */
+  var RING=[[0,0],[2.6,0],[-2.6,0],[0,2.6],[0,-2.6],[1.9,1.9],[1.9,-1.9],[-1.9,1.9],[-1.9,-1.9],[4.4,0],[0,4.4],[0,-4.4],[3.4,3.4],[3.4,-3.4],[-3.4,3.4],[-3.4,-3.4]];
+  function supportAnchor(p, c){
+    var dir=p.dir, TC=TACTIC[p.team], inZone=(c.x*dir)>BLUE_X;
+    var side=(p.role===0||p.role===3)?-1:1, ax, az;
+    if(p.role>=3){                                      /* защитники: у синей, разведены по ширине */
+      ax = inZone ? dir*(BLUE_X+(TC===2?-1.0:(TC===1?2.2:1.2))) : c.x-dir*(TC===2?9:6);
+      az = side*6.2;
+    } else if(p.role===1){                              /* центр: слот, вне зоны — по центру впереди шайбы */
+      ax = inZone ? dir*(GOAL_X-7.0) : c.x+dir*(4.5+(TC===1?1.5:(TC===2?-2.5:0)));
+      az = inZone ? clamp(-c.z*0.25,-2.5,2.5) : clamp(-c.z*0.35,-4,4);
+    } else {                                            /* крайние: широко и вперёд */
+      var weak = side*c.z < -1;                         /* дальний от шайбы край — к дальней штанге */
+      ax = inZone ? dir*(GOAL_X-(weak?5.5:7.5)) : c.x+dir*(6.5+(TC===1?1.5:(TC===2?-2.5:0)));
+      az = inZone ? side*(weak?5.0:9.0) : side*9.5;
+    }
+    return [ax, az];
+  }
+  function supportSpot(p, c){
+    var dir=p.dir, inZone=(c.x*dir)>BLUE_X, IS_D=p.role>=3;
+    var fresh = p._sT===undefined || SIMT>=p._sT || p._sc!==c;
+    if(fresh){
+      var an=supportAnchor(p, c), LV=aiLevel(p.team), mates=teamOf(p.team), best=null, bs=-1e9;
+      for(var i=0;i<RING.length;i++){
+        var ox=RING[i][0], oz=RING[i][1];
+        if(IS_D) ox=clamp(ox,-1.2,1.2);                 /* защитник ходит вдоль синей, а не в глубину */
+        var cc=inRink(an[0]+ox*dir, an[1]+oz, p.team), cx=cc[0], cz=cc[1];
+        if(!inZone && cx*dir>BLUE_X-0.6) cx=dir*(BLUE_X-0.6);         /* не раньше шайбы в зону */
+        if(IS_D && !inZone && (cx-c.x)*dir>-2) cx=c.x-dir*2;          /* защитник сзади шайбы */
+        var L=Math.hypot(cx-c.x, cz-c.z);
+        var s=clamp(foeGap(p.team, cx,cz, 0.3),0,4)*0.6;     /* свободно — до 4 м, дальше уже не важно */
+        var lane=laneBlock(p.team, c.x,c.z, cx,cz);
+        if(lane<1.0) s-=2.0; else if(lane<1.8) s-=0.7;
+        if(L<4) s-=(4-L)*0.4; else if(L>22) s-=(L-22)*0.15;
+        s-=Math.hypot(cx-an[0], cz-an[1])*0.2 + Math.hypot(cx-p.x, cz-p.z)*0.04;   /* своё место по роли */
+        if(!IS_D && inZone) s+=shotQuality(p.team, cx, cz, LV)*(p.role===1?1.6:1.0);
+        for(var j=0;j<mates.length;j++){
+          var o=mates[j]; if(o===p || o===c) continue;
+          var sd=Math.hypot(cx-(o._sx===undefined?o.x:o._sx), cz-(o._sz===undefined?o.z:o._sz));
+          if(sd<4.5) s-=(4.5-sd)*0.5;
+        }
+        if(p._sx!==undefined && Math.hypot(cx-p._sx, cz-p._sz)<1.0) s+=0.35;   /* не дёргаться между равными */
+        if(s>bs){ bs=s; best=[cx,cz]; }
+      }
+      p._sx=best[0]; p._sz=best[1]; p._sc=c; p._sT=SIMT+0.3;
+    }
+    var tx=p._sx, tz=p._sz;
+    if(!IS_D){
+      /* ищет окно: не стоит, а покачивается около точки */
+      tx+=Math.cos(SIMT*1.3+p.role*2.1)*0.6; tz+=Math.sin(SIMT*1.7+p.role*1.3)*0.9;
+      /* адресат будущего паса в разрез у живого владельца уже клонится в рывок */
+      if(HS[p.team].thruM===p){ var u=runDir(p); tx+=u[0]*1.5; tz+=u[1]*1.5; }
+      if(!inZone && tx*dir>BLUE_X-0.6) tx=dir*(BLUE_X-0.6);
+    }
+    return [tx,tz];
   }
 
   /* ---------- управление живым игроком ---------- */
@@ -528,6 +721,8 @@ function create(env){
     if(!hs.goalieCtl){
       if(puck.owner && puck.owner.team===team && !puck.owner.goalie){
         if(hs.ctrl!==puck.owner) hs.ctrl=puck.owner;
+      } else if(!puck.owner && LASTPASS && LASTPASS.lead && LASTPASS.from.team===team && LASTPASS.to && LASTPASS.to!==hs.ctrl && SIMT-LASTPASS.t<1.6){
+        /* пас в разрез летит партнёру: он рвётся за шайбой сам, управление перейдёт к нему при приёме */
       } else {
         hs.autoT-=dt;
         if(hs.autoT<=0){
@@ -933,7 +1128,9 @@ function create(env){
           if(p.down>0||p.boxed) continue;
           var k;
           if(p.goalie) k=Math.hypot(p.x-puck.x,p.z-puck.z)/PLAYER_CFG.pickupReachGoalie;   /* вратарь: по телу */
-          else k=Math.hypot(p.x+Math.cos(p.yaw)*0.95-puck.x, p.z+Math.sin(p.yaw)*0.95-puck.z)/PLAYER_CFG.pickupReachSkater; /* полевой: по концу клюшки */
+          else k=Math.hypot(p.x+Math.cos(p.yaw)*0.95-puck.x, p.z+Math.sin(p.yaw)*0.95-puck.z)/
+                 /* полевой: по концу клюшки; адресат паса в разрез тянется за шайбой дальше — приём на ход */
+                 ((LASTPASS && LASTPASS.lead && LASTPASS.to===p && SIMT-LASTPASS.t<1.6) ? PLAYER_CFG.leadReach : PLAYER_CFG.pickupReachSkater);
           /* ничья (например, на вбрасывании концы клюшек ровно на одинаковом
              расстоянии) решается случаем, а не порядком в массиве */
           k+=R()*0.03;
@@ -949,9 +1146,20 @@ function create(env){
         } else if(pick){
           var prevT=lastTouch;
           puck.owner=pick; lastTouch=pick; icing.armed=false;
+          /* шайба у партнёра живого игрока — управление к нему сразу, а не со следующего шага: иначе в этот
+             шаг за человека решал ИИ (бросал в одно касание после паса в разрез) */
+          if(CFG.hum[pick.team] && !HS[pick.team].goalieCtl) HS[pick.team].ctrl=pick;
           pickupEvent(pick, prevT);
         }
       }
+    }
+
+    /* адресат паса в разрез у живого владельца (он клонится в рывок; подсказка в index.html) — раз в 0.2 с */
+    for(var th0=0;th0<2;th0++){
+      var hs0=HS[th0], ow=puck.owner;
+      if(CFG.hum[th0] && ow && ow===hs0.ctrl && ow.team===th0){
+        if(!(hs0.thruT>SIMT)){ var tm0=thruMate(ow, aimDir(ow)); hs0.thruM=tm0?tm0.m:null; hs0.thruT=SIMT+0.2; }
+      } else { hs0.thruM=null; hs0.thruT=0; }
     }
 
     /* --- игроки ---
@@ -1003,10 +1211,13 @@ function create(env){
         var tx,tz;
         var carrier = puck.owner;
         var att = carrier && carrier.team===p.team;
+        /* свой пас в полёте: команда по-прежнему в атаке и открывается под адресата, а не откатывается в оборону */
+        var passTo = (!carrier && LASTPASS && LASTPASS.to && LASTPASS.from.team===p.team && SIMT-LASTPASS.t<1.6) ? LASTPASS.to : null;
         var chaser = nearestOf(p.team, carrier?carrier.x:puck.x, carrier?carrier.z:puck.z);
         if(CFG.hum[p.team] && p===HS[p.team].ctrl){ ax=0; az=0; }
         var gx = p.dir*GOAL_X, ownGx = -p.dir*GOAL_X;
         var foes = teamOf(p.team===0?1:0);
+        var supp=false, runner=false;
 
         /* ---------- позиционная игра ----------
            Роли: 0 левый крайний, 1 центр, 2 правый крайний, 3 и 4 защитники.
@@ -1036,27 +1247,9 @@ function create(env){
             tx += ex/eL*2.6; tz += ez/eL*5.2;
           }
         }
-        else if(att){
-          /* СВОЯ АТАКА */
-          if(IS_D){
-            /* защитники держат синюю линию: они последние сзади и страхуют отбор */
-            var hold = blueOpp - p.dir*1.4;
-            if(TC===2) hold = blueOpp - p.dir*7.0;      /* оборона: ниже */
-            else if(TC===1) hold = blueOpp - p.dir*0.4; /* атака: жмутся к линии */
-            tx = clamp(hold, -RL+3, RL-3);
-            /* но никогда впереди шайбы — иначе офсайд и дыра сзади */
-            tx = (p.dir>0) ? Math.min(tx, carrier.x-0.6) : Math.max(tx, carrier.x+0.6);
-            tz = clamp(LANE*0.85 + carrier.z*0.12, -RW+2.5, RW-2.5);
-          } else {
-            /* крайние и центр открываются впереди шайбы, каждый в своей полосе */
-            var dep = (p.role===1? 3.0 : 5.2);
-            if(TC===1) dep += 2.6; else if(TC===2) dep -= 3.0;
-            tx = clamp(carrier.x + p.dir*dep, -RL+3, RL-3);
-            tz = clamp(LANE + carrier.z*0.18, -RW+2.5, RW-2.5);
-            /* пока шайба не вошла в зону — ждём у синей, чтобы не встать в офсайд */
-            if((carrier.x - blueOpp)*p.dir < 0)
-              tx = (p.dir>0) ? Math.min(tx, blueOpp-1.2) : Math.max(tx, blueOpp+1.2);
-          }
+        else if(att || (passTo && passTo!==p)){
+          /* СВОЯ АТАКА: открываемся (supportSpot — игра без шайбы) */
+          var spt=supportSpot(p, carrier||passTo); tx=spt[0]; tz=spt[1]; supp=true;
         }
         else if(chaser===p){
           /* единственный, кто идёт на шайбу, — с упреждением */
@@ -1103,7 +1296,7 @@ function create(env){
 
         /* Разведение: если цель совпала с целью более приоритетного партнёра,
            отходим в сторону. Это и есть страховка от толпы вокруг шайбы. */
-        if(carrier!==p && chaser!==p){
+        if(carrier!==p && chaser!==p && !supp){
           if(carrier && carrier.team===p.team){
             var cx=tx-carrier.x, cz=tz-carrier.z, cL=Math.hypot(cx,cz);
             if(cL<5.0){
@@ -1129,7 +1322,12 @@ function create(env){
         /* адресат паса идёт навстречу шайбе, а не ждёт её на месте */
         var LVp=aiLevel(p.team);
         if(!carrier && LASTPASS && LASTPASS.to===p && LASTPASS.from.team===p.team && SIMT-LASTPASS.t<1.6 && LVp.meet>0){
-          tx=lerp(tx, puck.x+puck.vx*0.22, LVp.meet); tz=lerp(tz, puck.z+puck.vz*0.22, LVp.meet);
+          if(LASTPASS.lead){
+            /* пас в разрез: рывок в точку встречи; успевает перехватить раньше — туда */
+            var ip=interceptPt(p); tx=ip?ip[0]:LASTPASS.x; tz=ip?ip[1]:LASTPASS.z; runner=true;
+            /* шайба ещё не в зоне — у синей ждём её, иначе офсайд */
+            if(puck.x*p.dir<BLUE_X && tx*p.dir>BLUE_X-0.4 && p.x*p.dir<BLUE_X) tx=Math.min(tx*p.dir, Math.max(p.x*p.dir, BLUE_X-0.4))*p.dir;
+          } else { tx=lerp(tx, puck.x+puck.vx*0.22, LVp.meet); tz=lerp(tz, puck.z+puck.vz*0.22, LVp.meet); }
         }
         /* добивание: после броска партнёра нападающие без шайбы едут на пятак */
         else if(LVp.crash && !IS_D && carrier!==p && LASTSHOT && LASTSHOT.p.team===p.team && LASTSHOT.p!==p &&
@@ -1152,6 +1350,9 @@ function create(env){
         if(L<1.2){ax*=L;az*=L;}
         maxs = att?PLAYER_CFG.aiAttackMaxSpeed:PLAYER_CFG.aiBaseMaxSpeed;
         if(chaser===p && !att) maxs=PLAYER_CFG.aiChaseMaxSpeed;
+        if(runner){ maxs=PLAYER_CFG.sprintMaxSpeed; accel=PLAYER_CFG.sprintAccel; }   /* рывок — как ускорение живого */
+        /* открывание: до своей точки далеко — догоняет атаку ускорением, а не трусцой */
+        if(supp && Math.hypot(tx-p.x, tz-p.z)>4){ maxs=PLAYER_CFG.sprintMaxSpeed; accel=PLAYER_CFG.sprintAccel; }
         if(TACTIC[p.team]===1) maxs+=PLAYER_CFG.aiTacticAttackBonus;
         if(p.os) maxs=PLAYER_CFG.aiOffsidesMaxSpeed;
 
@@ -1224,6 +1425,11 @@ function create(env){
   api.aimInput=aimInput;
   api.aimDir=aimDir;
   api.bestMate=bestMate;
+  api.openMate=openMate;
+  api.thruMate=thruMate;
+  api.thruPoint=thruPoint;
+  api.passTargets=passTargets;
+  api.supportSpot=supportSpot;
   api.pIdx=pIdx;
   api.pickupEvent=pickupEvent;
   api.goalEvent=goalEvent;

@@ -544,7 +544,7 @@
   </div>
 </div>
 
-<script src="shared/sim.js?v=c5e609ce5d"></script>
+<script src="shared/sim.js?v=7cb65cbf64"></script>
 <script>
 (function(){
 'use strict';
@@ -3680,6 +3680,17 @@ var SUNCOL=[2.45,2.38,2.22];
 var DEBUG_MODE=0;
 var RDT=1/60;
 var PTRT=0;      /* время для покачивания указателя игрока */
+/* адресаты паса для подсказки: та же функция, что выбирает их в симуляции (shared/sim.js passTargets),
+   с тем же направлением стика; пересчёт 10 раз в секунду */
+var PHINT={t:-1, p:null, r:{thru:null, norm:null}};
+function passHint(p){
+  var now=performance.now();
+  if(PHINT.p===p && now-PHINT.t<100) return PHINT.r;
+  var L=Math.hypot(IN.mx,IN.mz), d=null;
+  if(L>0.25){ var w=toWorld(IN.mx/L, IN.mz/L, [0,0]); d={x:w[0], z:w[1]}; }
+  PHINT.t=now; PHINT.p=p; PHINT.r=SIM.passTargets(p, d);
+  return PHINT.r;
+}
 var EXPOSURE=0.355;   /* лёд был так ярок, что сливался с интерфейсом */
 var AMBK=0.72;
 function buildLightVP(o,cx,cz){
@@ -3926,6 +3937,12 @@ function render(){
     var py=1.86+Math.sin(PTRT*3.4)*0.045;
     drawGeo(GEO.pointer, m4model(_mm, controlled.x, py, controlled.z, cam.yaw, 1, 1),
             {tint:rc, tintK:1, alpha:0.98, mat:'flat', boost:1.5});
+    /* подсказка паса, пока веду шайбу: кому уйдёт пас по Y (цвет кнопки Y) и по A (цвет A), если это другой */
+    if(hasP && state==='play'){
+      var PH=passHint(controlled), mk=0.8, my=1.95+Math.sin(PTRT*5.2)*0.06;
+      if(PH.thru) drawGeo(GEO.pointer, m4model(_mm, PH.thru.x, my, PH.thru.z, cam.yaw, mk, mk), {tint:[1.0,0.80,0.25], tintK:1, alpha:0.95, mat:'flat', boost:1.5});
+      if(PH.norm && PH.norm!==PH.thru) drawGeo(GEO.pointer, m4model(_mm, PH.norm.x, my, PH.norm.z, cam.yaw, mk, mk), {tint:[0.42,0.88,0.55], tintK:1, alpha:0.95, mat:'flat', boost:1.5});
+    }
   }
   gl.depthMask(true); gl.disable(gl.BLEND);
 
@@ -5027,7 +5044,8 @@ function launchPred(kind, arg, me){
   if(kind==='pass'){
     var cfg={A:[19,false,false], Y:[21,false,true], X:[15,true,false]}[arg];
     var pa=passAim(me,cfg[2],null,null), dx=pa.tx-from[0], dz=pa.tz-from[1], L=Math.hypot(dx,dz)||1;
-    vx=dx/L*cfg[0]; vz=dz/L*cfg[0]; vy=cfg[1]?3.2:0;
+    var pv=pa.v||cfg[0];               /* в разрез сила своя — под рывок партнёра (sim passAim) */
+    vx=dx/L*pv; vz=dz/L*pv; vy=cfg[1]?3.2:0;
     playAction(me,'pass_forehand',0.45); SFX.stick();
   } else {
     var sa=shotAim(me), dx2=sa.tx-from[0], dz2=sa.tz-from[1], L2=Math.hypot(dx2,dz2)||1, sp=17+arg*17;
@@ -7193,6 +7211,7 @@ window.__hk={hs:function(){return HS;},net:function(){return NET;},setCam:functi
                            qshadow:QC().shadow,env:!!TEX.envGL}; },
   tapSeen:function(){var v=_tapSeen;_tapSeen=false;return v;},
   passes:function(){return SIM.passN[HUMAN];},
+  sim:function(){return SIM;},          /* общая симуляция (shared/sim.js) — для тестов и скриншотов */
   edgeA:function(){return _edgeA;},
   /* объединённое состояние действий: экран + клавиатура + геймпад */
   act:function(){return {A:!!IN._A,B:!!IN._B,X:!!IN._X,Y:!!IN._Y,RT:!!IN.RT};},
