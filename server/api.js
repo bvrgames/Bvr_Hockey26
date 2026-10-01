@@ -1,7 +1,8 @@
 /**
  * BVR Hockey — coins and player stats API on Cloudflare (Worker + D1), docs/EVENTS.md «Итог матча и бэкенд».
  *
- *   POST /v1/match    body: match:summary  → 200 { accepted, coins, balance, verdict, day: { coins, cap } }
+ *   POST /v1/match    body: match:summary  → 200 { accepted, coins, balance, verdict, day: { coins, cap },
+ *                                                  parts: { res, base, bonus } — what the coins are for (result screen) }
  *                     401 bad signature · 409 this match id is already in · 422 { reason } implausible ·
  *                     429 { reason } too often (the client keeps the match in its queue and tries again later)
  *   GET  /v1/profile  → { user: { id, name }, coins, stars, totals: { m, w, d, l, g, ga, streak, best, online },

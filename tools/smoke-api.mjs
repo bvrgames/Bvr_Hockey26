@@ -205,13 +205,37 @@ try {
       await g.page.waitForFunction(() => { const c = window.__hk && __hk.coins(); return c && c.coins === 15 && c.prof.m >= 1 && c.q === 0; }, null, { timeout: 20000 }).catch(() => {});
       const st = await g.page.evaluate(() => { const c = __hk.coins(); return { coins: c.coins, m: c.prof.m, w: c.prof.w, q: c.q, pill: (document.querySelector('[data-coins]') || {}).textContent || '' }; });
       ok(st.coins === 15 && st.m === 1 && st.w === 1 && st.q === 0 && /15/.test(st.pill), `game: queued match sent on start, profile from the server ${JSON.stringify(st)}`);
-      // a finished match: the summary goes out, the reward shows up on the result screen
+      // a finished match: the result screen waits («начисляем…»), the server's answer plays the reward: rows «за что»,
+      // the total counts up, coins fly to the balance (30) and are gone after it
       const s2 = summary();
-      await g.page.evaluate((x) => { __hk.match().id = x.id; __hk.ev.emit('match:summary', x); }, s2);
-      await g.page.waitForFunction(() => /\+15/.test(document.getElementById('oReward').textContent), null, { timeout: 15000 }).catch(() => {});
-      const rw = await g.page.evaluate(() => ({ t: document.getElementById('oReward').textContent, coins: __hk.coins().coins }));
-      ok(/\+15/.test(rw.t) && /30/.test(rw.t) && rw.coins === 30, `game: result screen shows the reward ${JSON.stringify(rw)}`);
-      const errs = g.logs.filter(isError);
+      await g.page.evaluate((id) => __hk.result(id), s2.id);
+      let rw = await g.page.evaluate(() => __hk.rw());
+      ok(rw.st === 'wait' && /…|\.\.\./.test(rw.text), `game: result screen waits for the server ${JSON.stringify(rw)}`);
+      await g.page.evaluate((x) => __hk.ev.emit('match:summary', x), s2);
+      let flew = 0;
+      for (let t = 0; t < 60; t++) { await new Promise((r) => setTimeout(r, 100)); rw = await g.page.evaluate(() => __hk.rw()); flew = Math.max(flew, rw.fly); if (rw.played && rw.wal === '30' && !rw.fly) break; }
+      ok(rw.st === 'done' && /\+10/.test(rw.text) && /\+5/.test(rw.text) && /\+15$/.test(rw.text) && rw.wal === '30' && flew >= 3 && rw.fly === 0,
+        `game: the reward played — rows, total +15, ${flew} coins flew, balance 30 ${JSON.stringify(rw)}`);
+      ok((await g.page.evaluate(() => __hk.coins().coins)) === 30, 'game: balance 30 after the reward');
+      // no connection: «начислится позже», nothing flies; the match stays in the queue
+      await g.page.route(/\/v1\/match/, (r) => r.abort());
+      const s3 = summary();
+      await g.page.evaluate((id) => __hk.result(id), s3.id);
+      await g.page.evaluate((x) => __hk.ev.emit('match:summary', x), s3);
+      await g.page.waitForFunction(() => __hk.rw().st === 'later', null, { timeout: 10000 }).catch(() => {});
+      rw = await g.page.evaluate(() => __hk.rw());
+      ok(rw.st === 'later' && rw.fly === 0 && (await g.page.evaluate(() => __hk.coins().q)) === 1, `game: no connection → «later», queued ${JSON.stringify(rw)}`);
+      await g.page.unroute(/\/v1\/match/);
+      // it goes out with the next one; a match that left early pays 0 — the rows, no flying coins
+      const s4 = summary({ score: [0, 2], patch: { result: 'left', played: 50, disconnect: { self: 1, selfLeft: true, opp: false, oppLeft: false } } });
+      await g.page.evaluate((id) => __hk.result(id), s4.id);
+      await g.page.evaluate((x) => __hk.ev.emit('match:summary', x), s4);
+      flew = 0;
+      for (let t = 0; t < 40; t++) { await new Promise((r) => setTimeout(r, 100)); rw = await g.page.evaluate(() => __hk.rw()); flew = Math.max(flew, rw.fly); if (rw.st === 'done' && t > 20) break; }
+      ok(rw.st === 'done' && flew === 0 && /0$/.test(rw.text), `game: 0 coins → no flying coins ${JSON.stringify(rw)} flew ${flew}`);
+      await g.page.waitForFunction(() => __hk.coins().q === 0, null, { timeout: 10000 }).catch(() => {});
+      ok((await g.page.evaluate(() => __hk.coins())).coins === 45, `game: the queued match went out with the next one ${JSON.stringify(await g.page.evaluate(() => __hk.coins().coins))}`);
+      const errs = g.logs.filter(isError).filter((e) => !/ERR_FAILED/.test(e.text));   // the request aborted on purpose above
       ok(!errs.length, `game: page errors ${JSON.stringify(errs).slice(0, 400)}`);
     } finally { await g.browser.close(); srv.close(); }
   }

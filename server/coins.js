@@ -123,14 +123,18 @@ export function checkSummary(s, minLen = DEF.MIN_LEN) {
 }
 
 // coins for one match before the daily cap: result × length + goals and assists of the player's team (≤ 5)
-export function matchReward(s, conf = confFrom(null)) {
+export function matchReward(s, conf = confFrom(null)) { return rewardParts(s, conf).total; }
+// the same, by parts — the result screen says what the coins are for: { base (the result), bonus (goals and assists,
+// what is left of them under the per-match cap), total }
+export function rewardParts(s, conf = confFrom(null)) {
+  if (s.result === 'left') return { base: 0, bonus: 0, total: 0 };
   const k = Math.max(0.4, Math.min(s.len, 300) / 180);
-  let c = Math.round((REWARD[s.result] || 0) * k);
-  if (s.result === 'left') return 0;
+  const cap = Math.round(conf('AI_COIN_CAP_MATCH') * k);
+  const base = Math.min(cap, Math.round((REWARD[s.result] || 0) * k));
   let bonus = 0;
   if (Array.isArray(s.players)) for (const p of s.players) if (p && p.t === s.team) bonus += (int(p.g) ? p.g : 0) + (int(p.a) ? p.a : 0);
-  c += Math.min(BONUS_MAX, bonus);
-  return Math.min(c, Math.round(conf('AI_COIN_CAP_MATCH') * k));
+  bonus = Math.min(BONUS_MAX, bonus, cap - base);
+  return { base, bonus, total: base + bonus };
 }
 
 export const dayStart = (sec) => sec - (sec % 86400);
@@ -159,7 +163,7 @@ async function postMatch(request, d, user, now) {
   const reason = duo ? 'match_duo' : 'match_ai';
   const cap = conf(duo ? 'DUO_COIN_CAP_DAY' : 'AI_COIN_CAP_DAY');
   const earned = await store.coinsSince(uid, reason, dayStart(now));
-  const want = matchReward(s, conf);
+  const parts = rewardParts(s, conf), want = parts.total;
   const coins = Math.max(0, Math.min(want, cap - earned));
   const verdict = s.result === 'left' ? 'left' : (coins < want ? 'capped' : (s.mode === 'online' && !duo ? 'unverified' : 'ok'));
   const my = s.score[s.team], op = s.score[1 - s.team];
@@ -170,7 +174,8 @@ async function postMatch(request, d, user, now) {
   });
   if (r === 'duplicate') return json(409, { reason: 'duplicate' });
   const balance = await store.balance(uid);
-  return json(200, { accepted: true, id: s.id, coins, balance, verdict, kind: reason, day: { coins: earned + coins, cap } });
+  return json(200, { accepted: true, id: s.id, coins, balance, verdict, kind: reason, day: { coins: earned + coins, cap },
+                     parts: { res: s.result, base: parts.base, bonus: parts.bonus } });
 }
 
 async function getProfile(d, user, now) {

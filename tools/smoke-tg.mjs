@@ -138,7 +138,7 @@ for (const S of SETUPS) {
 // ---------- the menu (docs/MENU_PLAN.md): every screen and the pause, landscape setups, RU / EN / ID.
 // Nothing under Telegram's buttons or outside the device safe area, texts fit their items, the screen content stays
 // above the footer (now playing + button hints) and the two columns do not overlap.
-const MENU_SCREENS = [['main'], ['welcome'], ['mode'], ['prep'], ['friend'], ['settings'], ['profile'], ['shop'], ['train'], ['rules', 0], ['rules', 1], ['pause'], ['lesson', 4], ['lesson', 8]];
+const MENU_SCREENS = [['main'], ['welcome'], ['mode'], ['prep'], ['friend'], ['settings'], ['profile'], ['shop'], ['train'], ['rules', 0], ['rules', 1], ['pause'], ['result'], ['lesson', 4], ['lesson', 8]];
 for (const S of SETUPS.filter((x) => !x.name.startsWith('port'))) {
   const g = await openGame(browserName, { w: S.w, h: S.h, mobile: true, tg: fakeTelegram({ fullscreen: true, safe: S.safe, content: S.content, lang: S.tgLang }) });
   const { page } = g;
@@ -178,18 +178,22 @@ for (const S of SETUPS.filter((x) => !x.name.startsWith('port'))) {
           await page.evaluate("__hk.menu('main'); __hk.start()");
           await page.waitForFunction('__hk.st()==="face" || __hk.st()==="play"', null, { timeout: 60000 });
           await page.waitForTimeout(200); await page.keyboard.press('Escape');
+        } else if (scr === 'result') {
+          // the result screen with the tallest reward: result, bonus, the daily-limit note, the total
+          await page.evaluate("__hk.menu('main'); __hk.result('ab12cd34'); __hk.ev.emit('match:reward', {id:'ab12cd34', coins:3, balance:1250, verdict:'capped', parts:{res:'draw', base:5, bonus:5}})");
+          await page.waitForTimeout(2600);
         } else await page.evaluate(`__hk.menu('main'); ${scr === 'main' ? '' : `__hk.menu('${scr}'${key !== undefined ? ', ' + key : ''})`}`);
         await page.waitForTimeout(150);
         const r = await page.evaluate(({ sa, band, cw, rw, pause }) => {
           const W = innerWidth, H = innerHeight, out = [];
-          const root = pause ? document.getElementById('pausescr') : document.getElementById('start');
+          const root = document.getElementById(pause === 'result' ? 'overscr' : pause ? 'pausescr' : 'start');
           const scr = root.querySelector('.mscr.cur'), foot = root.querySelector('.mfoot');
           if (!scr) return ['no current screen'];
           const vis = (e) => { const b = e.getBoundingClientRect(); return b.width > 0 && b.height > 0 && getComputedStyle(e).visibility !== 'hidden' ? b : null; };
           const zones = [{ n: 'tg-close', x: sa.left || 0, y: sa.top || 0, w: cw, h: band }, { n: 'tg-right', x: W - (sa.right || 0) - rw, y: sa.top || 0, w: rw, h: band }];
           const hit = (a, z) => a.left < z.x + z.w && z.x < a.right && a.top < z.y + z.h && z.y < a.bottom;
           const name = (e) => (e.id ? '#' + e.id : '.' + [...e.classList].join('.')) + ' "' + e.textContent.trim().slice(0, 24) + '"';
-          const els = [...scr.querySelectorAll('.mi,.mrow,.mbtn,.mtc,.mtab,.mlang,.mtitle,.mbrand,.mpill,.mcard,.mroom,.mscore,.mtbl .tr,.mback,.mprof,.mprofbig,.pst,.mshop,.mwallet')]
+          const els = [...scr.querySelectorAll('.mi,.mrow,.mbtn,.mtc,.mtab,.mlang,.mtitle,.mbrand,.mpill,.mcard,.mroom,.mscore,.mtbl .tr,.mback,.mprof,.mprofbig,.pst,.mshop,.mwallet,.rw-r,.rw-tot')]
             .concat(foot ? [...foot.querySelectorAll('.mnp,.mh')] : []);
           const fb = foot && vis(foot);
           for (const e of els) {
@@ -208,7 +212,7 @@ for (const S of SETUPS.filter((x) => !x.name.startsWith('port'))) {
           if (lb) for (const e of L.querySelectorAll('.mi,.mrow')) { const b = vis(e); if (b && b.right > lb.right + 1) out.push(`${name(e)} wider than the left column`); }
           if (lb && rb && !scr.classList.contains('wide')) for (const e of R.querySelectorAll('.mcard,.mroom,.mtbl,.mteams,.mwallet,.mscore')) { const b = vis(e); if (b && b.left < lb.right - 1 && b.right > lb.left && b.top < lb.bottom && b.bottom > lb.top) out.push(`${name(e)} overlaps the left column`); }
           return out;
-        }, { sa: S.safe, band: S.content.top, cw: CLOSE_W[S.tgLang], rw: RIGHT_W, pause: scr === 'pause' });
+        }, { sa: S.safe, band: S.content.top, cw: CLOSE_W[S.tgLang], rw: RIGHT_W, pause: scr === 'pause' || (scr === 'result' && 'result') });
         for (const x of r) fails.push(`${tag}: ${x}`);
         // the currency: an icon next to the number (no word «монеты / coins / koin» by a number), the icon as tall as
         // the digits; the wallet (main) shows coins and stars — a number or «—», never an empty spot
@@ -237,6 +241,7 @@ for (const S of SETUPS.filter((x) => !x.name.startsWith('port'))) {
         }
         if (browserName === 'chromium' && lang === 'ru' && S.name === 'land') await page.screenshot({ path: `shots/ui/tg-menu-${scr}${key ? '-tab2' : ''}.png` });
         if (scr === 'pause') { await page.keyboard.press('ArrowUp'); await page.keyboard.press('Enter'); await page.waitForTimeout(150); }
+        if (scr === 'result') { await page.evaluate('__hk.result(null)'); await page.waitForTimeout(150); }
       }
     }
     for (const e of g.logs.filter(isError)) fails.push(`menu ${S.name} [${e.type}] ${e.text}`);
