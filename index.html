@@ -286,6 +286,33 @@
   .mg.r{background:#b9c4d6;border-radius:6px}
   .mg.key{background:#dfe7f1;border-radius:5px;box-shadow:inset 0 -2px 0 rgba(0,0,0,.25);font-size:10px}
 
+  /* профиль (карточка на главном и экран) и магазин */
+  .mprof{display:flex;align-items:center;gap:10px;padding:8px 14px 8px 8px;border-radius:14px;max-width:280px;min-width:0}
+  .mprof.on,.mprofbig.on,.mshop.on{box-shadow:0 0 0 2px var(--mgold),0 10px 30px rgba(0,0,0,.35)}
+  .mprof .pn,.mprofbig .pn{display:flex;flex-direction:column;gap:3px;min-width:0}
+  .mprof .pn b{font:italic 800 16px/1 var(--msport);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mprof .pn i{font:700 11px/1.1 system-ui;font-style:normal;color:var(--mdim);white-space:nowrap}
+  .mava{position:relative;flex:none;width:40px;height:40px;border-radius:50%;overflow:hidden;display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(135deg,var(--mmag),var(--mblu));box-shadow:0 0 0 2px rgba(255,255,255,.25)}
+  .mava b{font:italic 800 19px/1 var(--msport);color:#fff}
+  .mava img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+  .mava.big{width:64px;height:64px}.mava.big b{font-size:30px}
+  .mlogo.sm{width:min(34vh,26vw);max-width:190px}
+  .mprofbig{display:flex;align-items:center;gap:14px;padding:12px 16px;border-radius:14px;max-width:380px}
+  .mprofbig .pn b{font:italic 800 22px/1 var(--msport);text-transform:uppercase}
+  .mprofbig .pn i{font:700 12px/1 system-ui;font-style:normal;color:var(--mdim)}
+  .mprofbig .mpill{align-self:flex-start;margin-top:3px}
+  .mstats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;width:100%;max-width:380px}
+  .pst{display:flex;flex-direction:column;gap:3px;padding:6px 10px;border-radius:10px;background:rgba(255,255,255,.06)}
+  .pst b{font:italic 800 21px/1 var(--msport)}
+  .pst span{font:700 9px/1 system-ui;letter-spacing:.12em;text-transform:uppercase;color:var(--mmute)}
+  .mshopg{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+  .mshop{position:relative;display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 8px 12px;border-radius:14px;text-align:center}
+  .mshop svg{width:min(15vh,64px);height:auto}
+  .mshop b{font:italic 800 15px/1.05 var(--msport);text-transform:uppercase}
+  .mshop i{font:600 10.5px/1.25 system-ui;font-style:normal;color:var(--mdim)}
+  .mshop .soon{position:absolute;top:8px;right:8px;font:italic 800 10px/1 var(--msport);padding:3px 6px;border-radius:999px;color:var(--mcyan);border:1px solid rgba(143,216,255,.35)}
+
   /* язык на главном — сбоку, небольшой */
   .mlang{margin-left:auto;display:flex;gap:4px;padding:3px;border-radius:10px}
   .mlang .chip{flex:0 0 auto;padding:5px 8px;font:italic 800 12px/1 var(--msport);border-radius:7px;border:0;color:var(--mdim);background:rgba(255,255,255,.07);opacity:1}
@@ -1085,7 +1112,14 @@ ru:{
   rFace:'Вбрасывание', rFaceD:'После гола, офсайда, проброса и остановки. Кто первым коснётся шайбы — тот владеет.',
   rLen:'Длина матча', rLenD:'1, 3 или 5 минут чистого времени. Ничья — значит ничья.',
   rGoal:'Гол', rGoalD:'Шайба целиком пересекла линию ворот. Вратарь может отбить её или накрыть.',
-  mDevD:'Ещё игры — @bvr_games_bot'
+  mDevD:'Ещё игры — @bvr_games_bot',
+  mProfile:'Профиль', mShop:'Магазин', mShopD:'Форма, клюшки, празднования — за монеты', mPlayer:'Игрок',
+  pMatches:'Матчи', pWins:'Победы', pDraws:'Ничьи', pLosses:'Поражения', pGoals:'Голы', pBest:'Лучшая серия',
+  pOnline:'С друзьями', pCoins:'Монеты', pCoinsSoon:'монеты — скоро', pNone:'Сыграй первый матч — здесь появится статистика.',
+  pStatsNote:'Статистика хранится в твоём Telegram и переезжает с тобой на другие устройства.',
+  shKits:'Форма команд', shKitsD:'Ретро, зимняя, ночная', shSticks:'Клюшки', shSticksD:'Цвет обмотки и крюка',
+  shGoal:'Празднование гола', shGoalD:'Сирена, салют, камера', shIce:'Лёд арены', shIceD:'Рисунок в центральном круге',
+  shSoon:'Покупки откроются, когда заработают монеты: их дают за матчи, немного каждый день.'
 },
 en:{
   fpsOn:'FPS: ON', fpsOff:'FPS: OFF',
@@ -1154,7 +1188,14 @@ en:{
   rFace:'Faceoff', rFaceD:'After a goal, offside, icing or a stoppage. The first to touch the puck owns it.',
   rLen:'Match length', rLenD:'1, 3 or 5 minutes of play. A draw is a draw.',
   rGoal:'Goal', rGoalD:'The whole puck crossed the goal line. The goalie can save it or cover it.',
-  mDevD:'More games — @bvr_games_bot'
+  mDevD:'More games — @bvr_games_bot',
+  mProfile:'Profile', mShop:'Shop', mShopD:'Kits, sticks, celebrations — for coins', mPlayer:'Player',
+  pMatches:'Matches', pWins:'Wins', pDraws:'Draws', pLosses:'Losses', pGoals:'Goals', pBest:'Best streak',
+  pOnline:'With friends', pCoins:'Coins', pCoinsSoon:'coins — soon', pNone:'Play your first match — your stats will show up here.',
+  pStatsNote:'Your stats live in your Telegram account and follow you to other devices.',
+  shKits:'Team kits', shKitsD:'Retro, winter, night', shSticks:'Sticks', shSticksD:'Tape and blade colours',
+  shGoal:'Goal celebration', shGoalD:'Horn, fireworks, camera', shIce:'Arena ice', shIceD:'Centre circle art',
+  shSoon:'The shop opens once coins arrive: you earn them in matches, a little every day.'
 },
 id:{
   fpsOn:'FPS: AKTIF', fpsOff:'FPS: MATI',
@@ -1225,7 +1266,14 @@ id:{
   rFace:'Face-off', rFaceD:'Setelah gol, offside, icing, atau penghentian. Yang pertama menyentuh keping menguasainya.',
   rLen:'Durasi laga', rLenD:'1, 3, atau 5 menit permainan. Seri tetap seri.',
   rGoal:'Gol', rGoalD:'Seluruh keping melewati garis gawang. Kiper bisa menepis atau menangkapnya.',
-  mDevD:'Game lainnya — @bvr_games_bot'
+  mDevD:'Game lainnya — @bvr_games_bot',
+  mProfile:'Profil', mShop:'Toko', mShopD:'Seragam, tongkat, selebrasi — dengan koin', mPlayer:'Pemain',
+  pMatches:'Laga', pWins:'Menang', pDraws:'Seri', pLosses:'Kalah', pGoals:'Gol', pBest:'Rekor beruntun',
+  pOnline:'Dengan teman', pCoins:'Koin', pCoinsSoon:'koin — segera', pNone:'Mainkan laga pertamamu — statistik akan muncul di sini.',
+  pStatsNote:'Statistikmu tersimpan di akun Telegram dan ikut ke perangkat lain.',
+  shKits:'Seragam tim', shKitsD:'Retro, musim dingin, malam', shSticks:'Tongkat', shSticksD:'Warna lakban dan bilah',
+  shGoal:'Selebrasi gol', shGoalD:'Sirene, kembang api, kamera', shIce:'Es arena', shIceD:'Gambar di lingkaran tengah',
+  shSoon:'Toko dibuka saat koin tersedia: kamu mendapatkannya dari laga, sedikit setiap hari.'
 }};
 var LANG='ru';
 try{ var _sl=localStorage.getItem('bvr_lang'); if(_sl && STRINGS[_sl]) LANG=_sl; }catch(e){}
@@ -5254,6 +5302,36 @@ function setLang(c, noSave){
   LANG=c; if(!noSave) prefSet('lang', c);
   paintLang(); if(MENU.ready){ MENU.repaint(); MUSIC.paint(); } netStatus(NET.status||T('notConnected'));
 }
+/* профиль игрока: статистика из match:summary (пока локально; позже — сервер, docs/EVENTS.md).
+   localStorage + кэш в CloudStorage ('profile'): из двух копий берётся та, где больше матчей */
+var PROF={m:0, w:0, d:0, l:0, g:0, ga:0, streak:0, best:0, online:0};
+function profApply(v){
+  var o=null; try{ o=JSON.parse(v); }catch(e){}
+  if(!o || typeof o.m!=='number' || o.m<PROF.m) return false;
+  for(var k in PROF) if(typeof o[k]==='number' && o[k]>=0) PROF[k]=Math.floor(o[k]);
+  return true;
+}
+prefGet('profile', function(v){ if(v && profApply(v) && MENU.ready) MENU.repaint(); });
+EV.on('match:summary', function(s){
+  if(!s || !s.score) return;
+  var me=s.team|0;
+  PROF.m++;
+  if(s.result==='win'){ PROF.w++; PROF.streak++; if(PROF.streak>PROF.best) PROF.best=PROF.streak; }
+  else { if(s.result==='draw') PROF.d++; else PROF.l++; PROF.streak=0; }
+  PROF.g+=s.score[me]|0; PROF.ga+=s.score[1-me]|0;
+  if(s.mode==='online') PROF.online++;
+  prefSet('profile', JSON.stringify(PROF));
+  if(MENU.ready){ MENU.build('main'); MENU.build('profile'); }
+});
+/* игрок из Telegram: имя, @ник, аватар (если Telegram его даёт) */
+function tgUser(){ try{ return (TG && TG.initDataUnsafe && TG.initDataUnsafe.user) || null; }catch(e){ return null; } }
+function mAvatar(big){
+  var u=tgUser(), nm=u ? ((u.first_name||'')+' '+(u.last_name||'')).trim() : '', ini=(nm||T('mPlayer')).slice(0,1).toUpperCase();
+  var img=(u && /^https:\/\//.test(u.photo_url||'')) ? '<img alt="" src="'+mEsc(u.photo_url)+'" onerror="this.remove()">' : '';
+  return '<span class="mava'+(big?' big':'')+'"><b>'+mEsc(ini)+'</b>'+img+'</span>';
+}
+function mUserName(){ var u=tgUser(); var nm=u ? ((u.first_name||'')+' '+(u.last_name||'')).trim() : ''; return nm || T('mPlayer'); }
+
 /* совместимость: облачные настройки просят перерисовать меню */
 function paintOpts(){ if(MENU.ready) MENU.repaint(); }
 function paintChips(){ paintOpts(); }
@@ -5293,11 +5371,13 @@ var MSCR={
   main:function(){
     var lg=''; [['ru','RU'],['en','EN'],['id','ID']].forEach(function(o){ lg+='<span class="chip'+(LANG===o[0]?' on':'')+'" data-lang="'+o[0]+'">'+o[1]+'</span>'; });
     var qd=clubName(CLUBS[LAST.my])+' — '+clubName(CLUBS[LAST.op])+' · '+T(diffKey()).toLowerCase()+' · '+T('min'+LAST.min);
-    return mHead('', '<div class="mlang mf mlast" data-adj="lang">'+lg+'</div>', true)+
+    return mHead('', '<div class="mlang mf mlast" data-adj="lang" data-ord="2">'+lg+'</div>', true)+
       '<div class="mleft"><div class="mlist">'+mItem('quick',T('mQuick'),qd)+mItem('mode',T('mMode'),T('mModeD'))+
       mItem('train',T('mTrain'),T('mTrainD'),'<span class="soon">'+mEsc(T('soon'))+'</span>','dis')+
-      mItem('rules',T('mRules'),T('mRulesD'))+mItem('settings',T('mSettings'),T('mSettingsD'))+'</div></div>'+
-      '<div class="mright"><img class="mlogo" alt="" src="'+(window.ASSETS&&ASSETS.logo||'')+'"></div>';
+      mItem('shop',T('mShop'),T('mShopD'))+mItem('rules',T('mRules'),T('mRulesD'))+mItem('settings',T('mSettings'),T('mSettingsD'))+'</div></div>'+
+      '<div class="mright"><div class="mprof mglass mf mlast" data-act="profile" data-ord="1">'+mAvatar()+'<span class="pn"><b>'+mEsc(mUserName())+'</b>'+
+      '<i>'+mEsc(T('mProfile'))+' · '+PROF.w+'–'+PROF.d+'–'+PROF.l+'</i></span></div>'+
+      '<img class="mlogo sm" alt="" src="'+(window.ASSETS&&ASSETS.logo||'')+'"></div>';
   },
   mode:function(){
     return mHead(T('mMode'))+'<div class="mleft"><div class="mlist">'+mItem('vsai',T('mVsAI'),T('mVsAID'))+mItem('friend',T('mFriend'),T('mFriendD'))+
@@ -5330,6 +5410,21 @@ var MSCR={
     return mHead(T('mSettings'))+'<div class="mleft"><div class="mopts">'+rows+'</div></div>'+
       '<div class="mright"><div class="mcard mglass" data-paint="setR"></div></div>';
   },
+  profile:function(){
+    var st=[['pMatches',PROF.m],['pWins',PROF.w],['pDraws',PROF.d],['pLosses',PROF.l],['pGoals',PROF.g+' : '+PROF.ga],['pBest',PROF.best],['pOnline',PROF.online]];
+    var g=''; st.forEach(function(x){ g+='<div class="pst"><b>'+mEsc(x[1])+'</b><span>'+mEsc(T(x[0]))+'</span></div>'; });
+    var u=tgUser();
+    return mHead(T('mProfile'))+'<div class="mleft"><div class="mprofbig mglass mf" data-act="noop">'+mAvatar(true)+'<div class="pn"><b>'+mEsc(mUserName())+'</b>'+
+      (u && u.username ? '<i>@'+mEsc(u.username)+'</i>' : '')+'<span class="mpill">'+mEsc(T('pCoinsSoon'))+'</span></div></div>'+
+      '<div class="mnote dim" style="margin-top:8px">'+mEsc(PROF.m ? T('pStatsNote') : T('pNone'))+'</div></div>'+
+      '<div class="mright"><div class="mstats">'+g+'</div></div>';
+  },
+  shop:function(){
+    var it=[['shKits','shKitsD','kit'],['shSticks','shSticksD','stick'],['shGoal','shGoalD','goal'],['shIce','shIceD','ice']], h='';
+    it.forEach(function(x){ h+='<div class="mshop mglass mf" data-act="noop">'+SHOP_ICON[x[2]]+'<b>'+mEsc(T(x[0]))+'</b><i>'+mEsc(T(x[1]))+'</i><span class="soon">'+mEsc(T('soon'))+'</span></div>'; });
+    return mHead(T('mShop'), '<span class="mpill">'+mEsc(T('pCoinsSoon'))+'</span>')+
+      '<div class="mleft"><div class="mshopg">'+h+'</div><div class="mnote dim" style="margin-top:8px">'+mEsc(T('shSoon'))+'</div></div>';
+  },
   rules:function(){
     var tabs='';
     if(!MENU.ctrlOnly){
@@ -5346,6 +5441,11 @@ var MSCR={
     return mHead(title, tabs)+'<div class="mleft"><div class="mlist sm">'+it+'</div></div><div class="mright"><div class="mcard mglass mrule" data-paint="ruleR"></div></div>';
   }
 };
+var SHOP_ICON={
+  kit:'<svg viewBox="0 0 100 100"><path d="M30 12 L42 8 Q50 16 58 8 L70 12 L92 28 L82 44 L72 38 L72 92 L28 92 L28 38 L18 44 L8 28 Z" fill="#c325d8"/><path d="M28 66 H72 V74 H28 Z" fill="#8fd8ff"/></svg>',
+  stick:'<svg viewBox="0 0 100 100"><path d="M70 6 L78 10 L40 80 L60 86 L58 94 L22 86 Z" fill="#ffd166"/><path d="M47 60 L55 64 L50 73 L42 69 Z" fill="#2585ff"/></svg>',
+  goal:'<svg viewBox="0 0 100 100"><path d="M20 30 H80 V80 H20 Z" fill="none" stroke="#e8736f" stroke-width="6"/><path d="M50 8 L56 22 L70 24 L59 33 L62 47 L50 40 L38 47 L41 33 L30 24 L44 22 Z" fill="#ffd166"/></svg>',
+  ice:'<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="38" fill="#cfe6f5"/><circle cx="50" cy="50" r="38" fill="none" stroke="#2b62c8" stroke-width="5"/><circle cx="50" cy="50" r="6" fill="#2b62c8"/></svg>'};
 var RULES=[['rOff','rOffD'],['rIce','rIceD'],['rPen','rPenD'],['rFace','rFaceD'],['rLen','rLenD'],['rGoal','rGoalD']];
 var RULE_ICON=[
   '<svg viewBox="0 0 50 34"><rect x="1" y="1" width="48" height="32" rx="8" fill="#1b4466"/><rect x="30" y="1" width="3" height="32" fill="#2b62c8"/><circle cx="40" cy="17" r="4" fill="#fff"/><circle cx="24" cy="12" r="3" fill="#ffd166"/></svg>',
@@ -5467,12 +5567,17 @@ MENU.key=function(L){ return L==='menu' ? MENU.top() : L; };
 MENU.items=function(L){
   var s=MENU.scr(L); if(!s) return [];
   var a=Array.prototype.filter.call(s.querySelectorAll('.mf'), function(e){ return e.offsetParent!==null; });
-  return a.filter(function(e){ return !e.classList.contains('mlast'); }).concat(a.filter(function(e){ return e.classList.contains('mlast'); }));
+  return mOrder(a);
 };
+function mOrder(a){
+  var last=a.filter(function(e){ return e.classList.contains('mlast'); });
+  last.sort(function(x,y){ return (+x.getAttribute('data-ord')||0)-(+y.getAttribute('data-ord')||0); });
+  return a.filter(function(e){ return !e.classList.contains('mlast'); }).concat(last);
+}
 MENU.focusedEl=function(id){
   var s=MENU.sec[id]; if(!s) return null;
   var a=Array.prototype.filter.call(s.querySelectorAll('.mf'), function(e){ return e.offsetParent!==null; });
-  var it=a.filter(function(e){ return !e.classList.contains('mlast'); }).concat(a.filter(function(e){ return e.classList.contains('mlast'); }));
+  var it=mOrder(a);
   return it[Math.min(MENU.foc[id]||0, it.length-1)]||null;
 };
 MENU.focusedAct=function(id){ var e=MENU.focusedEl(id); return e ? e.getAttribute('data-act') : null; };
@@ -5595,7 +5700,8 @@ function mFeedback(adj){
 }
 MENU.onLayer=function(L){
   if(L==='pause') paintPause();
-  if(L==='result') MENU.foc.result=0;
+  /* фокус итога и паузы сбрасывают showResult() / setPaused(): здесь (кадром позже) не трогаем — нажатие,
+     успевшее между появлением экрана и этим кадром, не должно откатываться */
   if(L==='menu') MENU.show(true);
   else MENU.setFocus(MENU.foc[L]||0, L);
   MENU.paintHints();
@@ -5667,6 +5773,9 @@ var ACT={
   invite:function(){ if(NET.code) shareLink(NET.code); },
   go:function(){ goStart(); },
   topic:function(){},
+  noop:function(){},
+  profile:function(){ MENU.go('profile'); },
+  shop:function(){ MENU.go('shop'); },
   resume:function(){ setPaused(false); },
   pctrl:function(){ openPauseSub('rules'); },
   pset:function(){ openPauseSub('settings'); },
@@ -5904,7 +6013,7 @@ function mFontLoad(){
     '<input id="rcode" maxlength="6" autocapitalize="characters" autocorrect="off" spellcheck="false" enterkeyhint="go">'+
     '<div id="netst"></div><div id="netlink"></div>';
   MENU.hold={srv:document.getElementById('srv'), rcode:document.getElementById('rcode'), netst:document.getElementById('netst'), netlink:document.getElementById('netlink')};
-  for(var id in MSCR){ var s=document.createElement('section'); s.className='mscr'+(id==='prep'?' wide':''); s.setAttribute('data-s',id); box.appendChild(s); MENU.sec[id]=s; }
+  for(var id in MSCR){ var s=document.createElement('section'); s.className='mscr'+(id==='prep'||id==='shop'?' wide':''); s.setAttribute('data-s',id); box.appendChild(s); MENU.sec[id]=s; }
   ['start','pausescr','overscr'].forEach(function(i){ var el=document.getElementById(i); el.addEventListener('click', mClick); el.addEventListener('pointerdown', mPointer); });
   if(tgBackOK()){ try{ TG.BackButton.onClick(tgBack); }catch(e){} }
   selFromLast();

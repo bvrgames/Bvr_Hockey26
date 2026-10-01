@@ -52,7 +52,7 @@ async function keys(page, list) { for (const k of list) { await page.keyboard.pr
 async function to(page, name, enter = true) {
   for (let i = 0; i < 12 && (await MS(page)).focus !== name; i++) await keys(page, ['ArrowDown']);
   const f = (await MS(page)).focus;
-  if (f !== name) fails.push(`keyboard: cannot reach "${name}" (focus ${f})`);
+  if (f !== name) fails.push(`keyboard: cannot reach "${name}" (focus ${f}) ` + JSON.stringify(await page.evaluate(`({st:__hk.st(), start:document.getElementById('start').style.display, over:document.getElementById('overscr').style.display, rot:document.getElementById('rotate').style.display, pause:document.getElementById('pausescr').style.display, paused:__hk.paused()})`)));
   if (enter) await keys(page, ['Enter']);
 }
 async function inMatch(page, what) {
@@ -105,8 +105,19 @@ async function collect(g, tag) {
     if (await inMatch(page, 'quick match')) {
       const m = await page.evaluate('({min: __hk.menuState().matchMin, t0: __hk.team()[0].id})');
       ok(m.min === 5 && m.t0 === 'blue', `quick match should repeat the saved setup: ${JSON.stringify(m)}`);
-      await keys(page, ['Escape']); await to(page, 'menu');       // pause → Main menu
-      ok((await page.evaluate('__hk.st()')) === 'menu', 'keyboard: back to the menu after the quick match');
+      // play it to the end: the result screen by keyboard, then the profile counts the match
+      await page.evaluate('__hk.setClock(0.3)');
+      await page.waitForFunction('__hk.menuState().layer==="result"', null, { timeout: 20000 }).catch(() => fails.push('keyboard: no result screen'));
+      s = await MS(page); ok(s.focus === 'again', `result: focus ${s.focus}`);
+      await keys(page, ['ArrowDown', 'Enter']);                    // Main menu
+      ok((await page.evaluate('__hk.st()')) === 'menu', 'keyboard: back to the menu from the result');
+      await to(page, 'profile');
+      s = await MS(page); ok(s.stack.join() === 'main,profile', `keyboard: profile ${JSON.stringify(s)}`);
+      const pm = await page.evaluate("document.querySelector('#start .mscr.cur .pst b').textContent");
+      ok(pm === '1', `profile: 1 match expected, shows "${pm}"`);
+      await keys(page, ['Escape']); await to(page, 'shop');
+      s = await MS(page); ok(s.stack.join() === 'main,shop', `keyboard: shop ${JSON.stringify(s)}`);
+      await keys(page, ['ArrowRight', 'Escape']);
     }
     // Settings: language (Right) and music volume (Left), then reload
     await to(page, 'settings');
@@ -121,6 +132,7 @@ async function collect(g, tag) {
     await page.waitForFunction('window.__hk && __hk.menuState', null, { timeout: 30000 });
     const after = await page.evaluate("({lang: document.documentElement.lang, item: document.querySelector('#start .mscr.cur .mi').textContent, vol: __hk.music().vol})");
     ok(/quick/i.test(after.item) && Math.abs(after.vol - 0.5) < 1e-6, `settings after reload: ${JSON.stringify(after)}`);
+    ok(/1–0–0|0–1–0|0–0–1/.test(await page.evaluate("document.querySelector('#start .mprof').textContent")), 'profile card after reload: the finished match is gone');
     // the language switch on the main menu (last in the focus order): Up from the first item wraps to it
     await to(page, 'lang', false); await keys(page, ['ArrowRight']);   // en → id
     const idItem = await page.evaluate("document.querySelector('#start .mscr.cur .mi').textContent");

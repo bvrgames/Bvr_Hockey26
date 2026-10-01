@@ -45,6 +45,8 @@ for (const o of ORIENT) {
     await page.evaluate("__hk.menu('main'); __hk.menu('mode'); __hk.menu('friend')"); await page.waitForTimeout(200); await shot('friend');
     await nav(['ArrowDown']); await shot('friend-join');
     await page.evaluate("__hk.menu('main'); __hk.menu('settings')"); await page.waitForTimeout(200); await nav(['ArrowDown']); await shot('settings');
+    await page.evaluate("__hk.menu('main'); __hk.menu('profile')"); await page.waitForTimeout(200); await shot('profile');
+    await page.evaluate("__hk.menu('main'); __hk.menu('shop')"); await page.waitForTimeout(200); await shot('shop');
     await page.evaluate("__hk.menu('main'); __hk.menu('rules')"); await page.waitForTimeout(200); await shot('rules-controls');
     await nav(['KeyE', 'ArrowDown', 'ArrowDown']); await shot('rules-hockey');
     await page.evaluate("__hk.menu('main')"); await page.waitForTimeout(200);

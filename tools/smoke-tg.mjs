@@ -138,7 +138,7 @@ for (const S of SETUPS) {
 // ---------- the menu (docs/MENU_PLAN.md): every screen and the pause, landscape setups, RU / EN / ID.
 // Nothing under Telegram's buttons or outside the device safe area, texts fit their items, the screen content stays
 // above the footer (now playing + button hints) and the two columns do not overlap.
-const MENU_SCREENS = [['main'], ['mode'], ['prep'], ['friend'], ['settings'], ['rules', 0], ['rules', 1], ['pause']];
+const MENU_SCREENS = [['main'], ['mode'], ['prep'], ['friend'], ['settings'], ['profile'], ['shop'], ['rules', 0], ['rules', 1], ['pause']];
 for (const S of SETUPS.filter((x) => !x.name.startsWith('port'))) {
   const g = await openGame(browserName, { w: S.w, h: S.h, mobile: true, tg: fakeTelegram({ fullscreen: true, safe: S.safe, content: S.content, lang: S.tgLang }) });
   const { page } = g;
@@ -165,7 +165,7 @@ for (const S of SETUPS.filter((x) => !x.name.startsWith('port'))) {
           const zones = [{ n: 'tg-close', x: sa.left || 0, y: sa.top || 0, w: cw, h: band }, { n: 'tg-right', x: W - (sa.right || 0) - rw, y: sa.top || 0, w: rw, h: band }];
           const hit = (a, z) => a.left < z.x + z.w && z.x < a.right && a.top < z.y + z.h && z.y < a.bottom;
           const name = (e) => (e.id ? '#' + e.id : '.' + [...e.classList].join('.')) + ' "' + e.textContent.trim().slice(0, 24) + '"';
-          const els = [...scr.querySelectorAll('.mi,.mrow,.mbtn,.mtc,.mtab,.mlang,.mtitle,.mbrand,.mpill,.mcard,.mroom,.mscore,.mtbl .tr,.mback')]
+          const els = [...scr.querySelectorAll('.mi,.mrow,.mbtn,.mtc,.mtab,.mlang,.mtitle,.mbrand,.mpill,.mcard,.mroom,.mscore,.mtbl .tr,.mback,.mprof,.mprofbig,.pst,.mshop,.mlogo')]
             .concat(foot ? [...foot.querySelectorAll('.mnp,.mh')] : []);
           const fb = foot && vis(foot);
           for (const e of els) {
