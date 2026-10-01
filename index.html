@@ -434,6 +434,8 @@
   .mres{align-items:center;text-align:center;padding:16px 20px}
   #oScore{font:italic 800 clamp(40px,14vh,60px)/1 var(--msport);letter-spacing:.04em}
   #oWinner{font:italic 800 16px/1.2 var(--msport);color:var(--mgold);text-transform:uppercase}
+  #oReward{margin-top:8px;font:800 15px/1.2 var(--msport);color:#fff;opacity:.92}
+  #oReward:empty{display:none}
   #pfps{font:700 11px/1 system-ui;color:#8fe3a0}
 </style>
 
@@ -500,7 +502,7 @@
         <div class="mi mf" id="oNext" data-act="lnext" style="display:none"></div>
         <div class="mi mf" id="oMenu" data-act="menu"></div>
       </div></div>
-      <div class="mright"><div class="mcard mglass mres"><div id="oScore">0 : 0</div><div id="oWinner">—</div></div></div>
+      <div class="mright"><div class="mcard mglass mres"><div id="oScore">0 : 0</div><div id="oWinner">—</div><div id="oReward"></div></div></div>
     </section>
     <div class="mfoot"><span></span><div class="mhints"></div></div>
   </div>
@@ -1187,11 +1189,11 @@ ru:{
   mDevD:'Ещё игры — @bvr_games_bot',
   mProfile:'Профиль', mShop:'Магазин', mShopD:'Форма, клюшки, празднования — за монеты', mPlayer:'Игрок',
   pMatches:'Матчи', pWins:'Победы', pDraws:'Ничьи', pLosses:'Поражения', pGoals:'Голы', pBest:'Лучшая серия',
-  pOnline:'С друзьями', pCoins:'Монеты', pCoinsSoon:'монеты — скоро', pNone:'Сыграй первый матч — здесь появится статистика.',
+  pOnline:'С друзьями', pCoins:'Монеты', pCoinsSoon:'монеты — скоро', rwCoins:'монета|монеты|монет', rwTotal:'всего', rwCap:'дневной лимит монет набран', pNone:'Сыграй первый матч — здесь появится статистика.',
   pStatsNote:'Статистика хранится в твоём Telegram и переезжает с тобой на другие устройства.',
   shKits:'Форма команд', shKitsD:'Ретро, зимняя, ночная', shSticks:'Клюшки', shSticksD:'Цвет обмотки и крюка',
   shGoal:'Празднование гола', shGoalD:'Сирена, салют, камера', shIce:'Лёд арены', shIceD:'Рисунок в центральном круге',
-  shSoon:'Покупки откроются, когда заработают монеты: их дают за матчи, немного каждый день.',
+  shSoon:'Покупки откроются, когда заработают монеты: их дают за матчи, немного каждый день.', shEarn:'Монеты уже копятся: их дают за матчи, до 100 в день. Покупки откроются скоро.',
   tLesson:'Урок', tFree:'Свободная тренировка', tFreeD:'Лёд без соперников — пробуй всё, шайба вернётся сама', tStart:'Начать урок',
   tBest:'Лучшее', tNotYet:'ещё не пройден', tDone:'Выполнено', tFail:'Не получилось', tRetry:'Ещё раз', tNext:'Следующий урок',
   tToList:'К урокам', tNoMedal:'без медали', tBronze:'Бронза', tSilver:'Серебро', tGold:'Золото', tMedalsP:'Медали', tTries:'попытка',
@@ -1278,11 +1280,11 @@ en:{
   mDevD:'More games — @bvr_games_bot',
   mProfile:'Profile', mShop:'Shop', mShopD:'Kits, sticks, celebrations — for coins', mPlayer:'Player',
   pMatches:'Matches', pWins:'Wins', pDraws:'Draws', pLosses:'Losses', pGoals:'Goals', pBest:'Best streak',
-  pOnline:'With friends', pCoins:'Coins', pCoinsSoon:'coins — soon', pNone:'Play your first match — your stats will show up here.',
+  pOnline:'With friends', pCoins:'Coins', pCoinsSoon:'coins — soon', rwCoins:'coins', rwTotal:'total', rwCap:'daily coin limit reached', pNone:'Play your first match — your stats will show up here.',
   pStatsNote:'Your stats live in your Telegram account and follow you to other devices.',
   shKits:'Team kits', shKitsD:'Retro, winter, night', shSticks:'Sticks', shSticksD:'Tape and blade colours',
   shGoal:'Goal celebration', shGoalD:'Horn, fireworks, camera', shIce:'Arena ice', shIceD:'Centre circle art',
-  shSoon:'The shop opens once coins arrive: you earn them in matches, a little every day.',
+  shSoon:'The shop opens once coins arrive: you earn them in matches, a little every day.', shEarn:'Coins already add up: you earn them in matches, up to 100 a day. Purchases open soon.',
   tLesson:'Lesson', tFree:'Free skate', tFreeD:'Empty ice — try everything, the puck comes back by itself', tStart:'Start lesson',
   tBest:'Best', tNotYet:'not done yet', tDone:'Complete', tFail:'Not this time', tRetry:'Retry', tNext:'Next lesson',
   tToList:'To lessons', tNoMedal:'no medal', tBronze:'Bronze', tSilver:'Silver', tGold:'Gold', tMedalsP:'Medals', tTries:'try',
@@ -1371,11 +1373,11 @@ id:{
   mDevD:'Game lainnya — @bvr_games_bot',
   mProfile:'Profil', mShop:'Toko', mShopD:'Seragam, tongkat, selebrasi — dengan koin', mPlayer:'Pemain',
   pMatches:'Laga', pWins:'Menang', pDraws:'Seri', pLosses:'Kalah', pGoals:'Gol', pBest:'Rekor beruntun',
-  pOnline:'Dengan teman', pCoins:'Koin', pCoinsSoon:'koin — segera', pNone:'Mainkan laga pertamamu — statistik akan muncul di sini.',
+  pOnline:'Dengan teman', pCoins:'Koin', pCoinsSoon:'koin — segera', rwCoins:'koin', rwTotal:'total', rwCap:'batas koin harian tercapai', pNone:'Mainkan laga pertamamu — statistik akan muncul di sini.',
   pStatsNote:'Statistikmu tersimpan di akun Telegram dan ikut ke perangkat lain.',
   shKits:'Seragam tim', shKitsD:'Retro, musim dingin, malam', shSticks:'Tongkat', shSticksD:'Warna lakban dan bilah',
   shGoal:'Selebrasi gol', shGoalD:'Sirene, kembang api, kamera', shIce:'Es arena', shIceD:'Gambar di lingkaran tengah',
-  shSoon:'Toko dibuka saat koin tersedia: kamu mendapatkannya dari laga, sedikit setiap hari.',
+  shSoon:'Toko dibuka saat koin tersedia: kamu mendapatkannya dari laga, sedikit setiap hari.', shEarn:'Koin sudah terkumpul: kamu mendapatkannya dari laga, hingga 100 per hari. Pembelian segera dibuka.',
   tLesson:'Pelajaran', tFree:'Latihan bebas', tFreeD:'Es kosong — coba semuanya, keping kembali sendiri', tStart:'Mulai pelajaran',
   tBest:'Terbaik', tNotYet:'belum selesai', tDone:'Selesai', tFail:'Belum berhasil', tRetry:'Ulangi', tNext:'Pelajaran berikutnya',
   tToList:'Ke daftar', tNoMedal:'tanpa medali', tBronze:'Perunggu', tSilver:'Perak', tGold:'Emas', tMedalsP:'Medali', tTries:'percobaan',
@@ -2281,6 +2283,7 @@ function showResult(){
     }
   }
   setText('oWinner', w);
+  setText('oReward', rewardText(MATCH.reward));
   setText('oAgain', T('again'));
   setText('oMenu', T('mainMenu'));
   var onx=document.getElementById('oNext'); if(onx) onx.style.display='none';
@@ -5566,15 +5569,15 @@ var MSCR={
     var g=''; st.forEach(function(x){ g+='<div class="pst"><b>'+mEsc(x[1])+'</b><span>'+mEsc(T(x[0]))+'</span></div>'; });
     var u=tgUser();
     return mHead(T('mProfile'))+'<div class="mleft"><div class="mprofbig mglass mf" data-act="noop">'+mAvatar(true)+'<div class="pn"><b>'+mEsc(mUserName())+'</b>'+
-      (u && u.username ? '<i>@'+mEsc(u.username)+'</i>' : '')+'<span class="mpill">'+mEsc(T('pCoinsSoon'))+'</span></div></div>'+
+      (u && u.username ? '<i>@'+mEsc(u.username)+'</i>' : '')+'<span class="mpill" data-coins>'+mEsc(coinsLabel())+'</span></div></div>'+
       '<div class="mnote dim" style="margin-top:8px">'+mEsc(PROF.m ? T('pStatsNote') : T('pNone'))+'</div></div>'+
       '<div class="mright"><div class="mstats">'+g+'</div></div>';
   },
   shop:function(){
     var it=[['shKits','shKitsD','kit'],['shSticks','shSticksD','stick'],['shGoal','shGoalD','goal'],['shIce','shIceD','ice']], h='';
     it.forEach(function(x){ h+='<div class="mshop mglass mf" data-act="noop">'+SHOP_ICON[x[2]]+'<b>'+mEsc(T(x[0]))+'</b><i>'+mEsc(T(x[1]))+'</i><span class="soon">'+mEsc(T('soon'))+'</span></div>'; });
-    return mHead(T('mShop'), '<span class="mpill">'+mEsc(T('pCoinsSoon'))+'</span>')+
-      '<div class="mleft"><div class="mshopg">'+h+'</div><div class="mnote dim" style="margin-top:8px">'+mEsc(T('shSoon'))+'</div></div>';
+    return mHead(T('mShop'), '<span class="mpill" data-coins>'+mEsc(coinsLabel())+'</span>')+
+      '<div class="mleft"><div class="mshopg">'+h+'</div><div class="mnote dim" style="margin-top:8px">'+mEsc(T(COINS===null?'shSoon':'shEarn'))+'</div></div>';
   },
   rules:function(){
     var tabs='';
@@ -6947,11 +6950,16 @@ function statsBrief(){
    сколько начислить.
    ============================================================ */
 var CLIENT_VER=1;
-/* адрес Worker'а статистики; пусто — итоги никуда не отправляются.
-   Бэкенд делается отдельной фазой. */
-var STATS_API='';
+/* адрес Worker'а статистики (server/api.js); пусто — итоги никуда не отправляются.
+   Локальная разработка и автотесты в боевой API не ходят; на localhost можно указать свой: ?api=http://127.0.0.1:8799 */
+var STATS_API=(function(){
+  var local=/^(localhost|127\.|\[::1\])/.test(location.hostname), q='';
+  try{ q=new URLSearchParams(location.search).get('api')||''; }catch(e){}
+  if(local) return /^https?:\/\//.test(q) ? q.replace(/\/+$/,'') : '';
+  return 'https://bvr-hockey-relay.bvrhockey.workers.dev';
+})();
 var MATCH={id:'', mode:'ai', role:'solo', team:0, difficulty:'normal', clubs:[0,0], len:0, played:0,
-           startedAt:0, summary:null, sent:false};
+           startedAt:0, summary:null, sent:false, reward:null};
 function newMatchId(){
   var b=new Uint8Array(12), s='';
   try{ crypto.getRandomValues(b); }catch(e){ for(var i=0;i<12;i++) b[i]=(Math.random()*256)|0; }
@@ -6965,7 +6973,7 @@ function matchStart(id, clubA, clubB){
   }
   MATCH.id=id; MATCH.mode=NET.on?'online':'ai'; MATCH.role=NET.on?NET.role:'solo'; MATCH.net=NET.on?(NET.srv?'server':'host'):null;
   MATCH.team=HUMAN; MATCH.clubs=[clubA,clubB]; MATCH.len=Math.round(clock);
-  MATCH.played=0; MATCH.startedAt=Date.now(); MATCH.summary=null; MATCH.sent=false;
+  MATCH.played=0; MATCH.startedAt=Date.now(); MATCH.summary=null; MATCH.sent=false; MATCH.reward=null;
   MATCH.difficulty = NET.on ? null : DIFF;   /* в сетевом матче соперник — человек */
   NET.dc={self:0, selfLeft:false, opp:false, oppLeft:false}; NET.w=0; netBanner();
   statsReset();
@@ -7006,8 +7014,9 @@ function sumFlush(){
       headers:{'Content-Type':'application/json', 'X-Telegram-Init-Data':TG.initData},
       body:JSON.stringify(sum)})
     .then(function(r){
-      /* 2xx — принят, 4xx — отвергнут навсегда (подпись, лимиты, дубль): в обоих случаях убираем */
-      if(r.status<500) sumQueueSave(sumQueue().filter(function(x){ return x.id!==sum.id; }));
+      /* 2xx — принят, 4xx — отвергнут навсегда (подпись, неправдоподобный итог, дубль): в обоих случаях убираем;
+         429 (рано после прошлого матча) и 5xx — остаётся до следующей попытки */
+      if(r.status<500 && r.status!==429) sumQueueSave(sumQueue().filter(function(x){ return x.id!==sum.id; }));
       return r.ok ? r.json() : null;
     })
     .then(function(res){ if(res) EV.emit('match:reward', res); })
@@ -7020,6 +7029,46 @@ EV.on('match:summary', function(sum){
   sumQueueSave(q); MATCH.sent=true; sumFlush();
 });
 EV.on('match:start', function(){ sumFlush(); });
+
+/* монеты: баланс знает только сервер (GET /v1/profile, ответ на итог матча); здесь — копия для показа */
+var COINS=null;   /* null — неизвестен: вне Telegram или сервер ещё ни разу не ответил */
+try{ var _c0=localStorage.getItem('bvr_coins'); if(_c0 && isFinite(+_c0)) COINS=Math.max(0, Math.floor(+_c0)); }catch(e){}
+function coinsLabel(){ return COINS===null ? T('pCoinsSoon') : T('pCoins')+': '+COINS; }
+function coinsSet(v){
+  if(typeof v!=='number' || !(v>=0)) return;
+  COINS=Math.floor(v);
+  try{ localStorage.setItem('bvr_coins', String(COINS)); }catch(e){}
+  if(MENU.ready){ MENU.build('profile'); MENU.build('shop'); }
+}
+/* «монета / монеты / монет»: формы через | (в языках без склонения — одна форма) */
+function coinWord(n){
+  var f=T('rwCoins').split('|'); if(f.length<3) return f[0];
+  var a=n%10, b=n%100;
+  return f[(a===1 && b!==11) ? 0 : (a>=2 && a<=4 && (b<12 || b>14)) ? 1 : 2];
+}
+function rewardText(res){
+  if(!res) return '';
+  var t = res.coins>0 ? '+'+res.coins+' '+coinWord(res.coins) : (res.verdict==='capped' ? T('rwCap') : '');
+  return t && typeof res.balance==='number' ? t+' · '+T('rwTotal')+' '+res.balance : t;
+}
+EV.on('match:reward', function(res){
+  coinsSet(res.balance);
+  if(res.id && res.id===MATCH.id){ MATCH.reward=res; setText('oReward', rewardText(res)); }
+});
+/* профиль с сервера: баланс и статистика (копия, где больше матчей, — как с CloudStorage) */
+function profileFetch(){
+  if(!STATS_API || !TG || !TG.initData) return;
+  fetch(STATS_API+'/v1/profile', {headers:{'X-Telegram-Init-Data':TG.initData}})
+  .then(function(r){ return r.ok ? r.json() : null; })
+  .then(function(j){
+    if(!j) return;
+    coinsSet(j.coins);
+    if(j.totals && profApply(JSON.stringify(j.totals))){ prefSet('profile', JSON.stringify(PROF)); if(MENU.ready){ MENU.build('main'); MENU.build('profile'); } }
+  })
+  .catch(function(){});
+}
+/* при запуске: сначала неотправленные итоги, потом профиль (чтобы баланс был уже с ними) */
+setTimeout(function(){ sumFlush(); setTimeout(profileFetch, 1500); }, 0);
 
 /* ============================================================
    СОБЫТИЯ ПО СЕТИ: хост кладёт события в снимки, гость их проигрывает.
@@ -7169,6 +7218,8 @@ window.__hk={hs:function(){return HS;},net:function(){return NET;},setCam:functi
     springs:{level:QC().springs|0, maxLean:+players.reduce(function(m,p){ return p._spr?Math.max(m,Math.abs(p._spr[0])+Math.abs(p._spr[2])):m; },0).toFixed(3)},
     glErr:GLOK?gl.getError():0}; },
   stats:function(){return STATS;}, match:function(){return MATCH;}, ev:EV,
+  /* монеты и профиль: баланс, статистика, длина очереди неотправленных итогов (tools/smoke-api.mjs) */
+  coins:function(){return {coins:COINS, prof:PROF, q:sumQueue().length};},
   /* сеть: источник картинки шайбы у гостя, задержка интерполяции, RTT — для tools/smoke-lag.mjs */
   netInfo:function(){ return {src:PDS.mode, pmode:PUCKP&&PUCKP.on?PUCKP.mode:null, D:Math.round(NETV.D*1000), rtt:Math.round(NETV.rtt||0), buf:NETV.buf.length}; },
   /* раскладка / подписи — для tools/smoke-tg.mjs */

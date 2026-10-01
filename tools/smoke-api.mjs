@@ -4,7 +4,9 @@
 // summaries → 422, 'left' gives no coins, the daily cap ends in verdict 'capped', CORS preflight. A real server-mode
 // match (two WebSocket players, a 15-second match in the Durable Object): both reports with the room's score are paid
 // from the duo cap, a report with another score → 422 'mismatch', a match the room does not know → paid as an AI match
-// ('unverified'), a host claiming team 1 → 422.
+// ('unverified'), a host claiming team 1 → 422. The game in Chromium (?api= points it at this Worker): a match left in
+// the send queue goes out on start, the profile brings coins and stats, a match summary shows «+N coins» on the result
+// screen.
 // usage: node tools/smoke-api.mjs [--port 8799] [--verbose]
 import { createHmac } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -14,6 +16,8 @@ import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import WebSocket from 'ws';
 import { startWrangler } from './wrangler-dev.mjs';
+import { startServer } from './serve.mjs';
+import { openGame, fakeTelegram, isError } from './browser.mjs';
 
 const args = process.argv.slice(2);
 const opt = (k, d) => { const i = args.indexOf('--' + k); return i >= 0 ? args[i + 1] : d; };
@@ -148,6 +152,30 @@ try {
     ok(ext.ok && !('score' in (await ext.json())), 'X-Internal from outside does not reach the room results');
   }
   H.ws.close(); G.ws.close();
+
+  // the game itself: queue on start, profile, reward on the result screen
+  {
+    const E = { id: A.id + 4, first_name: 'Game' };
+    const queued = summary();
+    const tg = fakeTelegram().replace(/initData:'[^']*'/, 'initData:' + JSON.stringify(initData(E)));
+    const srv = await startServer(port + 1);
+    const g = await openGame('chromium', { tg });
+    try {
+      await g.page.addInitScript((q) => { try { if (!sessionStorage.getItem('seeded')) { localStorage.setItem('bvr_pending_matches', JSON.stringify([q])); sessionStorage.setItem('seeded', '1'); } } catch (e) {} }, queued);
+      await g.page.goto(`http://127.0.0.1:${port + 1}/index.html?nomusic&api=${encodeURIComponent(API)}`, { waitUntil: 'load', timeout: 120000 });
+      await g.page.waitForFunction(() => { const c = window.__hk && __hk.coins(); return c && c.coins === 15 && c.prof.m >= 1 && c.q === 0; }, null, { timeout: 20000 }).catch(() => {});
+      const st = await g.page.evaluate(() => { const c = __hk.coins(); return { coins: c.coins, m: c.prof.m, w: c.prof.w, q: c.q, pill: (document.querySelector('[data-coins]') || {}).textContent || '' }; });
+      ok(st.coins === 15 && st.m === 1 && st.w === 1 && st.q === 0 && /15/.test(st.pill), `game: queued match sent on start, profile from the server ${JSON.stringify(st)}`);
+      // a finished match: the summary goes out, the reward shows up on the result screen
+      const s2 = summary();
+      await g.page.evaluate((x) => { __hk.match().id = x.id; __hk.ev.emit('match:summary', x); }, s2);
+      await g.page.waitForFunction(() => /\+15/.test(document.getElementById('oReward').textContent), null, { timeout: 15000 }).catch(() => {});
+      const rw = await g.page.evaluate(() => ({ t: document.getElementById('oReward').textContent, coins: __hk.coins().coins }));
+      ok(/\+15/.test(rw.t) && /30/.test(rw.t) && rw.coins === 30, `game: result screen shows the reward ${JSON.stringify(rw)}`);
+      const errs = g.logs.filter(isError);
+      ok(!errs.length, `game: page errors ${JSON.stringify(errs).slice(0, 400)}`);
+    } finally { await g.browser.close(); srv.close(); }
+  }
 
   // A is untouched by B
   p = await call('GET', '/v1/profile', ia);
