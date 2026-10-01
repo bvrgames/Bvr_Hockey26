@@ -6981,6 +6981,7 @@ function buildSummary(sc){
   var pl=[];
   for(var k in STATS.players){ var q=STATS.players[k]; pl.push({t:q.t, num:q.num, g:q.g, a:q.a, s:q.s, h:q.h}); }
   return {v:1, id:MATCH.id, client:CLIENT_VER, mode:MATCH.mode, role:MATCH.role, net:MATCH.net||null, team:me, difficulty:MATCH.difficulty,
+          room:MATCH.mode==='online'?NET.code:null,  /* по коду комнаты Worker сверит счёт серверного матча с Durable Object */
           clubs:MATCH.clubs.slice(), len:MATCH.len, played:Math.round(MATCH.played),
           startedAt:MATCH.startedAt, endedAt:Date.now(), score:sc.slice(), result:res, disconnect:dc,
           teams:[STATS.teams[0], STATS.teams[1]], players:pl, faceoffs:STATS.faceoffs, events:STATS.events,

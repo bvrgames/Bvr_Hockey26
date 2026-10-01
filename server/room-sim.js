@@ -51,6 +51,8 @@ export class MatchRoom {
     this.port = [mkPort(), mkPort()];
     this.running = false; this.acc = 0; this.last = 0; this.steps = 0; this.overT = 0;
     this.cfg = null;
+    this.ended = false;
+    this.onEnd = null;    // (result) once per match when the clock runs out: { id, len, score, left }; the stats API trusts it
     this.stat = { steps: 0, snaps: 0, maxStepMs: 0 };
     this.sim = BVRSim.create({
       emit: (n, e) => {
@@ -139,7 +141,7 @@ export class MatchRoom {
     this.evq.length = 0;
     const txt = JSON.stringify(this.cfg);
     this.send(0, txt); this.send(1, txt);
-    this.running = true; this.acc = 0; this.last = this.now(); this.steps = 0; this.overT = 0;
+    this.running = true; this.acc = 0; this.last = this.now(); this.steps = 0; this.overT = 0; this.ended = false;
   }
 
   // call ~60 times a second; runs as many fixed steps as real time asks for (at most 6: a stalled timer does not
@@ -162,7 +164,14 @@ export class MatchRoom {
       const t0 = Date.now();
       S.control.first = this.steps & 1;              // who acts first in a contested step alternates: no side wins ties
       if (S.state === 'over') this.overT += 1 / SIM_HZ;
-      else S.step(1 / SIM_HZ);
+      else {
+        S.step(1 / SIM_HZ);
+        if (S.state === 'over' && !this.ended) {
+          this.ended = true;
+          if (this.onEnd) this.onEnd({ id: this.cfg.id, len: Math.round(this.cfg.min * 60), score: [S.score[0], S.score[1]],
+                                       left: [this.port[0].left, this.port[1].left] });
+        }
+      }
       this.steps++; this.stat.steps++;
       const dt = Date.now() - t0; if (dt > this.stat.maxStepMs) this.stat.maxStepMs = dt;
       // after the end: 6 snapshots a second for 5 s, so both see the final state and match:end, then stop

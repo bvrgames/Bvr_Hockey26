@@ -1,7 +1,10 @@
 // Coins and stats API test (server/api.js) on `wrangler dev` with a throwaway local D1 and a test bot token.
 // Checks: the initData signature (missing, forged, stale, a changed field → 401), an empty profile, a win against the
 // AI gives coins and moves the profile, the same match again → 409, the next one too soon → 429, implausible
-// summaries → 422, 'left' gives no coins, the daily cap ends in verdict 'capped', CORS preflight.
+// summaries → 422, 'left' gives no coins, the daily cap ends in verdict 'capped', CORS preflight. A real server-mode
+// match (two WebSocket players, a 15-second match in the Durable Object): both reports with the room's score are paid
+// from the duo cap, a report with another score → 422 'mismatch', a match the room does not know → paid as an AI match
+// ('unverified'), a host claiming team 1 → 422.
 // usage: node tools/smoke-api.mjs [--port 8799] [--verbose]
 import { createHmac } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -9,6 +12,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
+import WebSocket from 'ws';
 import { startWrangler } from './wrangler-dev.mjs';
 
 const args = process.argv.slice(2);
@@ -99,7 +103,7 @@ try {
 
   // daily cap and 'left': a second Worker with MATCH_GAP 0 on the same database
   w.close(); await new Promise((res) => setTimeout(res, 800));
-  w = await startWrangler(port, { args: ['--persist-to', persist, '--var', `BOT_TOKEN:${TOKEN}`, '--var', 'MATCH_GAP:0'] });
+  w = await startWrangler(port, { args: ['--persist-to', persist, '--var', `BOT_TOKEN:${TOKEN}`, '--var', 'MATCH_GAP:0', '--var', 'MIN_LEN:10'] });
   const B = { id: A.id + 1, first_name: 'Test', username: 'b' };
   const ib = initData(B);
   r = await call('POST', '/v1/match', ib, summary({ score: [0, 2], patch: { result: 'left', played: 50, disconnect: { self: 1, selfLeft: true, opp: false, oppLeft: false } } }));
@@ -111,6 +115,40 @@ try {
   ok(last.j.verdict === 'capped' && total === 100 && last.j.balance === 100 && last.j.day.coins === 100, `daily cap 100: total ${total}, last ${JSON.stringify(last.j)}`);
   p = await call('GET', '/v1/profile', ib);
   ok(p.j.coins === 100 && p.j.totals.m === 11 && p.j.totals.l === 1 && p.j.totals.d === 1 && p.j.totals.w === 9 && p.j.totals.best === 9, `profile B ${JSON.stringify(p.j.totals)}`);
+  // a server-mode match in a real room
+  const room = 'API' + Math.floor(Math.random() * 1e5), mid = 'fedcba9876543210' + Math.floor(Math.random() * 1e8).toString(16).padStart(8, '0');
+  const sock = (q) => new Promise((res, rej) => {
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/room/${room}${q}`); const P = { ws, end: null };
+    ws.on('message', (d) => { const m = JSON.parse(d.toString()); if (m.t === 's' && m.e) for (const [nm, e] of m.e) if (nm === 'match:end') P.end = e; });
+    ws.on('open', () => res(P)); ws.on('error', rej);
+  });
+  const H = await sock('?mode=srv'); await new Promise((r) => setTimeout(r, 300));
+  const G = await sock('');
+  await new Promise((r) => setTimeout(r, 300));
+  H.ws.send(JSON.stringify({ t: 'cfg', a: 0, b: 3, min: 0.25, id: mid }));
+  const tEnd = Date.now(); while (!(H.end && G.end) && Date.now() - tEnd < 40000) await new Promise((r) => setTimeout(r, 200));
+  ok(H.end && G.end, 'the 15-second server match ended');
+  if (H.end) {
+    const sc = H.end.score, C = { id: A.id + 2, first_name: 'Host' }, D = { id: A.id + 3, first_name: 'Guest' };
+    const online = (team, o = {}) => summary({ len: 15, score: o.score || sc, patch: { id: o.id || mid, mode: 'online', role: team ? 'guest' : 'host', team, net: 'server', room: o.room || room,
+      difficulty: null, played: 15, result: (o.score || sc)[team] > (o.score || sc)[1 - team] ? 'win' : (o.score || sc)[team] < (o.score || sc)[1 - team] ? 'loss' : 'draw', ...(o.patch || {}) } });
+    r = await call('POST', '/v1/match', initData(C), online(0, { score: [sc[0] + 1, sc[1]] }));
+    ok(r.status === 422 && r.j.reason === 'mismatch', `server match with another score → 422 mismatch (got ${r.status} ${JSON.stringify(r.j)})`);
+    r = await call('POST', '/v1/match', initData(C), online(0, { patch: { team: 1 } }));
+    ok(r.status === 422 && r.j.reason === 'team', `host claiming team 1 → 422 team (got ${r.status} ${JSON.stringify(r.j)})`);
+    r = await call('POST', '/v1/match', initData(C), online(0));
+    ok(r.status === 200 && r.j.kind === 'match_duo' && r.j.verdict === 'ok' && r.j.coins > 0, `host report with the room's score → duo coins ${JSON.stringify(r.j)}`);
+    r = await call('POST', '/v1/match', initData(D), online(1));
+    ok(r.status === 200 && r.j.kind === 'match_duo' && r.j.verdict === 'ok', `guest report → duo ${JSON.stringify(r.j)}`);
+    r = await call('POST', '/v1/match', initData(D), online(1, { id: '00112233445566778899aabb' }));
+    ok(r.status === 200 && r.j.kind === 'match_ai' && r.j.verdict === 'unverified', `a match the room does not know → paid as AI, unverified ${JSON.stringify(r.j)}`);
+    p = await call('GET', '/v1/profile', initData(C));
+    ok(p.j.totals.online === 1 && p.j.day.duo > 0 && p.j.day.coins === 0, `host profile after the duo match ${JSON.stringify(p.j)}`);
+    const ext = await fetch(`${API}/room/${room}/diag`, { headers: { 'X-Internal': 'result' } });
+    ok(ext.ok && !('score' in (await ext.json())), 'X-Internal from outside does not reach the room results');
+  }
+  H.ws.close(); G.ws.close();
+
   // A is untouched by B
   p = await call('GET', '/v1/profile', ia);
   ok(p.j.coins === 15, `A's coins unchanged ${p.j.coins}`);

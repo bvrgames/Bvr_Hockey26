@@ -7,6 +7,11 @@
  *   GET  /v1/profile  → { user: { id, name }, coins, stars, totals: { m, w, d, l, g, ga, streak, best, online },
  *                         inventory: [], equipped: null, day: { coins, cap } }
  *
+ * Matches against a person in server mode (net: 'server', room: code) are checked against the room's own result:
+ * the Durable Object counted the match and keeps its final score (worker.js, saveResult), so the client's score has to
+ * match it (otherwise 422 'mismatch'); such matches pay from their own daily cap (ledger reason 'match_duo'). Matches
+ * the server did not count (host mode, an unknown room) are paid like a match against the AI, from the AI cap.
+ *
  * Every request carries the header X-Telegram-Init-Data (Telegram.WebApp.initData). The Worker checks its HMAC with
  * the bot token (secret BOT_TOKEN) and takes the player only from there: user.id is the account, the body says
  * nothing about who sent it. The client never adds coins: it says how the match went, the reward is decided here.
@@ -15,6 +20,8 @@
 const DEF = {
   AI_COIN_CAP_MATCH: 15,   // per 3-minute match; scales with the match length like the reward
   AI_COIN_CAP_DAY: 100,    // per player per UTC day (ledger reason 'match_ai'); over it — coins 0, verdict 'capped'
+  DUO_COIN_CAP_DAY: 100,   // the same for server-mode matches against a person (reason 'match_duo')
+  MIN_LEN: 60,             // shorter matches are not accepted (s)
   MATCHES_DAY: 40,         // accepted matches per player per UTC day
   MATCH_GAP: 0.8,          // the next match is accepted not sooner than MATCH_GAP × len after the previous one
   AUTH_MAX_AGE: 86400,     // initData older than this (s) is refused
@@ -71,15 +78,16 @@ const int = (v) => Number.isInteger(v) && v >= 0 && v < 1e6;
 const TEAM_KEYS = ['shots', 'sog', 'goals', 'passes', 'passesDone', 'saves', 'hits'];
 
 // null when the summary is plausible, otherwise the reason (422)
-export function checkSummary(s) {
+export function checkSummary(s, minLen = DEF.MIN_LEN) {
   if (!s || typeof s !== 'object' || s.v !== 1) return 'format';
   if (typeof s.id !== 'string' || !/^[0-9a-f]{8,32}$/.test(s.id)) return 'id';
   if (s.mode !== 'ai' && s.mode !== 'online') return 'mode';
   if (!['solo', 'host', 'guest'].includes(s.role) || (s.mode === 'ai') !== (s.role === 'solo')) return 'role';
   if (s.team !== 0 && s.team !== 1) return 'team';
+  if (s.mode === 'online' && s.team !== (s.role === 'host' ? 0 : 1)) return 'team';
   if (!['win', 'loss', 'draw', 'left'].includes(s.result)) return 'result';
   if (s.test) return 'test';
-  if (!int(s.len) || s.len < 60 || s.len > 600) return 'len';
+  if (!int(s.len) || s.len < minLen || s.len > 600) return 'len';
   if (!int(s.played) || !int(s.score && s.score[0]) || !int(s.score[1])) return 'format';
   const left = s.result === 'left';
   // a player who dropped and never came back sends the match as it was at that moment
@@ -111,16 +119,24 @@ export function matchReward(s, env) {
 
 const dayStart = (sec) => sec - (sec % 86400);
 
-async function dayCoins(db, uid, now) {
-  const r = await db.prepare("SELECT COALESCE(SUM(delta), 0) AS c FROM ledger WHERE user_id = ? AND reason = 'match_ai' AND created_at >= ?")
-    .bind(uid, dayStart(now)).first();
+async function dayCoins(db, uid, now, reason = 'match_ai') {
+  const r = await db.prepare('SELECT COALESCE(SUM(delta), 0) AS c FROM ledger WHERE user_id = ? AND reason = ? AND created_at >= ?')
+    .bind(uid, reason, dayStart(now)).first();
   return r ? r.c : 0;
+}
+
+// the server match's final result kept by the room (worker.js), or null
+async function roomResult(env, room, id) {
+  if (!env.ROOMS || typeof room !== 'string' || !/^[A-Za-z0-9_-]{2,16}$/.test(room)) return null;
+  const stub = env.ROOMS.get(env.ROOMS.idFromName(room.toUpperCase()));
+  const r = await stub.fetch('https://room/result?id=' + encodeURIComponent(id), { headers: { 'X-Internal': 'result' } });
+  return r.ok ? r.json() : null;
 }
 
 async function postMatch(request, env, user, now) {
   let s = null;
   try { const txt = await request.text(); if (txt.length > 32768) return json(413, { reason: 'size' }); s = JSON.parse(txt); } catch (e) {}
-  const bad = checkSummary(s);
+  const bad = checkSummary(s, conf(env, 'MIN_LEN'));
   if (bad) return json(422, { reason: bad });
   const db = env.DB, uid = user.id;
   if (await db.prepare('SELECT 1 FROM matches WHERE user_id = ? AND match_id = ?').bind(uid, s.id).first()) {
@@ -131,11 +147,21 @@ async function postMatch(request, env, user, now) {
   const today = await db.prepare('SELECT COUNT(*) AS n FROM matches WHERE user_id = ? AND created_at >= ?').bind(uid, dayStart(now)).first();
   if (today && today.n >= conf(env, 'MATCHES_DAY')) return json(429, { reason: 'day' });
 
-  const cap = conf(env, 'AI_COIN_CAP_DAY');
-  const earned = await dayCoins(db, uid, now);
+  // a server-mode match: the room says how it ended
+  let duo = false, checked = null;
+  if (s.mode === 'online' && s.net === 'server' && s.result !== 'left') {
+    checked = await roomResult(env, s.room, s.id);
+    if (checked) {
+      if (checked.len !== s.len || checked.score[0] !== s.score[0] || checked.score[1] !== s.score[1]) return json(422, { reason: 'mismatch' });
+      duo = true;
+    }
+  }
+  const reason = duo ? 'match_duo' : 'match_ai';
+  const cap = conf(env, duo ? 'DUO_COIN_CAP_DAY' : 'AI_COIN_CAP_DAY');
+  const earned = await dayCoins(db, uid, now, reason);
   const want = matchReward(s, env);
   const coins = Math.max(0, Math.min(want, cap - earned));
-  const verdict = s.result === 'left' ? 'left' : (coins < want ? 'capped' : 'ok');
+  const verdict = s.result === 'left' ? 'left' : (coins < want ? 'capped' : (s.mode === 'online' && !duo ? 'unverified' : 'ok'));
   const my = s.score[s.team], op = s.score[1 - s.team];
   const win = s.result === 'win' ? 1 : 0, draw = s.result === 'draw' ? 1 : 0;
 
@@ -153,7 +179,7 @@ async function postMatch(request, env, user, now) {
   ];
   if (coins > 0) {
     q.push(db.prepare(`INSERT INTO ledger (user_id, delta, reason, ref, balance_after, created_at)
-                       VALUES (?, ?, 'match_ai', ?, (SELECT coins FROM users WHERE user_id = ?), ?)`).bind(uid, coins, s.id, uid, now));
+                       VALUES (?, ?, ?, ?, (SELECT coins FROM users WHERE user_id = ?), ?)`).bind(uid, coins, reason, s.id, uid, now));
   }
   try { await db.batch(q); }
   catch (e) {
@@ -162,21 +188,21 @@ async function postMatch(request, env, user, now) {
     throw e;
   }
   const u = await db.prepare('SELECT coins FROM users WHERE user_id = ?').bind(uid).first();
-  return json(200, { accepted: true, id: s.id, coins, balance: u ? u.coins : coins, verdict, day: { coins: earned + coins, cap } });
+  return json(200, { accepted: true, id: s.id, coins, balance: u ? u.coins : coins, verdict, kind: reason, day: { coins: earned + coins, cap } });
 }
 
 async function getProfile(env, user, now) {
   const db = env.DB;
   const u = await db.prepare('SELECT * FROM users WHERE user_id = ?').bind(user.id).first();
   const inv = u ? (await db.prepare('SELECT item_id FROM inventory WHERE user_id = ? ORDER BY acquired_at').bind(user.id).all()).results : [];
-  const earned = u ? await dayCoins(db, user.id, now) : 0;
+  const earned = u ? await dayCoins(db, user.id, now) : 0, earnedDuo = u ? await dayCoins(db, user.id, now, 'match_duo') : 0;
   return json(200, {
     user: { id: user.id, name: user.name },
     coins: u ? u.coins : 0, stars: u ? u.stars : 0,
     totals: u ? { m: u.matches, w: u.wins, d: u.draws, l: u.losses, g: u.goals, ga: u.goals_against, streak: u.streak, best: u.best_streak, online: u.online }
               : { m: 0, w: 0, d: 0, l: 0, g: 0, ga: 0, streak: 0, best: 0, online: 0 },
     inventory: inv.map((r) => r.item_id), equipped: null,
-    day: { coins: earned, cap: conf(env, 'AI_COIN_CAP_DAY') },
+    day: { coins: earned, cap: conf(env, 'AI_COIN_CAP_DAY'), duo: earnedDuo, duoCap: conf(env, 'DUO_COIN_CAP_DAY') },
   });
 }
 

@@ -32,6 +32,9 @@
  *   HTTP: GET /diag             → the edge colo this request hit (no Durable Object involved)
  *         GET /room/<CODE>/diag → the room's diag (creates the object if it does not exist yet)
  *         /v1/match, /v1/profile → coins and player stats (server/api.js, D1 binding DB, secret BOT_TOKEN)
+ *   Internal (Worker → Durable Object, never from outside): GET <any>/result?id=<match id> → the server match's final
+ *   { id, len, score, left, at } or 404 — the last RESULTS_KEEP results of the room live in the object's storage, so the
+ *   stats API takes the score of a server-mode match from here, not from the client.
  *
  *   Everything else from one socket is relayed verbatim to "the other" socket in the room. Host-authoritative:
  *   only 'host' is expected to send 's', only 'guest' is expected to send 'i', but the relay itself does not enforce
@@ -55,6 +58,7 @@ const ROOM_CODE_RE = /^\/room\/([A-Za-z0-9_-]{2,16})(\/diag)?$/;
 const HINTS = new Set(['wnam', 'enam', 'sam', 'weur', 'eeur', 'apac', 'apac-ne', 'apac-se', 'oc', 'afr', 'me']);
 // phase 3.0 measurement from Indonesia (10 new rooms per hint): apac-se → SIN 8/10, apac → SIN/HKG/NRT, none → sometimes MXP
 const DEFAULT_HINT = 'apac-se';
+const RESULTS_KEEP = 8;
 
 export class Room {
   constructor(state, env) {
@@ -117,7 +121,19 @@ export class Room {
              conns: [c('host', this.host), c('guest', this.guest)].filter(Boolean) };
   }
 
+  // a server match ended: keep its result for the stats API (storage survives the object being evicted)
+  async saveResult(r) {
+    const list = (await this.state.storage.get('results')) || [];
+    list.push({ ...r, at: Date.now() });
+    await this.state.storage.put('results', list.slice(-RESULTS_KEEP));
+  }
+
   async fetch(request) {
+    if (request.headers.get('X-Internal') === 'result') {
+      const id = new URL(request.url).searchParams.get('id');
+      const r = ((await this.state.storage.get('results')) || []).find((x) => x.id && x.id === id);
+      return new Response(JSON.stringify(r || null), { status: r ? 200 : 404, headers: { 'content-type': 'application/json' } });
+    }
     const hint = request.headers.get('X-Loc-Hint');
     if (this.hint === null) this.hint = hint || 'none';
     await this.colo();
@@ -140,6 +156,7 @@ export class Room {
       this.tok = { host: null, guest: null };
       if (this.timer) { clearInterval(this.timer); this.timer = null; }
       this.match = this.srv ? new MatchRoom((slot, txt) => this.sendSlot(slot, txt)) : null;
+      if (this.match) this.match.onEnd = (r) => { this.saveResult(r).catch((e) => console.error('saveResult', e)); };
     }
     this.handleSocket(server, { colo: request.headers.get('X-Edge-Colo') || '?', country: request.headers.get('X-Edge-Country') || '?' }, this.claim(q), q.get('fresh') === '1');
 
@@ -245,6 +262,7 @@ export default {
     // the hint is respected only by the first get() that creates this room's object
     const stub = hint ? env.ROOMS.get(id, { locationHint: hint }) : env.ROOMS.get(id);
     const fwd = new Request(request);
+    fwd.headers.delete('X-Internal');               // only the stats API asks the room for results
     fwd.headers.set('X-Loc-Hint', hint || 'none');
     fwd.headers.set('X-Edge-Colo', cf.colo || '?');
     fwd.headers.set('X-Edge-Country', cf.country || '?');
