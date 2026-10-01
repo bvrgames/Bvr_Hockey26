@@ -5,6 +5,7 @@
 //   assets/src/hd_data.json   HD_DATA as before (skater / goalie: nv, ni, lo, sc, bones, …, mesh + anim as base64)
 //   assets/src/hd_lod.json    HD_LOD (tools/bake-lod.mjs): LOD index buffers as base64
 //   assets/src/{env,ads,logo}.png
+//   assets/src/train.js       the training lessons (index.html loads them on entering «Тренировка») → assets/dist/train.<hash>.js
 //   assets/dist/players-lo.<hash>.bin  skeleton, clips, animation, compact LOD meshes (what every level needs first)
 //   assets/dist/players-hi.<hash>.bin  full meshes (high level only; loaded on demand)
 //     both: 'BVR1', u32 header length, header JSON (blobs as [offset, length]), raw blobs 4-byte aligned — no base64
@@ -110,6 +111,7 @@ function build() {
   const P = packPlayers();
   const files = { lo: ['players-lo', 'bin', P.lo], hi: ['players-hi', 'bin', P.hi] };
   for (const n of IMAGES) files[n] = [n, 'png', readFileSync(join(SRC, n + '.png'))];
+  files.train = ['train', 'js', readFileSync(join(SRC, 'train.js'))];   // lesson code, loaded on entering the training
   const manifest = {};
   for (const [k, [n, ext, buf]] of Object.entries(files)) manifest[k] = `assets/dist/${n}.${hash(buf)}.${ext}`;
   manifest.loBytes = P.lo.length; manifest.hiBytes = P.hi.length;   // loading progress (content-length is compressed)

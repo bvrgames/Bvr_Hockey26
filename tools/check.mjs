@@ -22,7 +22,7 @@ for (let m; (m = re.exec(html));) {
   catch (e) { fails++; console.log(`index.html: ${e.message}\n${(e.stack || '').split('\n').slice(0, 3).join('\n')}`); }
 }
 
-for (const dir of ['tools', 'server', 'shared']) {
+for (const dir of ['tools', 'server', 'shared', 'assets/src']) {
   let files = [];
   try { files = readdirSync(join(ROOT, dir)).filter((f) => /\.(m?js)$/.test(f)); } catch { continue; }
   for (const f of files) {

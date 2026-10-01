@@ -3,7 +3,8 @@
 // reproducible). Lessons with luck in the simulation (goalie saves, the 2-on-1 rush) get up to 3 tries, like a player.
 // Also: the result screen, medals saved (CloudStorage + localStorage) and shown in the lesson list after a reload,
 // free skate, Pause → Main menu back to the lessons, entering a lesson by keyboard, the tactics buttons by touch,
-// and no network at all during the lessons (no WebSocket, no request off this machine).
+// and no network at all during the lessons (no WebSocket, no request off this machine). The lesson code is a separate
+// file (assets/dist/train.<hash>.js): not loaded with the page, loaded on entering «Тренировка».
 // usage: node tools/smoke-train.mjs [--browser chromium|webkit]
 import { startServer } from './serve.mjs';
 import { openGame, fakeTelegram, isError } from './browser.mjs';
@@ -26,6 +27,10 @@ await page.addInitScript(`(() => { const W = window.WebSocket; window.__ws = 0; 
 try {
   await page.goto(`http://127.0.0.1:${port}/index.html?frozen&seed=21&nomusic`, { waitUntil: 'load', timeout: 120000 });
   await page.waitForFunction('window.__hk && __hk.trainState', null, { timeout: 30000 });
+  // ---------- the lesson code is a separate file: not loaded with the page, loaded on demand
+  const trainReq = "performance.getEntriesByType('resource').filter(function(e){ return /\\/train\\.[0-9a-f]+\\.js/.test(e.name); }).length";
+  ok((await page.evaluate('__hk.trainJs()')) === 0 && (await page.evaluate(trainReq)) === 0, 'the training code was loaded with the page');
+  ok((await page.evaluate('__hk.trainLoad()')) === true && (await page.evaluate(trainReq)) === 1, 'the training code did not load on demand');
   // ---------- every lesson by its bot
   const keys = [];
   for (let i = 0; i < 10; i++) {
@@ -76,6 +81,8 @@ try {
   for (let k = 0; k < 8 && (await page.evaluate('__hk.menuState().focus')) !== 'train'; k++) { await page.keyboard.press('ArrowDown'); await page.evaluate('__hk.step(20)'); }
   await page.keyboard.press('Enter'); await page.evaluate('__hk.step(20)');
   ms = await page.evaluate('__hk.menuState()'); ok(ms.stack.join() === 'main,train' && ms.focus === 'lesson', `keyboard: Training ${JSON.stringify(ms)}`);
+  // entering «Тренировка» from the menu loads the lesson code (the page itself did not)
+  ok(await page.waitForFunction('__hk.trainJs()===2', null, { timeout: 15000 }).then(() => true, () => false), 'Training menu did not load the lesson code');
   await page.keyboard.press('ArrowDown'); await page.keyboard.press('Enter'); await page.evaluate('__hk.step(100)');
   st = await page.evaluate('__hk.trainState()'); ok(st.on && st.i === 1, `keyboard: lesson 2 should start, got ${JSON.stringify({ on: st.on, i: st.i })}`);
   for (const e of g.logs.filter(isError)) fails.push(`[${e.type}] ${e.text}`);
