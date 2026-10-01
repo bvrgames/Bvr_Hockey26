@@ -89,7 +89,8 @@ EV.emit('shot', { p: 3, t: 0, ... });                 // возвращает pa
 
 # Итог матча и бэкенд
 
-Сделано: `server/api.js` (`/v1/match`, `/v1/profile`), D1 `bvr-hockey` (APAC, схема — `server/migrations/`),
+Сделано: `/v1/match`, `/v1/profile` — правила в `server/coins.js` (без Cloudflare), D1-хранилище `server/coins-d1.js`,
+склейка Worker'а `server/api.js`; D1 `bvr-hockey` (APAC, схема — `server/migrations/`),
 тест `npm run smoke:api`. Ставки и покупки — ещё нет.
 
 Архитектура:
@@ -301,6 +302,41 @@ CREATE TABLE inventory (                         -- фаза магазина
   PRIMARY KEY (user_id, item_id)
 );
 ```
+
+## Перенос API (план, ничего не перенесено)
+
+Основная аудитория — Россия, а Cloudflare там работает нестабильно. API монет, скорее всего, переедет на VPS в Москве
+(Node.js + SQLite или Postgres). Live-матчи на двоих (Durable Object `Room`) — отдельный вопрос, этот план только про
+`/v1/*`.
+
+**Как код готов к переезду (01.10.2026):**
+
+| файл | что | при переезде |
+|---|---|---|
+| `server/coins.js` | правила целиком: проверка initData (WebCrypto), правдоподобие итога, формула награды, дневные лимиты, частота, обработчик `/v1/*` на стандартных `Request`/`Response` | **переносится как есть** — в нём нет ничего от Cloudflare; `smoke:api` гоняет его в чистом Node.js с хранилищем в памяти |
+| `server/coins-d1.js` | хранилище (интерфейс `STORE` в шапке `coins.js`): 8 методов, SQL — обычный SQLite | SQLite — те же запросы через `node:sqlite` / `better-sqlite3` (`db.batch` → транзакция); Postgres — новый файл, отличия ниже |
+| `server/api.js` | склейка Cloudflare: секрет `BOT_TOKEN`, привязка `DB`, переменные Worker'а как лимиты, итог серверного матча — из Durable Object комнаты | пишется заново (~30 строк): HTTP-сервер Node → `new Request(...)` → `handleCoins(...)` → ответ; секрет и лимиты — из переменных окружения |
+
+**Шаги переноса базы:**
+1. На VPS: Node.js ≥ 22, HTTPS (nginx/Caddy), процесс под systemd/pm2. `BOT_TOKEN` — переменная окружения, не в git.
+2. Схема — те же `server/migrations/*.sql`. SQLite: применить как есть. Postgres: `INTEGER PRIMARY KEY AUTOINCREMENT` →
+   `BIGSERIAL`, `user_id` — `BIGINT` (Telegram id не влезает в 32 бита), `INSERT OR IGNORE` → `ON CONFLICT DO NOTHING`,
+   `MAX(a, b)` → `GREATEST(a, b)`, `?` → `$1…`, в `ledger.balance_after` подзапрос заменить на `RETURNING coins` из `UPDATE`.
+3. Данные: `wrangler d1 export bvr-hockey --remote --output=dump.sql` — для SQLite импорт прямо (`sqlite3 db < dump.sql`),
+   для Postgres — через `pgloader` или построчно (таблиц четыре: `users`, `matches`, `ledger`, `inventory`). Перед
+   экспортом — запись только на новом сервере или окно в пару минут без матчей; очередь итогов у клиента
+   (`localStorage['bvr_pending_matches']`) переживёт простой: 503/сетевая ошибка — итог остаётся и уйдёт позже, дубль
+   `409` безопасен (первичный ключ `(user_id, match_id)`).
+4. Хранилище: `store-sqlite.js` / `store-pg.js` по интерфейсу `STORE`; `recordMatch` — одна транзакция (пользователь,
+   матч, итоги, строка `ledger`), нарушение уникальности → `'duplicate'`.
+5. Итог серверного матча (`roomResult`): пока матчи на двоих считает Durable Object — VPS спрашивает Worker по
+   внутреннему адресу с общим секретом (сейчас это `X-Internal` только изнутри Worker'а — понадобится заголовок с
+   секретом); если комнаты тоже переедут — их сервер отдаёт `{ len, score }` по `id` матча. Без этого серверные матчи
+   платятся как матч с ИИ (`verdict: 'unverified'`), это безопасно.
+6. Клиент: адрес API — `STATS_API` в `index.html` (одна строка; `?api=` — только на localhost); на время перехода
+   старый Worker может отвечать 503 — клиент повторит позже.
+7. Проверка: `smoke:api` (часть про ядро — без изменений; часть про HTTP — направить на новый адрес), затем один
+   настоящий матч из Telegram и сверка строки в `matches`/`ledger`.
 
 ## Telegram CloudStorage (клиент, позже)
 

@@ -1,4 +1,6 @@
-// Coins and stats API test (server/api.js) on `wrangler dev` with a throwaway local D1 and a test bot token.
+// Coins and stats API test. First the rules alone (server/coins.js) in plain Node.js with an in-memory store — the part
+// that has to move to another host as is; then the whole API (server/api.js) on `wrangler dev` with a throwaway local D1
+// and a test bot token.
 // Checks: the initData signature (missing, forged, stale, a changed field → 401), an empty profile, a win against the
 // AI gives coins and moves the profile, the same match again → 409, the next one too soon → 429, implausible
 // summaries → 422, 'left' gives no coins, the daily cap ends in verdict 'capped', CORS preflight. A real server-mode
@@ -54,6 +56,43 @@ function summary(o = {}) {
     players: [{ t: 0, num: 9, g: score[0], a: 2, s: 5, h: 1 }, { t: 1, num: 17, g: score[1], a: 0, s: 2, h: 0 }],
     faceoffs: 6, events: 120, test: false };
   return Object.assign(s, o.patch || {});
+}
+
+// ---------- the rules without Cloudflare: server/coins.js in plain Node.js with an in-memory store (the STORE contract)
+{
+  const { handleCoins } = await import('../server/coins.js');
+  const M = new Map(), U = new Map(), Lg = [];
+  const store = {
+    async matchSeen(uid, id) { return M.has(uid + ':' + id); },
+    async lastMatch(uid) { const a = [...M.values()].filter((m) => m.uid === uid).sort((x, y) => y.now - x.now)[0]; return a ? { at: a.now, len: a.len } : null; },
+    async matchesSince(uid, t) { return [...M.values()].filter((m) => m.uid === uid && m.now >= t).length; },
+    async coinsSince(uid, reason, t) { return Lg.filter((l) => l.uid === uid && l.reason === reason && l.at >= t).reduce((a, l) => a + l.d, 0); },
+    async recordMatch(m) {
+      if (M.has(m.uid + ':' + m.id)) return 'duplicate';
+      M.set(m.uid + ':' + m.id, m);
+      const u = U.get(m.uid) || { coins: 0, stars: 0, matches: 0, wins: 0, draws: 0, losses: 0, goals: 0, goals_against: 0, streak: 0, best_streak: 0, online: 0, inventory: [] };
+      u.coins += m.coins; u.matches++; u.wins += m.win; u.draws += m.draw; u.losses += 1 - m.win - m.draw; u.goals += m.my; u.goals_against += m.op;
+      u.streak = m.win ? u.streak + 1 : 0; u.best_streak = Math.max(u.best_streak, u.streak); u.online += m.online; U.set(m.uid, u);
+      if (m.coins > 0) Lg.push({ uid: m.uid, d: m.coins, reason: m.reason, at: m.now });
+      return 'ok';
+    },
+    async balance(uid) { return (U.get(uid) || { coins: 0 }).coins; },
+    async profile(uid) { return U.get(uid) || null; },
+  };
+  const P = { id: 777000111, first_name: 'Node' };
+  const deps = { botToken: TOKEN, store, roomResult: async () => null };
+  const req = (method, path, idata, body) => new Request('http://local' + path, { method,
+    headers: { ...(idata ? { 'X-Telegram-Init-Data': idata } : {}), ...(body ? { 'Content-Type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined });
+  const go = async (...a) => { const r = await handleCoins(req(...a), deps); return { status: r.status, j: await r.json() }; };
+  ok((await handleCoins(req('GET', '/room/X'), deps)) === null, 'node core: a non-API path is not handled');
+  ok((await go('GET', '/v1/profile', initData(P, { token: 'WRONG' }))).status === 401, 'node core: forged initData → 401');
+  const s1 = summary();
+  let r = await go('POST', '/v1/match', initData(P), s1);
+  ok(r.status === 200 && r.j.coins === 15 && r.j.balance === 15 && r.j.verdict === 'ok', `node core: win → 15 coins ${JSON.stringify(r.j)}`);
+  ok((await go('POST', '/v1/match', initData(P), s1)).status === 409, 'node core: the same match again → 409');
+  ok((await go('POST', '/v1/match', initData(P), summary())).status === 429, 'node core: next match right away → 429');
+  r = await go('GET', '/v1/profile', initData(P));
+  ok(r.status === 200 && r.j.coins === 15 && r.j.totals.w === 1 && r.j.day.coins === 15, `node core: profile ${JSON.stringify(r.j)}`);
 }
 
 const persist = mkdtempSync(join(tmpdir(), 'bvr-api-'));
