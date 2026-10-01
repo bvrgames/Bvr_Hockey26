@@ -35,7 +35,8 @@ try {
   const keys = [];
   for (let i = 0; i < 10; i++) {
     let res = null, st = null, runs = 0;
-    for (; runs < 3 && !(res && res.done); runs++) {
+    // a lesson with luck can end «done» without a medal (goalie: 4 saves of 8) — like a player, try again
+    for (; runs < 3 && !(res && res.done && res.medal >= 1); runs++) {
       res = null;
       await page.evaluate(`__hk.train(${i}); __hk.trainBot(true)`);
       st = await page.evaluate('__hk.trainState()');

@@ -189,7 +189,7 @@ for (const S of SETUPS.filter((x) => !x.name.startsWith('port'))) {
           const zones = [{ n: 'tg-close', x: sa.left || 0, y: sa.top || 0, w: cw, h: band }, { n: 'tg-right', x: W - (sa.right || 0) - rw, y: sa.top || 0, w: rw, h: band }];
           const hit = (a, z) => a.left < z.x + z.w && z.x < a.right && a.top < z.y + z.h && z.y < a.bottom;
           const name = (e) => (e.id ? '#' + e.id : '.' + [...e.classList].join('.')) + ' "' + e.textContent.trim().slice(0, 24) + '"';
-          const els = [...scr.querySelectorAll('.mi,.mrow,.mbtn,.mtc,.mtab,.mlang,.mtitle,.mbrand,.mpill,.mcard,.mroom,.mscore,.mtbl .tr,.mback,.mprof,.mprofbig,.pst,.mshop,.mlogo')]
+          const els = [...scr.querySelectorAll('.mi,.mrow,.mbtn,.mtc,.mtab,.mlang,.mtitle,.mbrand,.mpill,.mcard,.mroom,.mscore,.mtbl .tr,.mback,.mprof,.mprofbig,.pst,.mshop,.mwallet')]
             .concat(foot ? [...foot.querySelectorAll('.mnp,.mh')] : []);
           const fb = foot && vis(foot);
           for (const e of els) {
@@ -206,10 +206,35 @@ for (const S of SETUPS.filter((x) => !x.name.startsWith('port'))) {
           // items of the left list must fit the left column
           const L = scr.querySelector('.mleft'), R = scr.querySelector('.mright'), lb = L && vis(L), rb = R && vis(R);
           if (lb) for (const e of L.querySelectorAll('.mi,.mrow')) { const b = vis(e); if (b && b.right > lb.right + 1) out.push(`${name(e)} wider than the left column`); }
-          if (lb && rb && !scr.classList.contains('wide')) for (const e of R.querySelectorAll('.mcard,.mroom,.mtbl,.mteams,.mlogo,.mscore')) { const b = vis(e); if (b && b.left < lb.right - 1 && b.right > lb.left && b.top < lb.bottom && b.bottom > lb.top) out.push(`${name(e)} overlaps the left column`); }
+          if (lb && rb && !scr.classList.contains('wide')) for (const e of R.querySelectorAll('.mcard,.mroom,.mtbl,.mteams,.mwallet,.mscore')) { const b = vis(e); if (b && b.left < lb.right - 1 && b.right > lb.left && b.top < lb.bottom && b.bottom > lb.top) out.push(`${name(e)} overlaps the left column`); }
           return out;
         }, { sa: S.safe, band: S.content.top, cw: CLOSE_W[S.tgLang], rw: RIGHT_W, pause: scr === 'pause' });
         for (const x of r) fails.push(`${tag}: ${x}`);
+        // the currency: an icon next to the number (no word «монеты / coins / koin» by a number), the icon as tall as
+        // the digits; the wallet (main) shows coins and stars — a number or «—», never an empty spot
+        if (scr === 'main' || scr === 'profile' || scr === 'shop') {
+          const w = await page.evaluate((main) => {
+            const out = [], scr = document.querySelector('#start .mscr.cur');
+            const txt = scr.textContent;
+            if (/\d\s*(монет|coins?\b|koin)/i.test(txt) || /(монет[аы]?|coins?|koin)\s*:?\s*\d/i.test(txt)) out.push('currency word next to a number: ' + txt.replace(/\s+/g, ' ').slice(0, 120));
+            for (const id of ['ic-coin', 'ic-star']) if (!document.getElementById(id)) out.push('#' + id + ' symbol missing');
+            const curs = [...scr.querySelectorAll('.cval')];
+            if (curs.length < 2) out.push(`${curs.length} currency labels`);
+            for (const c of curs) {
+              const ic = c.querySelector('.ic'), b = c.querySelector('.cn');
+              if (!ic || !ic.querySelector('use') || !b) { out.push('currency label without an icon'); continue; }
+              if (!b.getBoundingClientRect().height) continue;   // not on screen (a lesson is still running over the menu)
+              if (!b.textContent.trim()) out.push('currency label without a number');
+              const ib = ic.getBoundingClientRect(), fs = parseFloat(getComputedStyle(b).fontSize);
+              // digits of the menu font are ~0.7 em tall: the icon 0.7…0.95 em
+              if (!(ib.height >= fs * 0.7 && ib.height <= fs * 0.95)) out.push(`icon ${ib.height.toFixed(1)} px next to ${fs} px text`);
+              if (Math.abs((ib.top + ib.bottom) / 2 - (b.getBoundingClientRect().top + b.getBoundingClientRect().bottom) / 2) > fs * 0.2) out.push('icon not centred on the number');
+            }
+            if (main) { const wl = scr.querySelector('.mwallet'); if (!wl || wl.querySelectorAll('.cval').length !== 2) out.push('main: no wallet with coins and stars'); }
+            return out;
+          }, scr === 'main');
+          for (const x of w) fails.push(`${tag}: ${x}`);
+        }
         if (browserName === 'chromium' && lang === 'ru' && S.name === 'land') await page.screenshot({ path: `shots/ui/tg-menu-${scr}${key ? '-tab2' : ''}.png` });
         if (scr === 'pause') { await page.keyboard.press('ArrowUp'); await page.keyboard.press('Enter'); await page.waitForTimeout(150); }
       }

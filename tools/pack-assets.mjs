@@ -13,6 +13,10 @@
 //   assets/src/music/*.mp3    menu music (title = file name, artist BvR) → assets/dist/music-<hash>.m4a, AAC 96 kbit/s via
 //                             macOS afconvert; the hash is of the source + encoder settings, so --check never re-encodes
 //   assets/src/fonts/*.woff2  menu font (Fira Sans Extra Condensed 800 italic, OFL) → assets/dist/font-lat|font-cyr.<hash>.woff2
+//   assets/src/icons/*.svg    currency icons (coin, star) → minified <symbol id="ic-<name>"> in a hidden <svg data-asset="icons">
+//                             right after <body> (used as <svg class="ic"><use href="#ic-coin"/></svg>). Inline, not a dist
+//                             file: ~1.5 KB each, needed on the first menu frame (no request, no blank icon while it loads),
+//                             vector — sharp at any DPR, one copy for every <use> (the flying coins on the result screen too)
 //
 // usage: node tools/pack-assets.mjs            rebuild dist + manifest (after changing anything in assets/src)
 //        node tools/pack-assets.mjs --check    exit 1 if index.html / dist are out of date (npm run check)
@@ -26,7 +30,10 @@ import { createHash } from 'node:crypto';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = join(ROOT, 'assets', 'src'), DIST = join(ROOT, 'assets', 'dist'), HTML = join(ROOT, 'index.html');
 const IMAGES = ['env', 'ads', 'logo'];
-const MUSIC = join(SRC, 'music'), FONTS = join(SRC, 'fonts');
+const MUSIC = join(SRC, 'music'), FONTS = join(SRC, 'fonts'), ICONS = join(SRC, 'icons');
+// the drawing's own bounds (getBBox in Chromium) instead of the artboard: the icon is exactly as tall as the text it
+// stands next to; both share the artboard's rows 55.4…870.2. Measure again when the art changes.
+const ICON_BOX = { coin: '66.8 55.4 814.8 814.8', star: '49.5 55.4 849.5 814.8' };
 const AAC = ['-f', 'm4af', '-d', 'aac', '-b', '96000'];      // afconvert arguments (part of the music file hash)
 const FONT_FILES = { fontLat: 'fira-sans-extra-condensed-latin-800-italic.woff2', fontCyr: 'fira-sans-extra-condensed-cyrillic-800-italic.woff2' };
 const args = process.argv.slice(2);
@@ -131,7 +138,29 @@ function build() {
   return { files, manifest, music };
 }
 
+// Illustrator SVG → one <symbol>: no XML header, comments, ids or <style> (class fills become fill attributes: the
+// classes .st0… of two icons would collide in one document), whitespace squeezed
+function iconSymbol(name, svg) {
+  const fill = {};
+  for (const m of svg.matchAll(/\.(st\d+)\s*\{\s*fill:\s*([^;}\s]+);?\s*\}/g)) fill[m[1]] = m[2];
+  let body = /<svg[^>]*>([\s\S]*)<\/svg>/.exec(svg)[1]
+    .replace(/<!--[\s\S]*?-->/g, '').replace(/<defs>[\s\S]*?<\/defs>/g, '')
+    .replace(/\sclass="([^"]+)"/g, (_, c) => { if (!fill[c]) throw new Error(`icons/${name}.svg: no fill for class ${c}`); return ` fill="${fill[c]}"`; })
+    .replace(/\sid="[^"]*"/g, '')
+    .replace(/\s+/g, ' ').replace(/>\s+</g, '><').replace(/-\s+(?=[\d.])/g, '-').trim();
+  const vb = ICON_BOX[name] || /viewBox="([^"]+)"/.exec(svg)[1];
+  return `<symbol id="ic-${name}" viewBox="${vb}">${body}</symbol>`;
+}
+function iconSprite() {
+  const names = existsSync(ICONS) ? readdirSync(ICONS).filter((f) => /\.svg$/i.test(f)).sort() : [];
+  return '<svg data-asset="icons" width="0" height="0" style="position:absolute" aria-hidden="true">' +
+    names.map((f) => iconSymbol(f.replace(/\.svg$/i, ''), readFileSync(join(ICONS, f), 'utf8'))).join('') + '</svg>';
+}
+
 function htmlWith(html, manifest) {
+  const sprite = iconSprite(), sre = /<svg data-asset="icons"[^>]*>.*?<\/svg>(?=\n)/;
+  if (sre.test(html)) html = html.replace(sre, () => sprite);
+  else html = html.replace(/<body>\n/, () => '<body>\n' + sprite + '\n');
   // the manifest and the start of the model download sit in a tiny script at the top of <head>: the download runs while
   // the page is parsed, in every browser (a <link rel=preload as=fetch> is not reused by fetch() in WebKit = twice)
   const tag = '<script data-asset="players">window.ASSETS=' + JSON.stringify(manifest) +
