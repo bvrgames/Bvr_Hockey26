@@ -9,8 +9,9 @@
 // ('unverified'), a host claiming team 1 → 422. The game in Chromium (?api= points it at this Worker): a match left in
 // the send queue goes out on start, the profile brings coins and stats, a match summary shows «+N coins» on the result
 // screen.
-// usage: node tools/smoke-api.mjs [--port 8799] [--verbose]
+// usage: node tools/smoke-api.mjs [--port 8799] [--verbose] [--core — only the Node.js part]
 import { createHmac } from 'node:crypto';
+import { createServer } from 'node:http';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
@@ -193,16 +194,95 @@ function summary(o = {}) {
   // the books: stakes move coins between players, never make or lose any
   const matchPaid = Lg.filter((l) => l.reason === 'match_duo' || l.reason === 'match_ai').filter((l) => [H, G, Poor].includes(l.uid)).reduce((a, l) => a + l.d, 0);
   ok(bal(H) + bal(G) + bal(Poor) === total0 + extra + matchPaid, `stake: coins add up to the coin (${bal(H) + bal(G) + bal(Poor)} = ${total0} + ${extra} + ${matchPaid})`);
+
+  // ---- stars for Telegram Stars (coins.js «stars»): a fake Bot API, the same STORE contract as coins-d1.js
+  const { handleBot, STAR_PACKS } = await import('../server/coins.js');
+  const Or = new Map();
+  Object.assign(store, {
+    async starOrderNew(o) { if (!U.has(o.uid)) user(o.uid, 0); Or.set(o.id, { id: o.id, uid: o.uid, pack: o.pack, stars: o.stars, price: o.price, status: 'pending', charge: null, created: o.now, short: 0 }); },
+    async starOrderGet(id) { const o = Or.get(id); return o ? { ...o } : null; },
+    async starOrderFail(id) { const o = Or.get(id); if (o && o.status === 'pending') o.status = 'failed'; },
+    async starOrdersSince(uid, t) { return [...Or.values()].filter((o) => o.uid === uid && o.created >= t).length; },
+    async starPaid(p) {
+      const o = Or.get(p.id); if (!o || o.status !== 'pending' || o.uid !== p.uid) return 'repeat';
+      U.get(p.uid).stars += p.stars; o.status = 'paid'; o.charge = p.charge; Lg.push({ uid: p.uid, d: p.stars, reason: 'stars_buy', ref: p.id, at: p.now });
+      return 'ok';
+    },
+    async starRefund(p) {
+      const o = [...Or.values()].find((x) => x.charge === p.charge); if (!o) return { r: 'unknown' };
+      if (o.status !== 'paid') return { r: 'repeat', id: o.id };
+      const u = U.get(o.uid), taken = Math.min(u.stars, o.stars);
+      u.stars -= taken; o.status = 'refunded'; o.short = o.stars - taken; Lg.push({ uid: o.uid, d: -taken, reason: 'stars_refund', ref: o.id, at: p.now });
+      return { r: 'ok', id: o.id, uid: o.uid, taken, short: o.short };
+    },
+    async starUnmatched(p) { Or.set('u_' + p.charge, { id: 'u_' + p.charge, uid: p.uid, status: 'unmatched', charge: p.charge, price: p.amount, stars: 0 }); },
+    async starsBalance(uid) { return (U.get(uid) || { stars: 0 }).stars; },
+  });
+  const calls = [];
+  const fakeBot = async (method, params) => { calls.push({ method, params }); return method === 'createInvoiceLink' ? 'https://t.me/$fake_' + params.payload : true; };
+  const sdeps = { ...deps, bot: fakeBot };
+  const sgo = async (method, path, idata, body) => { const r = await handleCoins(req(method, path, idata, body), sdeps); return { status: r.status, j: await r.json() }; };
+  const SECRET = 'webhook-secret-node';
+  const hook = async (upd, secret = SECRET) => (await handleBot(new Request('http://local/tg/webhook', { method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Telegram-Bot-Api-Secret-Token': secret }, body: JSON.stringify(upd) }), { secret: SECRET, store, bot: fakeBot })).status;
+  const B1 = { id: 9101, first_name: 'Buyer', language_code: 'ru' }, B2 = { id: 9102, first_name: 'Other' };
+  r = await sgo('GET', '/v1/profile', initData(B1));
+  ok(r.status === 200 && JSON.stringify(r.j.packs) === JSON.stringify(STAR_PACKS), `stars: the profile brings the packs ${JSON.stringify(r.j.packs)}`);
+  ok((await sgo('POST', '/v1/stars/invoice', initData(B1), { pack: 'free' })).status === 422, 'stars: an unknown pack → 422');
+  ok((await sgo('POST', '/v1/stars/invoice', null, { pack: 's50' })).status === 401, 'stars: an invoice without initData → 401');
+  r = await sgo('POST', '/v1/stars/invoice', initData(B1), { pack: 's120' });
+  const inv = calls.find((c) => c.method === 'createInvoiceLink');
+  ok(r.status === 200 && r.j.link === 'https://t.me/$fake_' + r.j.order && inv && inv.params.currency === 'XTR' && inv.params.provider_token === '' &&
+     inv.params.payload === r.j.order && inv.params.prices[0].amount === 100 && /120 звёзд/.test(inv.params.title), `stars: invoice s120 → XTR 100, payload = order ${JSON.stringify([r.j, inv && inv.params])}`);
+  const ord = r.j.order;
+  ok((await sgo('GET', '/v1/stars/order?id=' + ord, initData(B2))).status === 404, "stars: someone else's order → 404");
+  const checkout = async (from, payload, amount = 100) => { calls.length = 0;
+    await hook({ update_id: 1, pre_checkout_query: { id: 'q' + Math.random(), from, currency: 'XTR', total_amount: amount, invoice_payload: payload } });
+    const a = calls.find((c) => c.method === 'answerPreCheckoutQuery'); return a ? a.params.ok : null; };
+  ok((await checkout(B2, ord)) === false, "stars: pre_checkout from another player → ok:false");
+  ok((await checkout(B1, 'ffffffffffffffffffffffff')) === false, 'stars: pre_checkout for no such order → ok:false');
+  ok((await checkout(B1, ord, 50)) === false, 'stars: pre_checkout with another sum → ok:false');
+  ok((await checkout(B1, ord)) === true, 'stars: pre_checkout for the right order → ok:true');
+  ok((await hook({ update_id: 2 }, 'wrong')) === 403, 'stars: webhook with a wrong secret → 403');
+  const pay = (from, payload, charge, amount = 100) => hook({ update_id: 3, message: { message_id: 1, from, chat: { id: from.id }, date: now,
+    successful_payment: { currency: 'XTR', total_amount: amount, invoice_payload: payload, telegram_payment_charge_id: charge, provider_payment_charge_id: '' } } });
+  ok((await pay(B1, ord, 'ch_node_1')) === 200 && U.get(B1.id).stars === 120, `stars: successful_payment → +120 (${U.get(B1.id).stars})`);
+  await pay(B1, ord, 'ch_node_1');
+  ok(U.get(B1.id).stars === 120, 'stars: the same payment again adds nothing');
+  ok((await checkout(B1, ord)) === false, 'stars: pre_checkout for a paid order → ok:false');
+  r = await sgo('GET', '/v1/stars/order?id=' + ord, initData(B1));
+  ok(r.j.status === 'paid' && r.j.balance === 120, `stars: the order is paid ${JSON.stringify(r.j)}`);
+  // a refund after some stars are gone: only what is left goes, the rest is marked on the order
+  U.get(B1.id).stars = 30;
+  await hook({ update_id: 4, message: { message_id: 2, from: B1, chat: { id: B1.id }, date: now, refunded_payment: { currency: 'XTR', total_amount: 100, invoice_payload: ord, telegram_payment_charge_id: 'ch_node_1' } } });
+  ok(U.get(B1.id).stars === 0 && Or.get(ord).status === 'refunded' && Or.get(ord).short === 90, `stars: refund with 30 left → 0, short 90 (${U.get(B1.id).stars}, ${JSON.stringify(Or.get(ord))})`);
+  calls.length = 0;
+  await hook({ update_id: 5, message: { message_id: 3, from: B1, chat: { id: B1.id }, date: now, text: '/terms' } });
+  ok(calls.some((c) => c.method === 'sendMessage' && /Telegram id/.test(c.params.text)), '/terms answers with the terms (Telegram id, name, stats)');
 }
 
+const t0 = Date.now();
+if (args.includes('--core')) {          // only the rules in plain Node.js (seconds, no wrangler)
+  console.log(`smoke-api --core: ${fails.length ? 'FAIL' : 'OK'}`); for (const f of fails) console.log('  ✗ ' + f); process.exit(fails.length ? 1 : 0);
+}
 const persist = mkdtempSync(join(tmpdir(), 'bvr-api-'));
 let w = null;
-const t0 = Date.now();
+// a fake Bot API (TG_API points the Worker here): records every call, invoices get a link with the order id in it
+const BOT_PORT = port + 3, HOOK_SECRET = 'smoke-webhook-secret', botCalls = [];
+const botSrv = createServer((rq, rs) => { let b = ''; rq.on('data', (c) => { b += c; }); rq.on('end', () => {
+  const method = rq.url.split('/').pop(); let params = {}; try { params = JSON.parse(b || '{}'); } catch (e) {}
+  botCalls.push({ method, params, token: rq.url.split('/')[1] });
+  const result = method === 'createInvoiceLink' ? 'https://t.me/$smoke_' + params.payload : method === 'getMyCommands' ? [] : method === 'getUpdates' ? [] :
+    method === 'getWebhookInfo' ? { url: '', pending_update_count: 0 } : true;
+  rs.writeHead(200, { 'content-type': 'application/json' }); rs.end(JSON.stringify({ ok: true, result }));
+}); });
+await new Promise((res) => botSrv.listen(BOT_PORT, '127.0.0.1', res));
+const VARS = ['--var', `BOT_TOKEN:${TOKEN}`, '--var', `TG_API:http://127.0.0.1:${BOT_PORT}`, '--var', `TG_WEBHOOK_SECRET:${HOOK_SECRET}`];
 try {
   execFileSync(join(ROOT, 'node_modules', '.bin', 'wrangler'), ['d1', 'migrations', 'apply', 'DB', '--local', '--persist-to', persist],
     { cwd: join(ROOT, 'server'), stdio: VERBOSE ? 'inherit' : 'pipe', env: { ...process.env, WRANGLER_SEND_METRICS: 'false', CI: '1' } });
   // MATCH_GAP stays on for the 429 check, a second user with a gap of 0 tests the daily cap
-  w = await startWrangler(port, { args: ['--persist-to', persist, '--var', `BOT_TOKEN:${TOKEN}`] });
+  w = await startWrangler(port, { args: ['--persist-to', persist, ...VARS] });
 
   const A = { id: 100000000 + Math.floor(Math.random() * 1e6), first_name: 'Test', last_name: 'A', language_code: 'ru' };
   const ia = initData(A);
@@ -246,7 +326,7 @@ try {
 
   // daily cap and 'left': a second Worker with MATCH_GAP 0 on the same database
   w.close(); await new Promise((res) => setTimeout(res, 800));
-  w = await startWrangler(port, { args: ['--persist-to', persist, '--var', `BOT_TOKEN:${TOKEN}`, '--var', 'MATCH_GAP:0', '--var', 'MIN_LEN:10'] });
+  w = await startWrangler(port, { args: ['--persist-to', persist, ...VARS, '--var', 'MATCH_GAP:0', '--var', 'MIN_LEN:10'] });
   const B = { id: A.id + 1, first_name: 'Test', username: 'b' };
   const ib = initData(B);
   r = await call('POST', '/v1/match', ib, summary({ score: [0, 2], patch: { result: 'left', played: 50, disconnect: { self: 1, selfLeft: true, opp: false, oppLeft: false } } }));
@@ -258,6 +338,92 @@ try {
   ok(last.j.verdict === 'capped' && total === 100 && last.j.balance === 100 && last.j.day.coins === 100, `daily cap 100: total ${total}, last ${JSON.stringify(last.j)}`);
   p = await call('GET', '/v1/profile', ib);
   ok(p.j.coins === 100 && p.j.totals.m === 11 && p.j.totals.l === 1 && p.j.totals.d === 1 && p.j.totals.w === 9 && p.j.totals.best === 9, `profile B ${JSON.stringify(p.j.totals)}`);
+
+  // ---------- stars for Telegram Stars on the real Worker + D1, the Bot API faked (no real payments)
+  {
+    const hookRaw = (upd, secret = HOOK_SECRET) => fetch(API + '/tg/webhook', { method: 'POST', body: JSON.stringify(upd),
+      headers: { 'Content-Type': 'application/json', ...(secret !== null ? { 'X-Telegram-Bot-Api-Secret-Token': secret } : {}) } });
+    const S1 = { id: A.id + 20, first_name: 'Star', last_name: 'Buyer', language_code: 'en' }, S2 = { id: A.id + 21, first_name: 'Stranger' };
+    const starsOf = async (u) => (await call('GET', '/v1/profile', initData(u))).j.stars;
+    p = await call('GET', '/v1/profile', initData(S1));
+    ok(p.j.stars === 0 && Array.isArray(p.j.packs) && p.j.packs.map((x) => `${x.stars}/${x.price}`).join(' ') === '50/50 120/100 300/250', `stars: packs from the server ${JSON.stringify(p.j.packs)}`);
+    botCalls.length = 0;
+    r = await call('POST', '/v1/stars/invoice', initData(S1), { pack: 's50' });
+    const ci = botCalls.find((c) => c.method === 'createInvoiceLink');
+    ok(r.status === 200 && /^[0-9a-f]{24}$/.test(r.j.order) && r.j.link === 'https://t.me/$smoke_' + r.j.order && ci && ci.token === 'bot' + TOKEN &&
+       ci.params.currency === 'XTR' && ci.params.provider_token === '' && ci.params.payload === r.j.order && ci.params.prices[0].amount === 50,
+       `stars: invoice created through createInvoiceLink ${JSON.stringify([r.status, r.j, ci && ci.params])}`);
+    const o1 = r.j.order;
+    r = await call('GET', '/v1/stars/order?id=' + o1, initData(S1));
+    ok(r.status === 200 && r.j.status === 'pending' && r.j.stars === 50 && r.j.price === 50, `stars: the order is pending in D1 ${JSON.stringify(r.j)}`);
+    ok((await call('GET', '/v1/stars/order?id=' + o1, initData(S2))).status === 404, "stars: someone else's order → 404");
+    ok((await call('POST', '/v1/stars/invoice', initData(S1), { pack: 'x1' })).status === 422, 'stars: unknown pack → 422');
+    // the webhook: secret
+    ok((await hookRaw({ update_id: 1 }, 'wrong')).status === 403, 'webhook: wrong secret → 403');
+    ok((await hookRaw({ update_id: 1 }, null)).status === 403, 'webhook: no secret → 403');
+    // pre_checkout_query
+    const checkout = async (from, payload, amount = 50) => {
+      botCalls.length = 0; const id = 'pcq' + Math.floor(Math.random() * 1e9);
+      const st = (await hookRaw({ update_id: 2, pre_checkout_query: { id, from, currency: 'XTR', total_amount: amount, invoice_payload: payload } })).status;
+      const a = botCalls.find((c) => c.method === 'answerPreCheckoutQuery' && c.params.pre_checkout_query_id === id);
+      return st === 200 && a ? a.params : null;
+    };
+    let a = await checkout(S2, o1);
+    ok(a && a.ok === false && a.error_message, `pre_checkout: someone else's order → ok:false ${JSON.stringify(a)}`);
+    a = await checkout(S1, 'abababababababababababab');
+    ok(a && a.ok === false, `pre_checkout: no such order → ok:false ${JSON.stringify(a)}`);
+    a = await checkout(S1, o1, 1);
+    ok(a && a.ok === false, `pre_checkout: another sum → ok:false ${JSON.stringify(a)}`);
+    a = await checkout(S1, o1);
+    ok(a && a.ok === true, `pre_checkout: the right order → ok:true ${JSON.stringify(a)}`);
+    // successful_payment: once
+    const pay = (from, payload, charge, amount = 50) => hookRaw({ update_id: 3, message: { message_id: 7, from, chat: { id: from.id, type: 'private' }, date: Math.floor(Date.now() / 1000),
+      successful_payment: { currency: 'XTR', total_amount: amount, invoice_payload: payload, telegram_payment_charge_id: charge, provider_payment_charge_id: '' } } });
+    const ch1 = 'stxSMOKE' + Math.floor(Math.random() * 1e9);
+    ok((await pay(S1, o1, ch1)).status === 200 && (await starsOf(S1)) === 50, 'successful_payment: +50 stars');
+    ok((await pay(S1, o1, ch1)).status === 200 && (await starsOf(S1)) === 50, 'successful_payment: the same payment again adds nothing');
+    r = await call('GET', '/v1/stars/order?id=' + o1, initData(S1));
+    ok(r.j.status === 'paid' && r.j.balance === 50, `stars: the order is paid ${JSON.stringify(r.j)}`);
+    a = await checkout(S1, o1);
+    ok(a && a.ok === false, `pre_checkout: a paid order → ok:false ${JSON.stringify(a)}`);
+    ok((await call('GET', '/v1/profile', initData(S1))).j.coins === 0, 'stars never turn into coins');
+    // a second order (s120) and a refund of the first: −50
+    const o2 = (await call('POST', '/v1/stars/invoice', initData(S1), { pack: 's120' })).j.order, ch2 = ch1 + 'b';
+    await pay(S1, o2, ch2, 100);
+    ok((await starsOf(S1)) === 170, 'successful_payment: s120 → 170');
+    const refund = (from, charge, amount) => hookRaw({ update_id: 4, message: { message_id: 8, from, chat: { id: from.id, type: 'private' }, date: Math.floor(Date.now() / 1000),
+      refunded_payment: { currency: 'XTR', total_amount: amount, invoice_payload: '', telegram_payment_charge_id: charge } } });
+    ok((await refund(S1, ch1, 50)).status === 200 && (await starsOf(S1)) === 120, 'refunded_payment: −50 → 120');
+    ok((await refund(S1, ch1, 50)).status === 200 && (await starsOf(S1)) === 120, 'refunded_payment: the same refund again takes nothing');
+    r = await call('GET', '/v1/stars/order?id=' + o1, initData(S1));
+    ok(r.j.status === 'refunded', `stars: the first order is refunded ${JSON.stringify(r.j)}`);
+    // a refund after the stars were spent (no shop yet: the balance is cut in D1 by hand) — never below zero
+    execFileSync(join(ROOT, 'node_modules', '.bin', 'wrangler'), ['d1', 'execute', 'DB', '--local', '--persist-to', persist, '--command', `UPDATE users SET stars = 20 WHERE user_id = ${S1.id}`],
+      { cwd: join(ROOT, 'server'), stdio: 'pipe', env: { ...process.env, WRANGLER_SEND_METRICS: 'false', CI: '1' } });
+    ok((await starsOf(S1)) === 20, 'stars: 100 of 120 spent (set in D1)');
+    ok((await refund(S1, ch2, 100)).status === 200 && (await starsOf(S1)) === 0, 'refunded_payment with 20 left of 120 → 0, not below');
+    const rows = JSON.parse(execFileSync(join(ROOT, 'node_modules', '.bin', 'wrangler'), ['d1', 'execute', 'DB', '--local', '--persist-to', persist, '--json', '--command',
+      `SELECT status, refund_short, charge_id FROM star_orders WHERE id = '${o2}'; SELECT delta, reason, balance_after, currency FROM ledger WHERE user_id = ${S1.id} ORDER BY id`],
+      { cwd: join(ROOT, 'server'), stdio: 'pipe', env: { ...process.env, WRANGLER_SEND_METRICS: 'false', CI: '1' } }).toString());
+    const od = rows[0].results[0], lg = rows[1].results.map((x) => `${x.reason}:${x.delta}:${x.balance_after}:${x.currency}`).join(' ');
+    ok(od && od.status === 'refunded' && od.refund_short === 100 && od.charge_id === ch2, `refund: the order marks 100 not taken back ${JSON.stringify(od)}`);
+    ok(lg === 'stars_buy:50:50:stars stars_buy:120:170:stars stars_refund:-50:120:stars stars_refund:-20:0:stars', `refund: ledger rows ${lg}`);
+    // a payment no order matches is kept, not lost; commands
+    await pay(S2, 'cdcdcdcdcdcdcdcdcdcdcdcd', ch1 + 'zz');
+    ok((await starsOf(S2)) === 0, 'successful_payment for an unknown order credits nothing (kept as unmatched)');
+    botCalls.length = 0;
+    await hookRaw({ update_id: 5, message: { message_id: 9, from: S1, chat: { id: S1.id, type: 'private' }, date: 1, text: '/paysupport' } });
+    await hookRaw({ update_id: 6, message: { message_id: 10, from: { ...S1, language_code: 'ru' }, chat: { id: S1.id, type: 'private' }, date: 1, text: '/terms@bvr_games_bot' } });
+    const sm = botCalls.filter((c) => c.method === 'sendMessage');
+    ok(sm.length === 2 && /support/i.test(sm[0].params.text) && /Telegram id/.test(sm[1].params.text) && /монет/.test(sm[1].params.text), `/paysupport and /terms answer ${JSON.stringify(sm.map((x) => x.params.text.slice(0, 40)))}`);
+    // the one-time setup: without the secret 403; with it — setWebhook with the secret and the commands
+    ok((await fetch(API + '/tg/setup?do=install', { method: 'POST' })).status === 403, 'setup without the secret → 403');
+    botCalls.length = 0;
+    r = await fetch(API + '/tg/setup?do=install', { method: 'POST', headers: { 'X-Setup-Secret': HOOK_SECRET } });
+    const sw = botCalls.find((c) => c.method === 'setWebhook'), sc = botCalls.find((c) => c.method === 'setMyCommands');
+    ok(r.status === 200 && sw && sw.params.url === API + '/tg/webhook' && sw.params.secret_token === HOOK_SECRET && sw.params.allowed_updates.includes('pre_checkout_query') &&
+       sc && sc.params.commands.map((c) => c.command).join() === 'paysupport,terms', `setup: setWebhook + setMyCommands ${JSON.stringify([r.status, sw && sw.params, sc && sc.params])}`);
+  }
 
   // a socket to a room that keeps every message; next() waits for one that matches
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -405,17 +571,58 @@ try {
       ok(rw.st === 'done' && flew === 0 && /0$/.test(rw.text), `game: 0 coins → no flying coins ${JSON.stringify(rw)} flew ${flew}`);
       await g.page.waitForFunction(() => __hk.coins().q === 0, null, { timeout: 10000 }).catch(() => {});
       ok((await g.page.evaluate(() => __hk.coins())).coins === 45, `game: the queued match went out with the next one ${JSON.stringify(await g.page.evaluate(() => __hk.coins().coins))}`);
+      // ---- stars: «+» at the stars in the wallet → packs from the server → invoice → Telegram says 'paid' → the client
+      // waits for the webhook's payment, then the stars fly into the wallet; 'cancelled' credits nothing
+      await g.page.evaluate(() => { __hk.result(); __hk.menu('main'); });
+      await g.page.waitForTimeout(300);
+      let sb = await g.page.evaluate(() => __hk.sb());
+      ok(sb.ok && sb.btn === 2 && sb.packs && sb.packs.length === 3, `stars: «+» in the wallet on the main menu and the profile, packs from the profile ${JSON.stringify(sb)}`);
+      await g.page.click('#start section.cur .mtopup');
+      await g.page.waitForTimeout(300);
+      ok((await g.page.evaluate(() => __hk.menuState().stack.join('>'))) === 'main>stars', 'stars: «+» opens the packs screen');
+      await g.page.click('#start section.cur .msbp[data-pack="s50"]');
+      await g.page.waitForFunction(() => window.__tgInvoice && __hk.sb().st === 'open', null, { timeout: 10000 }).catch(() => {});
+      const inv = await g.page.evaluate(() => ({ url: (window.__tgInvoice || {}).url, sb: __hk.sb() }));
+      ok(inv.sb.st === 'open' && inv.url === 'https://t.me/$smoke_' + inv.sb.order, `stars: the invoice opened in Telegram ${JSON.stringify(inv)}`);
+      await g.page.evaluate(() => __tgInvoiceClose('paid'));
+      await g.page.waitForTimeout(2500);
+      sb = await g.page.evaluate(() => __hk.sb());
+      ok(sb.st === 'wait' && (await g.page.evaluate(() => __hk.coins().stars)) === 0, `stars: 'paid' from Telegram alone credits nothing — waits for the server ${JSON.stringify(sb)}`);
+      const hook = (upd) => fetch(API + '/tg/webhook', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Telegram-Bot-Api-Secret-Token': HOOK_SECRET }, body: JSON.stringify(upd) });
+      await hook({ update_id: 50, message: { message_id: 50, from: E, chat: { id: E.id, type: 'private' }, date: Math.floor(Date.now() / 1000),
+        successful_payment: { currency: 'XTR', total_amount: 50, invoice_payload: inv.sb.order, telegram_payment_charge_id: 'stxGAME' + Date.now(), provider_payment_charge_id: '' } } });
+      let flewS = 0;
+      for (let t = 0; t < 60; t++) { await g.page.waitForTimeout(100); sb = await g.page.evaluate(() => __hk.sb()); flewS = Math.max(flewS, sb.fly); if (sb.st === 'done' && !sb.fly && t > 10) break; }
+      const st50 = await g.page.evaluate(() => ({ stars: __hk.coins().stars, wal: document.querySelector('#start section.cur [data-stars]').textContent }));
+      ok(sb.st === 'done' && /50/.test(sb.text) && flewS >= 3 && st50.stars === 50 && st50.wal === '50', `stars: confirmed → +50 flew into the wallet ${JSON.stringify([sb, flewS, st50])}`);
+      await g.page.click('#start section.cur .msbp[data-pack="s120"]');
+      await g.page.waitForFunction(() => window.__tgInvoiceClose && __hk.sb().st === 'open', null, { timeout: 10000 }).catch(() => {});
+      await g.page.evaluate(() => __tgInvoiceClose('cancelled'));
+      await g.page.waitForTimeout(500);
+      sb = await g.page.evaluate(() => __hk.sb());
+      ok(sb.st === 'cancel' && sb.text.length > 5 && (await g.page.evaluate(() => __hk.coins().stars)) === 50, `stars: 'cancelled' → a calm message, nothing credited ${JSON.stringify(sb)}`);
       const errs = g.logs.filter(isError).filter((e) => !/ERR_FAILED/.test(e.text));   // the request aborted on purpose above
       ok(!errs.length, `game: page errors ${JSON.stringify(errs).slice(0, 400)}`);
     } finally { await g.browser.close(); srv.close(); }
+    // outside Telegram (no initData, no openInvoice) there is no «+»
+    const srv2 = await startServer(port + 1), g2 = await openGame('chromium');
+    try {
+      await g2.page.goto(`http://127.0.0.1:${port + 1}/index.html?nomusic&api=${encodeURIComponent(API)}`, { waitUntil: 'load', timeout: 120000 });
+      await g2.page.waitForFunction('window.__hk && __hk.menuState && __hk.menuState().layer==="menu"', null, { timeout: 60000 });
+      await g2.page.evaluate(() => { __hk.menu('main'); __hk.menu('profile'); });
+      const sb2 = await g2.page.evaluate(() => __hk.sb());
+      ok(!sb2.ok && sb2.btn === 0, `stars: no «+» outside Telegram ${JSON.stringify(sb2)}`);
+    } finally { await g2.browser.close(); srv2.close(); }
   }
 
 
   // ---------- no result from the room → refund: a Worker whose stakes are already past their deadline when locked
   // (STAKE_GRACE far below zero) — the room's alarm and the profile's sweep refund it; the match's own end later pays nothing
   w.close(); await sleep(800);
-  w = await startWrangler(port, { args: ['--persist-to', persist, '--var', `BOT_TOKEN:${TOKEN}`, '--var', 'MATCH_GAP:0', '--var', 'MIN_LEN:10', '--var', 'STAKE_GRACE:-100000'] });
+  w = await startWrangler(port, { args: ['--persist-to', persist, ...VARS, '--var', 'MATCH_GAP:0', '--var', 'MIN_LEN:10', '--var', 'STAKE_GRACE:-100000'] });
   {
+    // the staked match above may have left the loser with 5 coins: a won match against the AI each (+15) for the stake of 10
+    for (const u of [SH, SG]) await call('POST', '/v1/match', initData(u), summary());
     const before = [await coinsOf(SH), await coinsOf(SG)];
     const code = 'STR' + Math.floor(Math.random() * 1e5), sm = 'cc' + Math.floor(Math.random() * 1e12).toString(16).padStart(14, '0') + 'dd00ee11';
     const { H, G } = await stakeRoom(code, SH, SG, 10);
@@ -446,6 +653,7 @@ try {
   if (w) console.log(w.log().slice(-3000));
 } finally {
   if (w) w.close();
+  botSrv.close();
   try { rmSync(persist, { recursive: true, force: true }); } catch (e) {}
 }
 console.log(`smoke-api: ${fails.length ? 'FAIL' : 'OK'} (${((Date.now() - t0) / 1000).toFixed(1)} s)`);

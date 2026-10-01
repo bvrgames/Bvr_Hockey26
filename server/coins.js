@@ -11,8 +11,10 @@
  *     conf(key) → number,     // overrides of DEF below (Worker vars), or undefined
  *     store,                  // the database, see STORE below (server/coins-d1.js — D1 / SQLite)
  *     roomResult(room, id),   // → { len, score } of a server-mode match the room counted itself, or null
+ *     bot(method, params),    // the Bot API (botApiFrom below) — star invoices
  *     now,                    // optional, unix seconds (tests)
  *   }) → Response, or null when the path is not /v1/*
+ *   handleBot(request, { secret, store, bot }) → the bot's webhook (/tg/webhook): star payments, /paysupport, /terms
  *
  * STORE (all async; one player = one Telegram user id):
  *   matchSeen(uid, id) → bool                  this match id is already in for this player
@@ -33,6 +35,17 @@
  *   stakesOverdue(uid, now) → [stake]          this player's stakes still locked after their deadline
  *   profile(uid) → { coins, stars, matches, wins, draws, losses, goals, goals_against, streak, best_streak, online,
  *                    inventory: [item ids] } | null
+ *   stars (an order: { id, uid, pack, stars, price, status: 'pending' | 'paid' | 'refunded' | 'failed' | 'unmatched',
+ *          charge, created, paid, refunded, short }):
+ *   starOrderNew(o)                            create the player if new, the order 'pending'
+ *   starOrderGet(id) → order | null            starOrderFail(id, now): 'pending' → 'failed' (no invoice was made)
+ *   starOrdersSince(uid, t) → n                orders made since t
+ *   starPaid({ id, uid, stars, charge, now }) → 'ok' | 'repeat'   in one transaction, only from 'pending': the order
+ *                                              'paid' with the charge id, users.stars += stars, ledger 'stars_buy'
+ *   starRefund({ charge, now }) → { r: 'ok' | 'repeat' | 'unknown', id, taken, short }   only from 'paid': stars back,
+ *                                              never below zero (short — what was already spent), ledger 'stars_refund'
+ *   starUnmatched({ uid, name, charge, amount, payload, now })   a payment no order matches, kept as 'unmatched'
+ *   starsBalance(uid) → stars
  *
  * The client never adds coins: it says how the match went, the reward is decided here; the player is taken only from
  * the signed initData (user.id), the body says nothing about who sent it.
@@ -47,6 +60,7 @@ export const DEF = {
   MATCH_GAP: 0.8,          // the next match is accepted not sooner than MATCH_GAP × len after the previous one
   AUTH_MAX_AGE: 86400,     // initData older than this (s) is refused
   STAKE_GRACE: 900,        // a stake still locked 2 × len + this (s) after the start, with no result from the room → refund
+  INVOICES_HOUR: 20,       // star invoices one player may open per hour
 };
 const REWARD = { win: 10, draw: 5, loss: 3, left: 0 };
 const BONUS_MAX = 5;
@@ -96,7 +110,8 @@ export async function verifyInitData(initData, botToken, nowSec, maxAge = DEF.AU
   let u = null; try { u = JSON.parse(p.get('user') || 'null'); } catch (e) {}
   if (!u || !Number.isSafeInteger(u.id) || u.id <= 0) return null;
   const name = ((u.first_name || '') + ' ' + (u.last_name || '')).trim().slice(0, 64) || (u.username || '').slice(0, 64);
-  return { id: u.id, name };
+  const str = (v, n) => (typeof v === 'string' && v ? v.slice(0, n) : null);
+  return { id: u.id, name, username: str(u.username, 64), lang: str(u.language_code, 16), premium: u.is_premium ? 1 : 0 };
 }
 
 const int = (v) => Number.isInteger(v) && v >= 0 && v < 1e6;
@@ -264,6 +279,198 @@ export class StakeRoom {
   }
 }
 
+// ---------- stars: in-game stars bought for Telegram Stars (XTR), docs/EVENTS.md «Звёзды»
+// Stars are a donation currency only (ice, kits, no ads): never staked, never turned into coins. The prices are here and
+// only here — the client gets them from the server (/v1/profile, /v1/stars/packs); an order keeps the pack it was made
+// with, so changing a price never touches orders already made. id — what the client sends, stars — what the player
+// gets, price — Telegram Stars the player pays.
+export const STAR_PACKS = [
+  { id: 's50', stars: 50, price: 50 },
+  { id: 's120', stars: 120, price: 100 },
+  { id: 's300', stars: 300, price: 250 },
+];
+export const BOT_PATH = '/tg/webhook';     // Telegram posts updates here (setWebhook with secret_token)
+
+// The Bot API over plain fetch (the same in Workers and Node.js): (method, params) → result, or throws.
+// base — https://api.telegram.org, or a fake one in tests.
+export function botApiFrom(token, base = 'https://api.telegram.org') {
+  return async (method, params) => {
+    const r = await fetch(`${base}/bot${token}/${method}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(params || {}) });
+    let j = null; try { j = await r.json(); } catch (e) {}
+    if (!j || !j.ok) throw new Error(`bot ${method}: ${(j && j.description) || r.status}`);
+    return j.result;
+  };
+}
+
+// texts the bot and the invoice speak (ru / en / id by the player's Telegram language, else en)
+const L3 = (lang) => (lang === 'ru' || lang === 'id' ? lang : 'en');
+const ruPlural = (n, one, few, many) => { const a = n % 10, b = n % 100; return a === 1 && b !== 11 ? one : a >= 2 && a <= 4 && (b < 10 || b >= 20) ? few : many; };
+export const BOT_TEXTS = {
+  paysupport: {
+    ru: 'Поддержка по платежам BVR Hockey 26.\nЕсли звёзды не пришли после оплаты или нужен возврат — напишите сюда, что случилось, и время покупки. Ответим в течение 3 дней.',
+    en: 'BVR Hockey 26 payment support.\nIf your stars did not arrive after paying or you need a refund, write here what happened and when you bought. We answer within 3 days.',
+    id: 'Dukungan pembayaran BVR Hockey 26.\nJika bintang tidak masuk setelah membayar atau kamu perlu pengembalian dana, tulis di sini apa yang terjadi dan kapan kamu membeli. Kami menjawab dalam 3 hari.',
+  },
+  terms: {
+    ru: 'Условия покупки — BVR Hockey 26\n\n• Звёзды игры покупаются за Telegram Stars и зачисляются после подтверждения оплаты.\n• Звёзды — только для оформления (лёд, форма) и отключения рекламы. Они не меняются на монеты, не участвуют в ставках и не имеют денежной стоимости.\n• Возврат — через /paysupport. При возврате купленные звёзды списываются; если они уже потрачены, баланс не уходит ниже нуля.\n• Игра хранит ваш Telegram id, имя и статистику матчей.',
+    en: 'Purchase terms — BVR Hockey 26\n\n• In-game stars are bought for Telegram Stars and credited once the payment is confirmed.\n• Stars are only for cosmetics (ice, kits) and turning off ads. They never turn into coins, are never staked and have no cash value.\n• Refunds — via /paysupport. A refund takes the bought stars back; if they are already spent, the balance never goes below zero.\n• The game stores your Telegram id, name and match stats.',
+    id: 'Ketentuan pembelian — BVR Hockey 26\n\n• Bintang game dibeli dengan Telegram Stars dan masuk setelah pembayaran dikonfirmasi.\n• Bintang hanya untuk tampilan (es, seragam) dan mematikan iklan. Bintang tidak bisa ditukar ke koin, tidak dipakai untuk taruhan dan tidak bernilai uang.\n• Pengembalian dana — lewat /paysupport. Saat dikembalikan, bintang yang dibeli ditarik; jika sudah terpakai, saldo tidak turun di bawah nol.\n• Game menyimpan id Telegram, nama, dan statistik laga kamu.',
+  },
+  commands: [
+    { command: 'paysupport', description: { ru: 'Поддержка по платежам', en: 'Payment support', id: 'Dukungan pembayaran' } },
+    { command: 'terms', description: { ru: 'Условия покупки', en: 'Purchase terms', id: 'Ketentuan pembelian' } },
+  ],
+  invoiceTitle: (n, lang) => ({ ru: `${n} ${ruPlural(n, 'звезда', 'звезды', 'звёзд')} — BVR Hockey`, en: `${n} stars — BVR Hockey`, id: `${n} bintang — BVR Hockey` })[L3(lang)],
+  invoiceDesc: {
+    ru: 'Звёзды BVR Hockey 26: оформление льда, форма команды, отключение рекламы. Не меняются на монеты.',
+    en: 'BVR Hockey 26 stars: ice designs, team kits, no ads. They never turn into coins.',
+    id: 'Bintang BVR Hockey 26: desain es, seragam tim, tanpa iklan. Tidak bisa ditukar ke koin.',
+  },
+  checkoutNo: {
+    ru: 'Этот счёт уже недействителен. Открой пополнение в игре заново.',
+    en: 'This invoice is no longer valid. Open the top-up in the game again.',
+    id: 'Tagihan ini sudah tidak berlaku. Buka isi ulang di game lagi.',
+  },
+};
+
+const orderId = () => { const b = new Uint8Array(12); crypto.getRandomValues(b); return hex(b); };
+const ORDER_RE = /^[0-9a-f]{24}$/;
+// what the client sees of an order
+const orderView = (o, balance) => ({ id: o.id, status: o.status, stars: o.stars, price: o.price, balance });
+
+// POST /v1/stars/invoice { pack } → { order, link }: the order is written 'pending' first, then the invoice is made
+// with the order id as its payload (Bot API createInvoiceLink, currency XTR, provider_token empty)
+async function postInvoice(request, d, user, now) {
+  let b = null; try { const t = await request.text(); if (t.length < 1024) b = JSON.parse(t); } catch (e) {}
+  const pack = STAR_PACKS.find((p) => b && p.id === b.pack);
+  if (!pack) return json(422, { reason: 'pack' });
+  if (!d.bot) return json(503, { reason: 'not configured' });
+  if (await d.store.starOrdersSince(user.id, now - 3600) >= d.conf('INVOICES_HOUR')) return json(429, { reason: 'often' });
+  const id = orderId();
+  await d.store.starOrderNew({ id, uid: user.id, name: user.name, pack: pack.id, stars: pack.stars, price: pack.price, now });
+  let link = null;
+  try {
+    link = await d.bot('createInvoiceLink', {
+      title: BOT_TEXTS.invoiceTitle(pack.stars, user.lang), description: BOT_TEXTS.invoiceDesc[L3(user.lang)],
+      payload: id, provider_token: '', currency: 'XTR', prices: [{ label: BOT_TEXTS.invoiceTitle(pack.stars, user.lang), amount: pack.price }],
+    });
+  } catch (e) {
+    console.error('stars invoice', id, e && e.message);
+    await d.store.starOrderFail(id, now);
+    return json(502, { reason: 'bot' });
+  }
+  return json(200, { order: id, link, pack: pack.id, stars: pack.stars, price: pack.price });
+}
+// GET /v1/stars/order?id= → the player's own order and the stars balance (the client waits for 'paid' after paying)
+async function getOrder(request, d, user) {
+  const id = new URL(request.url).searchParams.get('id') || '';
+  const o = ORDER_RE.test(id) ? await d.store.starOrderGet(id) : null;
+  if (!o || o.uid !== user.id) return json(404, { reason: 'order' });
+  return json(200, orderView(o, await d.store.starsBalance(user.id)));
+}
+
+// ---- the bot's webhook: payments and two commands. Telegram must get an answer to pre_checkout_query within 10 s.
+// pre_checkout_query: the order exists, is 'pending', the payer and the sum are the order's → ok, else ok:false.
+// successful_payment: the order → 'paid' and its stars to the player in one transaction, once (a repeat of the same
+// payment, a retry by Telegram — nothing more). refunded_payment (also after refundStarPayment): the stars are taken
+// back, never below zero — what was already spent stays as refund_short on the order.
+export function checkoutCheck(o, q) {
+  if (!o) return 'order';
+  if (o.status !== 'pending') return 'status';
+  if (!q.from || q.from.id !== o.uid) return 'user';
+  if (q.currency !== 'XTR' || q.total_amount !== o.price) return 'amount';
+  return null;
+}
+async function botCommand(d, msg) {
+  const cmd = (/^\/(paysupport|terms)(@\w+)?(\s|$)/.exec(msg.text || '') || [])[1];
+  if (!cmd || !msg.chat) return;
+  await d.bot('sendMessage', { chat_id: msg.chat.id, text: BOT_TEXTS[cmd][L3(msg.from && msg.from.language_code)] });
+}
+export async function onBotUpdate(u, d) {
+  const now = d.now || Math.floor(Date.now() / 1000);
+  const q = u.pre_checkout_query;
+  if (q) {
+    const o = typeof q.invoice_payload === 'string' && ORDER_RE.test(q.invoice_payload) ? await d.store.starOrderGet(q.invoice_payload) : null;
+    const bad = checkoutCheck(o, q);
+    if (bad) console.warn('stars checkout refused', JSON.stringify({ order: q.invoice_payload, from: q.from && q.from.id, amount: q.total_amount, bad }));
+    await d.bot('answerPreCheckoutQuery', bad ? { pre_checkout_query_id: q.id, ok: false, error_message: BOT_TEXTS.checkoutNo[L3(q.from && q.from.language_code)] }
+                                              : { pre_checkout_query_id: q.id, ok: true });
+    return { kind: 'checkout', ok: !bad, bad };
+  }
+  const m = u.message;
+  if (!m) return { kind: 'skip' };
+  const from = m.from || {};
+  if (m.successful_payment) {
+    const p = m.successful_payment, id = p.invoice_payload, charge = String(p.telegram_payment_charge_id || '');
+    const o = typeof id === 'string' && ORDER_RE.test(id) ? await d.store.starOrderGet(id) : null;
+    if (!o || o.uid !== from.id || p.currency !== 'XTR' || p.total_amount !== o.price || !charge) {
+      // money came in for an order we cannot match: kept for the developer's page, never lost silently
+      console.error('stars payment unmatched', JSON.stringify({ id, from: from.id, amount: p.total_amount, charge }));
+      if (charge && from.id) await d.store.starUnmatched({ uid: from.id, name: [from.first_name, from.last_name].filter(Boolean).join(' ').slice(0, 64), charge, amount: p.total_amount | 0, payload: String(id || '').slice(0, 128), now });
+      return { kind: 'paid', r: 'unmatched' };
+    }
+    const r = await d.store.starPaid({ id, uid: o.uid, stars: o.stars, charge, now });
+    console.log('stars paid', JSON.stringify({ id, uid: o.uid, stars: o.stars, price: o.price, r }));
+    return { kind: 'paid', r };
+  }
+  if (m.refunded_payment) {
+    const p = m.refunded_payment, charge = String(p.telegram_payment_charge_id || '');
+    const r = charge ? await d.store.starRefund({ charge, now }) : { r: 'unknown' };
+    (r.short ? console.warn : console.log)('stars refunded', JSON.stringify({ charge, from: from.id, ...r }));
+    return { kind: 'refund', ...r };
+  }
+  if (m.text && m.text[0] === '/') { await botCommand(d, m); return { kind: 'command' }; }
+  return { kind: 'skip' };
+}
+// POST /tg/webhook — returns a Response, or null when the path is not the bot's. 403 without the right secret header;
+// 500 lets Telegram retry (a payment that failed to be written is written on the retry, once).
+export async function handleBot(request, d) {
+  const path = new URL(request.url).pathname;
+  if (path !== BOT_PATH) return null;
+  if (request.method !== 'POST') return json(405, { reason: 'method' });
+  const got = request.headers.get('X-Telegram-Bot-Api-Secret-Token') || '';
+  if (!d.secret || !sameBytes(enc.encode(got), enc.encode(d.secret))) return json(403, { reason: 'secret' });
+  if (!d.store || !d.bot) return json(503, { reason: 'not configured' });
+  let u = null; try { u = await request.json(); } catch (e) {}
+  if (!u || typeof u !== 'object') return json(400, { reason: 'body' });
+  try { await onBotUpdate(u, d); return json(200, { ok: true }); }
+  catch (e) { console.error('bot update', u.update_id, e && e.stack || e); return json(500, { reason: 'server' }); }
+}
+
+// One-time bot setup by the owner (POST /tg/setup, header X-Setup-Secret = the webhook secret):
+//   ?do=info     — the bot's webhook and commands as they are, and whether something reads it through getUpdates
+//   ?do=install  — setWebhook(<this host>/tg/webhook, secret_token) and the commands /paysupport, /terms added to the
+//                  bot's own ones; refused (409) when the bot already has another webhook
+export async function handleBotSetup(request, d) {
+  const url = new URL(request.url);
+  if (url.pathname !== '/tg/setup') return null;
+  const got = request.headers.get('X-Setup-Secret') || '';
+  if (request.method !== 'POST' || !d.secret || !sameBytes(enc.encode(got), enc.encode(d.secret))) return json(403, { reason: 'secret' });
+  if (!d.bot) return json(503, { reason: 'not configured' });
+  const target = (d.publicUrl || url.origin) + BOT_PATH;
+  const info = await d.bot('getWebhookInfo', {});
+  const cmds = await d.bot('getMyCommands', {});
+  const pub = { url: info.url || '', pending: info.pending_update_count | 0, lastError: info.last_error_message || null, allowed: info.allowed_updates || null, commands: cmds };
+  if (url.searchParams.get('do') !== 'install') {
+    // no webhook: peek (no offset — nothing is confirmed) at what waits for getUpdates; old updates = nobody reads them
+    if (!info.url) { try { const ups = await d.bot('getUpdates', { limit: 3, timeout: 0 }); pub.queued = ups.map((x) => ({ id: x.update_id, date: (x.message && x.message.date) || null })); } catch (e) { pub.queued = String(e.message); } }
+    return json(200, { target, ...pub });
+  }
+  if (info.url && info.url !== target) return json(409, { reason: 'webhook exists', ...pub });
+  await d.bot('setWebhook', { url: target, secret_token: d.secret, allowed_updates: ['message', 'pre_checkout_query'], max_connections: 20 });
+  const have = new Set(cmds.map((c) => c.command));
+  const add = BOT_TEXTS.commands.filter((c) => !have.has(c.command));
+  await d.bot('setMyCommands', { commands: [...cmds, ...add.map((c) => ({ command: c.command, description: c.description.en }))] });
+  for (const lang of ['ru', 'id']) {
+    const own = await d.bot('getMyCommands', { language_code: lang });
+    if (!own.length) continue;    // no own list for this language: the default one (above) is shown
+    const h = new Set(own.map((c) => c.command));
+    await d.bot('setMyCommands', { language_code: lang, commands: [...own, ...BOT_TEXTS.commands.filter((c) => !h.has(c.command)).map((c) => ({ command: c.command, description: c.description[lang] }))] });
+  }
+  if (!cmds.length) await d.bot('setMyCommands', { language_code: 'ru', commands: BOT_TEXTS.commands.map((c) => ({ command: c.command, description: c.description.ru })) });
+  return json(200, { installed: target, before: pub, info: await d.bot('getWebhookInfo', {}), commands: await d.bot('getMyCommands', {}) });
+}
+
 async function postMatch(request, d, user, now) {
   const { store, conf } = d;
   let s = null;
@@ -319,6 +526,7 @@ async function getProfile(d, user, now) {
               : { m: 0, w: 0, d: 0, l: 0, g: 0, ga: 0, streak: 0, best: 0, online: 0 },
     inventory: u ? u.inventory : [], equipped: null,
     day: { coins: earned, cap: conf('AI_COIN_CAP_DAY'), duo: earnedDuo, duoCap: conf('DUO_COIN_CAP_DAY') },
+    packs: STAR_PACKS,
   });
 }
 
@@ -328,14 +536,21 @@ export async function handleCoins(request, d) {
   if (!path.startsWith('/v1/')) return null;
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
   const route = request.method + ' ' + path;
-  if (route !== 'POST /v1/match' && route !== 'GET /v1/profile') return json(404, { reason: 'route' });
+  const R = {
+    'POST /v1/match': (dd, user, now) => postMatch(request, dd, user, now),
+    'GET /v1/profile': (dd, user, now) => getProfile(dd, user, now),
+    'GET /v1/stars/packs': () => json(200, { packs: STAR_PACKS }),
+    'POST /v1/stars/invoice': (dd, user, now) => postInvoice(request, dd, user, now),
+    'GET /v1/stars/order': (dd, user) => getOrder(request, dd, user),
+  }[route];
+  if (!R) return json(404, { reason: 'route' });
   if (!d.store || !d.botToken) return json(503, { reason: 'not configured' });
   const conf = d.conf || confFrom(null), dd = { ...d, conf };
   const now = d.now || Math.floor(Date.now() / 1000);
   const user = await verifyInitData(request.headers.get('X-Telegram-Init-Data'), d.botToken, now, conf('AUTH_MAX_AGE'));
   if (!user) return json(401, { reason: 'auth' });
   try {
-    return route === 'POST /v1/match' ? await postMatch(request, dd, user, now) : await getProfile(dd, user, now);
+    return await R(dd, user, now);
   } catch (e) {
     console.error('api', route, e && e.stack || e);
     return json(500, { reason: 'server' });

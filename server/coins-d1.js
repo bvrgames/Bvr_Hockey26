@@ -2,10 +2,13 @@
  * The coins store (server/coins.js, STORE) on Cloudflare D1. The SQL is plain SQLite (schema — migrations/), so the
  * same statements run on SQLite anywhere (node:sqlite / better-sqlite3 on a VPS); for Postgres — the notes in
  * docs/EVENTS.md «Перенос API». A D1 batch is one transaction: the match, the totals and the ledger row go in together;
- * a stake's lock and its settlement are one batch each (schema — migrations/0002_stakes.sql).
+ * a stake's lock and its settlement are one batch each (schema — migrations/0002_stakes.sql), so are a star payment and
+ * its refund (migrations/0003_stars.sql).
  */
 const stakeRow = (r) => ({ id: r.match_id, room: r.room, amount: r.amount, uids: [r.host_uid, r.guest_uid], len: r.len,
   status: r.status, outcome: r.outcome, created: r.created_at, deadline: r.deadline });
+const orderRow = (r) => ({ id: r.id, uid: r.user_id, pack: r.pack, stars: r.stars, price: r.price, status: r.status, charge: r.charge_id,
+  created: r.created_at, paid: r.paid_at, refunded: r.refunded_at, short: r.refund_short });
 
 export function d1Store(db) {
   const one = (sql, ...a) => db.prepare(sql).bind(...a).first();
@@ -90,6 +93,59 @@ export function d1Store(db) {
       const r = await db.prepare(`SELECT * FROM stakes WHERE status = 'locked' AND deadline <= ? AND (host_uid = ? OR guest_uid = ?)`).bind(now, uid, uid).all();
       return r.results.map(stakeRow);
     },
+    // ---- stars (coins.js «stars», schema — migrations/0003_stars.sql). Payment and refund are one batch each; every
+    // statement of it is guarded by the order's status, and the last one moves the status — a repeat changes nothing.
+    async starOrderNew(o) {
+      await db.batch([
+        db.prepare('INSERT OR IGNORE INTO users (user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?)').bind(o.uid, o.name, o.now, o.now),
+        db.prepare(`INSERT INTO star_orders (id, user_id, pack, stars, price, status, created_at) VALUES (?, ?, ?, ?, ?, 'pending', ?)`)
+          .bind(o.id, o.uid, o.pack, o.stars, o.price, o.now),
+      ]);
+    },
+    async starOrderGet(id) { const r = await one('SELECT * FROM star_orders WHERE id = ?', id); return r ? orderRow(r) : null; },
+    async starOrderFail(id, now) { await db.prepare("UPDATE star_orders SET status = 'failed', note = 'no invoice' WHERE id = ? AND status = 'pending'").bind(id).run(); },
+    async starOrdersSince(uid, t) {
+      const r = await one('SELECT COUNT(*) AS n FROM star_orders WHERE user_id = ? AND created_at >= ?', uid, t);
+      return r ? r.n : 0;
+    },
+    async starPaid(p) {
+      const pending = "EXISTS (SELECT 1 FROM star_orders WHERE id = ? AND user_id = ? AND status = 'pending')";
+      const res = await db.batch([
+        db.prepare(`UPDATE users SET stars = stars + ?, updated_at = ? WHERE user_id = ? AND ${pending}`).bind(p.stars, p.now, p.uid, p.id, p.uid),
+        db.prepare(`INSERT INTO ledger (user_id, delta, currency, reason, ref, balance_after, created_at)
+                    SELECT ?, ?, 'stars', 'stars_buy', ?, (SELECT stars FROM users WHERE user_id = ?), ? WHERE ${pending}`).bind(p.uid, p.stars, p.id, p.uid, p.now, p.id, p.uid),
+        db.prepare("UPDATE star_orders SET status = 'paid', charge_id = ?, paid_at = ? WHERE id = ? AND user_id = ? AND status = 'pending'").bind(p.charge, p.now, p.id, p.uid),
+      ]);
+      return res[2].meta.changes ? 'ok' : 'repeat';
+    },
+    async starRefund(p) {
+      const o = await one('SELECT * FROM star_orders WHERE charge_id = ?', p.charge);
+      if (!o) return { r: 'unknown' };
+      if (o.status !== 'paid') return { r: 'repeat', id: o.id };
+      const paid = "EXISTS (SELECT 1 FROM star_orders WHERE id = ? AND status = 'paid')";
+      const res = await db.batch([
+        // the ledger row first: it sees the balance before the refund (taken = what is there, at most the order's stars)
+        db.prepare(`INSERT INTO ledger (user_id, delta, currency, reason, ref, balance_after, created_at)
+                    SELECT user_id, -MIN(stars, ?), 'stars', 'stars_refund', ?, MAX(stars - ?, 0), ? FROM users WHERE user_id = ? AND ${paid}`)
+          .bind(o.stars, o.id, o.stars, p.now, o.user_id, o.id),
+        db.prepare(`UPDATE star_orders SET refund_short = ? + COALESCE((SELECT delta FROM ledger WHERE user_id = ? AND reason = 'stars_refund' AND ref = ?), 0)
+                    WHERE id = ? AND status = 'paid'`).bind(o.stars, o.user_id, o.id, o.id),
+        db.prepare(`UPDATE users SET stars = MAX(stars - ?, 0), updated_at = ? WHERE user_id = ? AND ${paid}`).bind(o.stars, p.now, o.user_id, o.id),
+        db.prepare("UPDATE star_orders SET status = 'refunded', refunded_at = ? WHERE id = ? AND status = 'paid'").bind(p.now, o.id),
+      ]);
+      if (!res[3].meta.changes) return { r: 'repeat', id: o.id };
+      const after = await one('SELECT refund_short FROM star_orders WHERE id = ?', o.id);
+      const short = after ? after.refund_short : 0;
+      return { r: 'ok', id: o.id, uid: o.user_id, taken: o.stars - short, short };
+    },
+    async starUnmatched(p) {
+      await db.batch([
+        db.prepare('INSERT OR IGNORE INTO users (user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?)').bind(p.uid, p.name || null, p.now, p.now),
+        db.prepare(`INSERT OR IGNORE INTO star_orders (id, user_id, pack, stars, price, status, charge_id, created_at, paid_at, note)
+                    VALUES (?, ?, '?', 0, ?, 'unmatched', ?, ?, ?, ?)`).bind('u_' + p.charge.slice(0, 60), p.uid, p.amount, p.charge, p.now, p.now, 'payload ' + p.payload),
+      ]);
+    },
+    async starsBalance(uid) { const r = await one('SELECT stars FROM users WHERE user_id = ?', uid); return r ? r.stars : 0; },
     async balance(uid) { const r = await one('SELECT coins FROM users WHERE user_id = ?', uid); return r ? r.coins : 0; },
     async profile(uid) {
       const u = await one('SELECT * FROM users WHERE user_id = ?', uid);

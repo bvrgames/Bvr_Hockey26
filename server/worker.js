@@ -31,7 +31,8 @@
  *
  *   HTTP: GET /diag             → the edge colo this request hit (no Durable Object involved)
  *         GET /room/<CODE>/diag → the room's diag (creates the object if it does not exist yet)
- *         /v1/match, /v1/profile → coins and player stats (server/api.js, D1 binding DB, secret BOT_TOKEN)
+ *         /v1/match, /v1/profile, /v1/stars/* → coins, player stats, star purchases (server/api.js, D1 binding DB, secret BOT_TOKEN)
+ *         /tg/webhook → the bot's updates (star payments, /paysupport, /terms; secret TG_WEBHOOK_SECRET)
  *   Internal (Worker → Durable Object, never from outside): GET <any>/result?id=<match id> → the server match's final
  *   { id, len, score, left, at } or 404 — the last RESULTS_KEEP results of the room live in the object's storage, so the
  *   stats API takes the score of a server-mode match from here, not from the client.

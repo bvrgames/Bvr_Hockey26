@@ -158,6 +158,10 @@ EV.emit('shot', { p: 3, t: 0, ... });                 // возвращает pa
 |---|---|---|---|
 | `POST` | `/v1/match` | `match:summary` | `200 { accepted: true, coins: +N, balance, verdict: 'ok'\|'capped'\|'left'\|'unverified', kind: 'match_ai'\|'match_duo', day: { coins, cap }, parts: { res, base, bonus }, stake: { n, out: 'win'\|'loss'\|'back'\|'pending', delta } \| null }` — `parts`: за что монеты (результат; голы и передачи — экран итога), `stake`: ставка на этот матч, как её видит игрок (`delta` — что вернулось при расчёте) · `401` подпись · `409` этот `id` уже принят · `422 { reason }` неправдоподобный итог · `429 { reason: 'gap'\|'day' }` слишком часто — клиент оставляет итог в очереди и пробует позже |
 | `GET` | `/v1/profile` | — | `{ user: { id, name }, coins, stars, totals: { m, w, d, l, g, ga, streak, best, online }, inventory: [...], equipped, day: { coins, cap } }` — `totals` в тех же полях, что профиль клиента (`PROF`); `g`/`ga` — голы команды игрока / пропущенные, `left` считается поражением |
+| `GET` | `/v1/stars/packs` | — | `{ packs: [{ id, stars, price }] }` — пакеты звёзд (то же приходит в `/v1/profile` полем `packs`) |
+| `POST` | `/v1/stars/invoice` | `{ pack: 's50' }` | `200 { order, link, pack, stars, price }` — заказ записан `pending`, `link` — счёт Bot API `createInvoiceLink` для `Telegram.WebApp.openInvoice` · `422` нет такого пакета · `429` больше 20 счетов в час · `502` Bot API не ответил (заказ → `failed`) |
+| `GET` | `/v1/stars/order?id=` | — | `{ id, status: 'pending'\|'paid'\|'refunded'\|'failed', stars, price, balance }` — свой заказ и баланс звёзд; чужой / нет — `404` |
+| `POST` | `/tg/webhook` | апдейт Telegram | вебхук бота, заголовок `X-Telegram-Bot-Api-Secret-Token` = секрет `TG_WEBHOOK_SECRET`, иначе `403`; раздел «Звёзды» |
 | `POST` | `/v1/purchase` | `{ item: 'jersey_retro_01', idem: '<uuid>' }` | `200 { balance, inventory }` · `402` мало монет · `409` уже куплено (фаза магазина) |
 
 **Лимиты и проверки `/v1/match`** (числа — конфиг Worker'а, не клиента):
@@ -245,6 +249,56 @@ EV.emit('shot', { p: 3, t: 0, ... });                 // возвращает pa
 Чего нет (было в старом плане, в новых правилах не нужно — отдельной задачей при желании): комиссия с выигрыша,
 лимит ставок в сутки и с одним соперником (защита от перекачки монет между своими аккаунтами).
 
+### Звёзды за Telegram Stars (сделано 02.10.2026)
+
+Звёзды игры — **только донат**: оформление льда, форма команды, отключение рекламы. Не меняются на монеты, не участвуют
+в ставках, денежной стоимости не имеют (это же — в `/terms` бота). Покупаются за Telegram Stars (валюта `XTR`, без
+платёжного провайдера).
+
+**Пакеты** — `STAR_PACKS` в начале раздела «stars» `server/coins.js`, **одна правка** меняет цены у всех: клиент берёт
+их только с сервера (`/v1/profile` → `packs`, `/v1/stars/packs`). Сейчас: 50 звёзд за 50 Stars, 120 за 100, 300 за 250
+(бонус «+20 %» на карточке клиент считает сам из `stars / price`). Заказ хранит звёзды и цену своего пакета —
+смена цен не трогает уже созданные счета (старый счёт оплачивается по старой цене).
+
+**Покупка:**
+1. Клиент (только в Telegram, где есть `openInvoice`; вне Telegram кнопки нет): «+» со звездой у звёзд в кошельке на
+   главном и в профиле → экран «Пополнить звёзды» (три карточки) → `POST /v1/stars/invoice`.
+2. Сервер пишет заказ (`star_orders`, `status 'pending'`, id — 24 hex, он же `payload` счёта; игрок — из initData) и
+   создаёт счёт `createInvoiceLink` (`currency: 'XTR'`, `provider_token: ''`, `prices: [{ amount: price }]`, название на
+   языке игрока).
+3. Клиент открывает `Telegram.WebApp.openInvoice(link)`. Ответ окна `paid` (или `pending`) — **ещё не начисление**:
+   клиент опрашивает `GET /v1/stars/order` раз в 1.2 с до 30 с, звёзды летят в кошелёк (анимация как у монет, звон)
+   только при `status: 'paid'` от сервера; не дождался — «звёзды появятся чуть позже» (профиль перечитается).
+   `cancelled` / `failed` — спокойное сообщение «ничего не списано».
+
+**Вебхук бота** `POST /tg/webhook` (`allowed_updates: message, pre_checkout_query`):
+- `pre_checkout_query` — заказ есть, `pending`, `from.id` — владелец заказа, `XTR` и сумма = цена заказа → `ok: true`;
+  иначе `ok: false` и `error_message` на языке игрока («счёт уже недействителен…»), причина — в лог. Один запрос к D1 и
+  один к Bot API — в 10 с укладывается с запасом.
+- `successful_payment` — одним D1-батчем (транзакция), каждый запрос с условием «заказ ещё `pending`»: `users.stars +=
+  stars`, строка `ledger` (`currency 'stars'`, `reason 'stars_buy'`, `ref` = заказ), заказ → `paid` с
+  `telegram_payment_charge_id`. Повтор того же платежа (Telegram повторяет апдейт, если не получил 200) ничего не
+  начисляет; ошибка записи → `500`, Telegram повторит. Платёж, который не сходится ни с одним заказом (чужой / нет
+  такого / другая сумма), **не теряется**: строка `star_orders` со `status 'unmatched'` и charge id — видна на странице
+  разработчика, звёзды не начисляются, разбор вручную.
+- `refunded_payment` (приходит и после ручного `refundStarPayment`) — по charge id, только из `paid`: строка `ledger`
+  `stars_refund` на то, что есть (`-MIN(stars, звёзды заказа)`), `users.stars = MAX(stars − звёзды заказа, 0)`, заказ →
+  `refunded`; если часть уже потрачена — баланс 0, недостача — `star_orders.refund_short`, в логе `stars refunded` с
+  `short`. Повтор ничего не списывает. Ниже нуля баланс не уходит и триггером `users_stars_nonneg`.
+- `/paysupport`, `/terms` — тексты `BOT_TEXTS` в `coins.js` (ru / en / id по языку Telegram игрока; правятся там же).
+  Остальные сообщения боту игнорируются.
+
+**Настройка бота — один раз** (`POST /tg/setup`, заголовок `X-Setup-Secret` = `TG_WEBHOOK_SECRET`): `?do=info` —
+текущий вебхук, команды, очередь `getUpdates` (без `offset` — ничего не подтверждает); `?do=install` — `setWebhook`
+на `<Worker>/tg/webhook` с `secret_token`, команды `/paysupport`, `/terms` **добавляются** к уже заданным
+(`getMyCommands` → `setMyCommands`). Если у бота уже другой вебхук — `409`, ничего не меняется.
+
+Секреты Worker'а: `BOT_TOKEN`, `TG_WEBHOOK_SECRET` (`wrangler secret put`). Схема — `migrations/0003_stars.sql`.
+Правила — `coins.js` (`STAR_PACKS`, `BOT_TEXTS`, `botApiFrom`, `checkoutCheck`, `onBotUpdate`, `handleBot`,
+`handleBotSetup`), SQL — `coins-d1.js` (`starOrderNew`, `starOrderGet`, `starPaid`, `starRefund`, `starUnmatched`…),
+склейка — `api.js` / `worker.js`. Ручной возврат: `refundStarPayment(user_id, telegram_payment_charge_id)` из Bot API
+(charge id — на странице разработчика / в `star_orders`), списание сделает `refunded_payment`.
+
 ### Экран итога: начисление
 
 По ответу `/v1/match`: строки «за что» (`parts`, ставка, пометка о дневном лимите), «Итого» набирается счётчиком,
@@ -257,7 +311,7 @@ EV.emit('shot', { p: 3, t: 0, ... });                 // возвращает pa
 Действующая схема — `server/migrations/0001_init.sql` (там же новые миграции; применить —
 `cd server && ../node_modules/.bin/wrangler d1 migrations apply DB --remote`). Отличия от наброска ниже: в `users` поля
 под профиль клиента (`goals_against`, `streak`, `best_streak`, `online` вместо `assists`/`shots`), вместо `wagers` —
-`stakes` (`0002_stakes.sql`, раздел выше). Набросок (старый, ещё со `wagers`):
+`stakes` (`0002_stakes.sql`, раздел выше), заказы звёзд — `star_orders` (`0003_stars.sql`, раздел «Звёзды»). Набросок (старый, ещё со `wagers`):
 
 ```sql
 CREATE TABLE users (
@@ -339,8 +393,8 @@ CREATE TABLE inventory (                         -- фаза магазина
 
 | файл | что | при переезде |
 |---|---|---|
-| `server/coins.js` | правила целиком: проверка initData (WebCrypto), правдоподобие итога, формула награды, дневные лимиты, частота, обработчик `/v1/*` на стандартных `Request`/`Response`; ставки (02.10): `StakeRoom`, расчёт по результату комнаты, возврат по сроку | **переносится как есть** — в нём нет ничего от Cloudflare; `smoke:api` гоняет его в чистом Node.js с хранилищем в памяти |
-| `server/coins-d1.js` | хранилище (интерфейс `STORE` в шапке `coins.js`): 12 методов (4 — ставки), SQL — обычный SQLite; «не ниже нуля» — триггер `users_coins_nonneg` (Postgres: `CHECK (coins >= 0)`) | SQLite — те же запросы через `node:sqlite` / `better-sqlite3` (`db.batch` → транзакция); Postgres — новый файл, отличия ниже |
+| `server/coins.js` | правила целиком: проверка initData (WebCrypto), правдоподобие итога, формула награды, дневные лимиты, частота, обработчик `/v1/*` на стандартных `Request`/`Response`; ставки (02.10): `StakeRoom`, расчёт по результату комнаты, возврат по сроку; звёзды (02.10): пакеты, счёт, вебхук бота `handleBot` (Bot API — обычный `fetch`) | **переносится как есть** — в нём нет ничего от Cloudflare; `smoke:api` гоняет его в чистом Node.js с хранилищем в памяти |
+| `server/coins-d1.js` | хранилище (интерфейс `STORE` в шапке `coins.js`): 12 методов (4 — ставки, 7 — звёзды), SQL — обычный SQLite; «не ниже нуля» — триггер `users_coins_nonneg` (Postgres: `CHECK (coins >= 0)`) | SQLite — те же запросы через `node:sqlite` / `better-sqlite3` (`db.batch` → транзакция); Postgres — новый файл, отличия ниже |
 | `server/api.js` | склейка Cloudflare: секрет `BOT_TOKEN`, привязка `DB`, переменные Worker'а как лимиты, итог серверного матча — из Durable Object комнаты | пишется заново (~30 строк): HTTP-сервер Node → `new Request(...)` → `handleCoins(...)` → ответ; секрет и лимиты — из переменных окружения |
 
 **Шаги переноса базы:**
@@ -349,7 +403,7 @@ CREATE TABLE inventory (                         -- фаза магазина
    `BIGSERIAL`, `user_id` — `BIGINT` (Telegram id не влезает в 32 бита), `INSERT OR IGNORE` → `ON CONFLICT DO NOTHING`,
    `MAX(a, b)` → `GREATEST(a, b)`, `?` → `$1…`, в `ledger.balance_after` подзапрос заменить на `RETURNING coins` из `UPDATE`.
 3. Данные: `wrangler d1 export bvr-hockey --remote --output=dump.sql` — для SQLite импорт прямо (`sqlite3 db < dump.sql`),
-   для Postgres — через `pgloader` или построчно (таблиц пять: `users`, `matches`, `ledger`, `inventory`, `stakes`). Перед
+   для Postgres — через `pgloader` или построчно (таблиц шесть: `users`, `matches`, `ledger`, `inventory`, `stakes`, `star_orders`). Перед
    экспортом — запись только на новом сервере или окно в пару минут без матчей; очередь итогов у клиента
    (`localStorage['bvr_pending_matches']`) переживёт простой: 503/сетевая ошибка — итог остаётся и уйдёт позже, дубль
    `409` безопасен (первичный ключ `(user_id, match_id)`).
@@ -365,6 +419,9 @@ CREATE TABLE inventory (                         -- фаза магазина
    вместе с комнатами; пока они в Durable Object, ставки пишут в D1. Переезжает API, а комнаты нет — комнате нужен тот
    же `STORE` по сети (или ставки остаются в D1 до переезда комнат). Срок ставки на VPS закрывает `stakeSweep` при
    любом запросе игрока — будильник не обязателен.
+6b. Вебхук бота: на VPS тот же `handleBot` на пути `/tg/webhook`; после переезда — `POST /tg/setup?do=info` на старом
+   адресе, затем `setWebhook` на новый (у бота один вебхук: старый перестанет получать платежи сразу). Счета, созданные
+   до переезда, оплачиваются уже на новом адресе — заказы должны переехать вместе с базой.
 7. Проверка: `smoke:api` (часть про ядро — без изменений; часть про HTTP — направить на новый адрес), затем один
    настоящий матч из Telegram и сверка строки в `matches`/`ledger`.
 

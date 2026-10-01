@@ -23,6 +23,9 @@ export function fakeTelegram({ fullscreen = true, safe = {}, content = {}, lang 
       isVersionAtLeast:function(v){ return parseFloat(v)<=8.0; },
       ready:noop, expand:noop, disableVerticalSwipes:noop, setHeaderColor:noop, setBackgroundColor:noop,
       enableClosingConfirmation:noop, requestFullscreen:noop, openTelegramLink:noop, onEvent:noop, offEvent:noop,
+      // openInvoice: the last invoice is kept in window.__tgInvoice; window.__tgInvoiceClose('paid'|'cancelled'|'failed') closes it
+      openInvoice:function(url, cb){ window.__tgInvoice={url:url, n:((window.__tgInvoice||{}).n||0)+1};
+        window.__tgInvoiceClose=function(st){ window.__tgInvoiceClose=null; if(cb) cb(st); }; },
       HapticFeedback:{impactOccurred:noop, notificationOccurred:noop, selectionChanged:noop},
       // BackButton: calls are recorded in window.__tgBack (visible, clicks); window.__tgBackClick() presses it
       BackButton:(function(){ var cbs=[]; window.__tgBack={visible:false, shows:0, hides:0};
