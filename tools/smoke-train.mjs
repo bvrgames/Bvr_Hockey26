@@ -22,7 +22,7 @@ const { page } = g;
 const offsite = [];
 page.on('request', (r) => { const u = r.url(); if (!/^http:\/\/127\.0\.0\.1:/.test(u) && !/telegram\.org\/js\//.test(u) && !/^data:/.test(u)) offsite.push(u); });
 await page.addInitScript(`(() => { const W = window.WebSocket; window.__ws = 0; window.WebSocket = function (u, p) { window.__ws++; return p ? new W(u, p) : new W(u); };
-  window.WebSocket.prototype = W.prototype; })(); try{ localStorage.setItem('bvr_lang','ru'); }catch(e){}`);
+  window.WebSocket.prototype = W.prototype; })(); try{ localStorage.setItem('bvr_lang','ru'); localStorage.setItem('bvr_onboard','1'); }catch(e){}`);
 try {
   await page.goto(`http://127.0.0.1:${port}/index.html?frozen&seed=21&nomusic`, { waitUntil: 'load', timeout: 120000 });
   await page.waitForFunction('window.__hk && __hk.trainState', null, { timeout: 30000 });

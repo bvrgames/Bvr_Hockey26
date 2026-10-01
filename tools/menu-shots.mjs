@@ -39,7 +39,8 @@ for (const o of ORIENT) {
       await page.evaluate("document.querySelectorAll('body>div[style*=\"z-index:9999\"]').forEach(function(e){e.remove();})"); };
     if (o.name === 'port') { await shot('rotate'); await g.browser.close(); continue; }
     const nav = async (keys) => { for (const k of keys) { await page.keyboard.press(k); await page.waitForTimeout(120); } };
-    await shot('main');
+    await page.evaluate("__hk.menu('main'); __hk.menu('welcome')"); await page.waitForTimeout(200); await shot('welcome');
+    await page.evaluate("__hk.menu('main')"); await page.waitForTimeout(1600); await shot('main');
     await page.evaluate("__hk.menu('mode')"); await page.waitForTimeout(200); await shot('mode');
     await page.evaluate("__hk.menu('prep')"); await page.waitForTimeout(200); await shot('prep');
     await page.evaluate("__hk.menu('main'); __hk.menu('mode'); __hk.menu('friend')"); await page.waitForTimeout(200); await shot('friend');

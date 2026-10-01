@@ -37,9 +37,10 @@ const NO_AUTOPLAY = `(() => { const P = HTMLMediaElement.prototype, orig = P.pla
 const srv = await startServer(port);
 const url = (q = '') => `http://127.0.0.1:${port}/index.html?seed=11${q}`;
 
-async function open(S, init = []) {
+async function open(S, init = [], firstRun = false) {
   const g = await openGame(browserName, { w: S.w, h: S.h, mobile: true, tg: fakeTelegram({ fullscreen: true, safe: S.safe, content: S.content, lang: 'ru' }) });
-  await g.page.addInitScript("try{ if(!sessionStorage.getItem('__kept')){ localStorage.setItem('bvr_lang','ru'); sessionStorage.setItem('__kept','1'); } }catch(e){}");
+  // the first-launch offer is tested on its own (section 0); the other sections start on the main menu
+  await g.page.addInitScript(`try{ if(!sessionStorage.getItem('__kept')){ localStorage.setItem('bvr_lang','ru'); ${firstRun ? '' : "localStorage.setItem('bvr_onboard','1');"} sessionStorage.setItem('__kept','1'); } }catch(e){}`);
   for (const s of init) await g.page.addInitScript(s);
   await g.page.goto(url(), { waitUntil: 'load', timeout: 120000 });
   await g.page.waitForFunction('window.__hk && __hk.menuState', null, { timeout: 30000 });   // (portrait: layer null — the rotate screen)
@@ -63,6 +64,32 @@ async function inMatch(page, what) {
 async function collect(g, tag) {
   for (const e of g.logs.filter(isError)) fails.push(`${tag} [${e.type}] ${e.text}`);
   for (const e of await g.page.evaluate('__hk.errors()')) fails.push(`${tag} [window] ${e}`);
+}
+
+// ---------- 0. first launch: "take the 2-minute training" once; Later → main menu; Start → lesson 1; the 3D menu background
+{
+  const g = await open(LAND, [], true); const { page } = g;
+  try {
+    let s = await MS(page);
+    ok(s.stack.join() === 'main,welcome' && s.focus === 'wgo', `first launch: offer not shown ${JSON.stringify(s)}`);
+    await keys(page, ['ArrowDown', 'Enter']);                      // Later
+    s = await MS(page); ok(s.stack.join() === 'main' && s.focus === 'quick', `first launch: Later ${JSON.stringify(s)}`);
+    // 3D background: on the high preset it starts ~1.2 s after the menu shows, and stops when a match starts
+    await page.evaluate('__hk.q(2,false)'); await page.waitForTimeout(1800);
+    ok(await page.evaluate("document.getElementById('start').classList.contains('m3d')"), 'menu: the 3D background did not start on HIGH');
+    await page.reload({ waitUntil: 'load' }); await page.waitForFunction('window.__hk && __hk.menuState', null, { timeout: 30000 });
+    s = await MS(page); ok(s.stack.join() === 'main', `first launch: the offer comes back after a reload ${JSON.stringify(s)}`);
+    await page.evaluate('__hk.start()'); await page.waitForTimeout(400);
+    ok(!(await page.evaluate("document.getElementById('start').classList.contains('m3d')")) && (await page.evaluate('__hk.cam.yaw')) === 0, 'match: the 3D background or its camera turn stays');
+    await page.evaluate("localStorage.removeItem('bvr_onboard'); sessionStorage.clear()"); await page.reload({ waitUntil: 'load' });
+    await page.waitForFunction('window.__hk && __hk.menuState', null, { timeout: 30000 });
+    await page.evaluate("localStorage.removeItem('bvr_onboard')");
+    if ((await MS(page)).stack.join() === 'main,welcome') {
+      await keys(page, ['Enter']);                                 // Start training
+      const t = await page.evaluate('__hk.trainState()'); ok(t.on && t.i === 0, `first launch: Start should open lesson 1 ${JSON.stringify({ on: t.on, i: t.i })}`);
+    } else fails.push('first launch: the offer did not come back with no saved flag');
+    await collect(g, 'first launch');
+  } catch (e) { fails.push('first launch: runner error: ' + e.message.split('\n')[0]); } finally { await g.browser.close(); }
 }
 
 // ---------- 1. keyboard only
