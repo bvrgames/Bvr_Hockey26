@@ -87,7 +87,10 @@ EV.emit('shot', { p: 3, t: 0, ... });                 // возвращает pa
 
 ---
 
-# Итог матча и бэкенд (план; сервер делается отдельной фазой)
+# Итог матча и бэкенд
+
+Сделано: `server/api.js` (`/v1/match`, `/v1/profile`), D1 `bvr-hockey` (APAC, схема — `server/migrations/`),
+тест `npm run smoke:api`. Ставки и покупки — ещё нет.
 
 Архитектура:
 - live-матч на двоих — Cloudflare Worker `bvr-hockey-relay` (как сейчас), симуляция у хоста;
@@ -146,8 +149,8 @@ EV.emit('shot', { p: 3, t: 0, ... });                 // возвращает pa
 
 | метод | путь | тело | ответ |
 |---|---|---|---|
-| `POST` | `/v1/match` | `match:summary` | `200 { accepted: true, coins: +N, balance, verdict: 'ok'\|'capped' }` · `401` подпись · `409` этот `id` уже принят · `422 { reason }` неправдоподобный итог · `429` слишком часто |
-| `GET` | `/v1/profile` | — | `{ user: { id, name }, coins, stars, totals: { matches, wins, losses, draws, goals, assists, shots }, inventory: [...], equipped }` |
+| `POST` | `/v1/match` | `match:summary` | `200 { accepted: true, coins: +N, balance, verdict: 'ok'\|'capped' }` · `401` подпись · `409` этот `id` уже принят · `422 { reason }` неправдоподобный итог · `429 { reason: 'gap'\|'day' }` слишком часто — клиент оставляет итог в очереди и пробует позже |
+| `GET` | `/v1/profile` | — | `{ user: { id, name }, coins, stars, totals: { m, w, d, l, g, ga, streak, best, online }, inventory: [...], equipped, day: { coins, cap } }` — `totals` в тех же полях, что профиль клиента (`PROF`); `g`/`ga` — голы команды игрока / пропущенные, `left` считается поражением |
 | `POST` | `/v1/purchase` | `{ item: 'jersey_retro_01', idem: '<uuid>' }` | `200 { balance, inventory }` · `402` мало монет · `409` уже куплено (фаза магазина) |
 | `POST` | `/v1/wager` | `{ match: '<id>', room: 'ABCD', stake: 50 }` — ставка перед матчем на двоих | `200 { escrow, balance }` · `402` мало монет · `409` ставки соперников не совпадают · `422` не матч на двоих |
 | `GET` | `/v1/wager/<id>` | — | `{ state: 'open'\|'locked'\|'settled'\|'refunded', stakes: {host, guest}, winner? }` |
@@ -172,9 +175,10 @@ EV.emit('shot', { p: 3, t: 0, ... });                 // возвращает pa
 
 | | значение по умолчанию (конфиг Worker'а) |
 |---|---|
-| победа / ничья / поражение | 10 / 5 / 3 монеты за матч 3 мин (`len` 60 с — ×0.4) |
+| победа / ничья / поражение | 10 / 5 / 3 монеты за матч 3 мин; множитель `max(0.4, min(len, 300) / 180)`: 1 мин ×0.4, 5 мин ×1.67 |
 | бонус | +1 за гол, +1 за передачу игрока своей команды, не больше +5 за матч |
-| потолок за матч | `AI_COIN_CAP_MATCH` = 15 |
+| потолок за матч | `AI_COIN_CAP_MATCH` = 15 × тот же множитель (6 / 15 / 25) |
+| не вернулся после обрыва (`result: 'left'`) | 0 монет, `verdict: 'left'`, в статистике — поражение |
 | **дневной лимит на игрока** | `AI_COIN_CAP_DAY` = 100 (≈ 10 матчей); сверх — матч и статистика пишутся, монет 0, `verdict: 'capped'` |
 | сутки | по UTC, считаются по `ledger` (`reason = 'match_ai'`) |
 
@@ -211,6 +215,11 @@ EV.emit('shot', { p: 3, t: 0, ... });                 // возвращает pa
    с одним и тем же соперником (против перекачки монет между своими аккаунтами).
 
 ## Схема D1
+
+Действующая схема — `server/migrations/0001_init.sql` (там же новые миграции; применить —
+`cd server && ../node_modules/.bin/wrangler d1 migrations apply DB --remote`). Отличия от наброска ниже: в `users` поля
+под профиль клиента (`goals_against`, `streak`, `best_streak`, `online` вместо `assists`/`shots`), таблицы `wagers`
+пока нет. Набросок:
 
 ```sql
 CREATE TABLE users (

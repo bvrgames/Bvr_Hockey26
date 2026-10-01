@@ -7,9 +7,10 @@ import { dirname, join } from 'node:path';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 // resolves when the Worker answers GET /diag on port p
-export async function startWrangler(p, { quiet = true } = {}) {
+// args — extra `wrangler dev` arguments (e.g. --var, --persist-to)
+export async function startWrangler(p, { quiet = true, args = [] } = {}) {
   const bin = join(ROOT, 'node_modules', '.bin', 'wrangler');
-  const child = spawn(bin, ['dev', '--port', String(p), '--ip', '127.0.0.1', '--local', '--show-interactive-dev-session=false'],
+  const child = spawn(bin, ['dev', '--port', String(p), '--ip', '127.0.0.1', '--local', '--show-interactive-dev-session=false', ...args],
     { cwd: join(ROOT, 'server'), stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, WRANGLER_SEND_METRICS: 'false' } });
   let out = '';
   child.stdout.on('data', (d) => { out += d; if (!quiet) process.stdout.write(d); });

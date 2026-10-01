@@ -31,6 +31,7 @@
  *
  *   HTTP: GET /diag             → the edge colo this request hit (no Durable Object involved)
  *         GET /room/<CODE>/diag → the room's diag (creates the object if it does not exist yet)
+ *         /v1/match, /v1/profile → coins and player stats (server/api.js, D1 binding DB, secret BOT_TOKEN)
  *
  *   Everything else from one socket is relayed verbatim to "the other" socket in the room. Host-authoritative:
  *   only 'host' is expected to send 's', only 'guest' is expected to send 'i', but the relay itself does not enforce
@@ -48,6 +49,7 @@
  */
 
 import { MatchRoom, SIM_HZ } from './room-sim.js';
+import { handleApi } from './api.js';
 
 const ROOM_CODE_RE = /^\/room\/([A-Za-z0-9_-]{2,16})(\/diag)?$/;
 const HINTS = new Set(['wnam', 'enam', 'sam', 'weur', 'eeur', 'apac', 'apac-ne', 'apac-se', 'oc', 'afr', 'me']);
@@ -227,6 +229,8 @@ export default {
       return new Response(JSON.stringify({ edgeColo: cf.colo || '?', country: cf.country || '?', st: Date.now() }),
         { headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' } });
     }
+    const api = await handleApi(request, env);
+    if (api) return api;
     const m = url.pathname.match(ROOM_CODE_RE);
     if (!m) {
       return new Response('BVR Hockey relay is up. Connect to /room/<CODE> over WebSocket.', {

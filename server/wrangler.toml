@@ -9,3 +9,9 @@ class_name = "Room"
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["Room"]
+
+# coins and player stats (server/api.js); schema — migrations/, secret BOT_TOKEN — `wrangler secret put BOT_TOKEN`
+[[d1_databases]]
+binding = "DB"
+database_name = "bvr-hockey"
+database_id = "742ae4e9-ec51-4be1-bb03-00c33f01c7fe"
