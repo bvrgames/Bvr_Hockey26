@@ -286,8 +286,17 @@ EV.emit('shot', { p: 3, t: 0, ... });                 // возвращает pa
   `stars_refund` на то, что есть (`-MIN(stars, звёзды заказа)`), `users.stars = MAX(stars − звёзды заказа, 0)`, заказ →
   `refunded`; если часть уже потрачена — баланс 0, недостача — `star_orders.refund_short`, в логе `stars refunded` с
   `short`. Повтор ничего не списывает. Ниже нуля баланс не уходит и триггером `users_stars_nonneg`.
-- `/paysupport`, `/terms` — тексты `BOT_TEXTS` в `coins.js` (ru / en / id по языку Telegram игрока; правятся там же).
-  Остальные сообщения боту игнорируются.
+- `/paysupport`, `/terms` — тексты `BOT_TEXTS` в `coins.js` (ru / en / id по языку Telegram игрока, иначе en;
+  правятся там же).
+- `/start` — приветствие (1–2 строки об игре) и инлайн-кнопка «Играть» / «Play» / «Main» типа `web_app` на игру
+  (`GAME.url` в `coins.js` — `https://bvr-hockey26.vercel.app/`, адрес, который открывает Telegram). `/start <param>`
+  (диплинк `t.me/bvr_games_bot?start=<param>`, `[A-Za-z0-9_-]{1,64}`) — кнопка-ссылка на прямую ссылку мини-приложения
+  `t.me/bvr_games_bot/hockeytg?startapp=<param>`: кнопка `web_app` не умеет передавать `start_param`, а прямая ссылка
+  доставляет его в игру ровно как приглашение в комнату (`dbg_`, `host_`, код комнаты — `TEST.startParam`).
+- Любое другое сообщение (и незнакомая команда) в личке — подсказка «я бот игры, нажми Играть; вопросы по оплате —
+  /paysupport» с той же кнопкой. В группах бот молчит.
+- Установка (`/tg/setup?do=install`) добавляет `/start` первой к командам бота (свои не удаляются) и ставит кнопку меню
+  «Играть» на игру, только если сейчас кнопка игру не открывает.
 
 **Настройка бота — один раз** (`POST /tg/setup`, заголовок `X-Setup-Secret` = `TG_WEBHOOK_SECRET`): `?do=info` —
 текущий вебхук, команды, очередь `getUpdates` (без `offset` — ничего не подтверждает); `?do=install` — `setWebhook`

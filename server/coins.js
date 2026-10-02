@@ -307,6 +307,9 @@ export const STAR_PACKS = [
   { id: 's300', stars: 300, price: 250 },
 ];
 export const BOT_PATH = '/tg/webhook';     // Telegram posts updates here (setWebhook with secret_token)
+// the game as Telegram opens it: the Mini App's address (web_app buttons) and its direct link (t.me/<bot>/<app>, where
+// ?startapp=<param> reaches the game as start_param — the way room invites work, index.html TEST.startParam)
+export const GAME = { url: 'https://bvr-hockey26.vercel.app/', link: 'https://t.me/bvr_games_bot/hockeytg' };
 
 // The Bot API over plain fetch (the same in Workers and Node.js): (method, params) → result, or throws.
 // base — https://api.telegram.org, or a fake one in tests.
@@ -333,7 +336,19 @@ export const BOT_TEXTS = {
     en: 'Purchase terms — BVR Hockey 26\n\n• In-game stars are bought for Telegram Stars and credited once the payment is confirmed.\n• Stars are only for cosmetics (ice, kits) and turning off ads. They never turn into coins, are never staked and have no cash value.\n• Refunds — via /paysupport. A refund takes the bought stars back; if they are already spent, the balance never goes below zero.\n• The game stores your Telegram id, name and match stats.',
     id: 'Ketentuan pembelian — BVR Hockey 26\n\n• Bintang game dibeli dengan Telegram Stars dan masuk setelah pembayaran dikonfirmasi.\n• Bintang hanya untuk tampilan (es, seragam) dan mematikan iklan. Bintang tidak bisa ditukar ke koin, tidak dipakai untuk taruhan dan tidak bernilai uang.\n• Pengembalian dana — lewat /paysupport. Saat dikembalikan, bintang yang dibeli ditarik; jika sudah terpakai, saldo tidak turun di bawah nol.\n• Game menyimpan id Telegram, nama, dan statistik laga kamu.',
   },
+  start: {
+    ru: 'BVR Hockey 26 — аркадный хоккей 5 на 5 прямо в Telegram: матчи с ИИ и с друзьями, тренировка, монеты за победы.\nЖми «Играть»!',
+    en: 'BVR Hockey 26 — arcade 5-on-5 hockey right in Telegram: matches against the AI and with friends, training, coins for wins.\nTap «Play»!',
+    id: 'BVR Hockey 26 — hoki arcade 5 lawan 5 langsung di Telegram: laga melawan AI dan bersama teman, latihan, koin untuk kemenangan.\nTekan «Main»!',
+  },
+  play: { ru: 'Играть', en: 'Play', id: 'Main' },
+  other: {
+    ru: 'Я бот игры BVR Hockey 26 — нажми «Играть», чтобы открыть игру. Вопросы по оплате — /paysupport.',
+    en: 'I am the BVR Hockey 26 game bot — tap «Play» to open the game. Payment questions — /paysupport.',
+    id: 'Aku bot game BVR Hockey 26 — tekan «Main» untuk membuka game. Pertanyaan pembayaran — /paysupport.',
+  },
   commands: [
+    { command: 'start', description: { ru: 'Открыть игру', en: 'Open the game', id: 'Buka game' } },
     { command: 'paysupport', description: { ru: 'Поддержка по платежам', en: 'Payment support', id: 'Dukungan pembayaran' } },
     { command: 'terms', description: { ru: 'Условия покупки', en: 'Purchase terms', id: 'Ketentuan pembelian' } },
   ],
@@ -398,10 +413,26 @@ export function checkoutCheck(o, q) {
   if (q.currency !== 'XTR' || q.total_amount !== o.price) return 'amount';
   return null;
 }
-async function botCommand(d, msg) {
-  const cmd = (/^\/(paysupport|terms)(@\w+)?(\s|$)/.exec(msg.text || '') || [])[1];
-  if (!cmd || !msg.chat) return;
-  await d.bot('sendMessage', { chat_id: msg.chat.id, text: BOT_TEXTS[cmd][L3(msg.from && msg.from.language_code)] });
+// «Играть» under the greeting: the game itself (web_app); /start <param> (a deep link t.me/<bot>?start=<param>) opens
+// the game through its direct link with ?startapp=<param> — a web_app button cannot carry start_param, the direct link
+// delivers it exactly like a room invite does
+export function playButton(param, lang) {
+  const text = BOT_TEXTS.play[L3(lang)];
+  return param ? { text, url: GAME.link + '?startapp=' + encodeURIComponent(param) } : { text, web_app: { url: GAME.url } };
+}
+// a message to the bot in a private chat: /start, /paysupport, /terms, anything else — a hint (nobody reads the chat)
+async function botMessage(d, msg) {
+  if (!msg.chat || msg.chat.type !== 'private') return 'skip';
+  const lang = L3(msg.from && msg.from.language_code), text = msg.text || '';
+  const m = /^\/(start|paysupport|terms)(?:@\w+)?(?:\s+(\S+))?\s*$/.exec(text);
+  if (m && m[1] === 'start') {
+    const param = /^[A-Za-z0-9_-]{1,64}$/.test(m[2] || '') ? m[2] : null;
+    await d.bot('sendMessage', { chat_id: msg.chat.id, text: BOT_TEXTS.start[lang], reply_markup: { inline_keyboard: [[playButton(param, lang)]] } });
+    return 'start';
+  }
+  if (m) { await d.bot('sendMessage', { chat_id: msg.chat.id, text: BOT_TEXTS[m[1]][lang] }); return m[1]; }
+  await d.bot('sendMessage', { chat_id: msg.chat.id, text: BOT_TEXTS.other[lang], reply_markup: { inline_keyboard: [[playButton(null, lang)]] } });
+  return 'other';
 }
 export async function onBotUpdate(u, d) {
   const now = d.now || Math.floor(Date.now() / 1000);
@@ -436,8 +467,7 @@ export async function onBotUpdate(u, d) {
     (r.short ? console.warn : console.log)('stars refunded', JSON.stringify({ charge, from: from.id, ...r }));
     return { kind: 'refund', ...r };
   }
-  if (m.text && m.text[0] === '/') { await botCommand(d, m); return { kind: 'command' }; }
-  return { kind: 'skip' };
+  return { kind: await botMessage(d, m) };
 }
 // POST /tg/webhook — returns a Response, or null when the path is not the bot's. 403 without the right secret header;
 // 500 lets Telegram retry (a payment that failed to be written is written on the retry, once).
@@ -471,7 +501,8 @@ async function botSetup(url, d) {
   const target = (d.publicUrl || url.origin) + BOT_PATH;
   const info = await d.bot('getWebhookInfo', {});
   const cmds = await d.bot('getMyCommands', {});
-  const pub = { url: info.url || '', pending: info.pending_update_count | 0, lastError: info.last_error_message || null, allowed: info.allowed_updates || null, commands: cmds };
+  const pub = { url: info.url || '', pending: info.pending_update_count | 0, lastError: info.last_error_message || null, allowed: info.allowed_updates || null, commands: cmds,
+                menuButton: await d.bot('getChatMenuButton', {}) };
   if (url.searchParams.get('do') !== 'install') {
     // no webhook: peek (no offset — nothing is confirmed) at what waits for getUpdates; old updates = nobody reads them
     if (!info.url) { try { const ups = await d.bot('getUpdates', { limit: 3, timeout: 0 }); pub.queued = ups.map((x) => ({ id: x.update_id, date: (x.message && x.message.date) || null })); } catch (e) { pub.queued = String(e.message); } }
@@ -479,17 +510,24 @@ async function botSetup(url, d) {
   }
   if (info.url && info.url !== target) return json(409, { reason: 'webhook exists', ...pub });
   await d.bot('setWebhook', { url: target, secret_token: d.secret, allowed_updates: ['message', 'pre_checkout_query'], max_connections: 20 });
-  const have = new Set(cmds.map((c) => c.command));
-  const add = BOT_TEXTS.commands.filter((c) => !have.has(c.command));
-  await d.bot('setMyCommands', { commands: [...cmds, ...add.map((c) => ({ command: c.command, description: c.description.en }))] });
+  // our commands are added to the bot's own ones (never removed): /start first, the rest after the existing
+  const merged = (own, lang) => {
+    const h = new Set(own.map((c) => c.command)), mk = (c) => ({ command: c.command, description: c.description[lang] });
+    const miss = BOT_TEXTS.commands.filter((c) => !h.has(c.command));
+    return [...miss.filter((c) => c.command === 'start').map(mk), ...own, ...miss.filter((c) => c.command !== 'start').map(mk)];
+  };
+  await d.bot('setMyCommands', { commands: merged(cmds, 'en') });
   for (const lang of ['ru', 'id']) {
     const own = await d.bot('getMyCommands', { language_code: lang });
-    if (!own.length) continue;    // no own list for this language: the default one (above) is shown
-    const h = new Set(own.map((c) => c.command));
-    await d.bot('setMyCommands', { language_code: lang, commands: [...own, ...BOT_TEXTS.commands.filter((c) => !h.has(c.command)).map((c) => ({ command: c.command, description: c.description[lang] }))] });
+    if (!own.length && (cmds.length || lang !== 'ru')) continue;    // no own list for this language: the default one is shown
+    await d.bot('setMyCommands', { language_code: lang, commands: merged(own, lang) });
   }
-  if (!cmds.length) await d.bot('setMyCommands', { language_code: 'ru', commands: BOT_TEXTS.commands.map((c) => ({ command: c.command, description: c.description.ru })) });
-  return json(200, { installed: target, before: pub, info: await d.bot('getWebhookInfo', {}), commands: await d.bot('getMyCommands', {}) });
+  // the menu button: kept if it already opens the game, else «Играть» → the game
+  const mb = await d.bot('getChatMenuButton', {});
+  const mbOk = mb && mb.type === 'web_app' && mb.web_app && typeof mb.web_app.url === 'string' && mb.web_app.url.startsWith(new URL(GAME.url).origin);
+  if (!mbOk) await d.bot('setChatMenuButton', { menu_button: { type: 'web_app', text: BOT_TEXTS.play.ru, web_app: { url: GAME.url } } });
+  return json(200, { installed: target, before: pub, info: await d.bot('getWebhookInfo', {}), commands: await d.bot('getMyCommands', {}),
+                     menuButton: mbOk ? { kept: mb } : { set: GAME.url, was: mb } });
 }
 
 // ---------- the developer's page: read only, ADMIN_IDS only (docs/EVENTS.md «Страница разработчика»)

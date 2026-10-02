@@ -103,7 +103,8 @@
   пакетов → `POST /v1/stars/invoice` (заказ `pending` в D1 `star_orders`, счёт `createInvoiceLink` XTR) →
   `openInvoice`; звёзды начисляет только вебхук бота `POST /tg/webhook` (секрет `TG_WEBHOOK_SECRET`):
   `pre_checkout_query` — проверка заказа, `successful_payment` — один раз, `refunded_payment` — списание не ниже нуля
-  (`refund_short`), `/paysupport`, `/terms` (тексты `BOT_TEXTS`). Подключение вебхука — `POST /tg/setup` (docs/EVENTS.md
+  (`refund_short`), `/paysupport`, `/terms` (тексты `BOT_TEXTS`); `/start` — приветствие и кнопка «Играть» (web_app на
+  игру, с параметром — прямая ссылка `?startapp=`), другие сообщения — подсказка. Подключение вебхука — `POST /tg/setup` (docs/EVENTS.md
   «Звёзды»). Скриншоты — `node tools/stars-shots.mjs`.
   **Перевыпустили токен бота** (02.10 так пропал пункт «Разработчик»: подпись initData не сходилась, все запросы 401/403)
   — новый `BOT_TOKEN` в секрет Worker'а и `POST /tg/setup?do=install` (Telegram снимает вебхук при перевыпуске);

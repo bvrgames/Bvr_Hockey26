@@ -257,8 +257,20 @@ function summary(o = {}) {
   await hook({ update_id: 4, message: { message_id: 2, from: B1, chat: { id: B1.id }, date: now, refunded_payment: { currency: 'XTR', total_amount: 100, invoice_payload: ord, telegram_payment_charge_id: 'ch_node_1' } } });
   ok(U.get(B1.id).stars === 0 && Or.get(ord).status === 'refunded' && Or.get(ord).short === 90, `stars: refund with 30 left → 0, short 90 (${U.get(B1.id).stars}, ${JSON.stringify(Or.get(ord))})`);
   calls.length = 0;
-  await hook({ update_id: 5, message: { message_id: 3, from: B1, chat: { id: B1.id }, date: now, text: '/terms' } });
+  await hook({ update_id: 5, message: { message_id: 3, from: B1, chat: { id: B1.id, type: 'private' }, date: now, text: '/terms' } });
   ok(calls.some((c) => c.method === 'sendMessage' && /Telegram id/.test(c.params.text)), '/terms answers with the terms (Telegram id, name, stats)');
+  // the menu button: one that already opens the game is kept; the commands keep the bot's own ones
+  {
+    const { handleBotSetup } = await import('../server/coins.js');
+    const mc = [];
+    const mbBot = async (method, params) => { mc.push({ method, params });
+      return method === 'getChatMenuButton' ? { type: 'web_app', text: 'Hockey', web_app: { url: 'https://bvr-hockey26.vercel.app/?x=1' } }
+        : method === 'getMyCommands' ? (params.language_code ? [] : [{ command: 'help', description: 'Help' }]) : method === 'getWebhookInfo' ? { url: '' } : true; };
+    const r = await handleBotSetup(new Request('https://w.example/tg/setup?do=install', { method: 'POST', headers: { 'X-Setup-Secret': SECRET } }), { secret: SECRET, bot: mbBot });
+    const smc = mc.find((c) => c.method === 'setMyCommands');
+    ok(r.status === 200 && !mc.some((c) => c.method === 'setChatMenuButton') && smc && smc.params.commands.map((c) => c.command).join() === 'start,help,paysupport,terms',
+      `setup: a game menu button is kept, own commands kept ${JSON.stringify([r.status, smc && smc.params])}`);
+  }
 
   // ---- the developer's page: only ADMIN_IDS by the verified Telegram id
   const adeps = { ...sdeps, adminIds: '42, 9101', adminUi: 'function BVRDev(K){ return {}; }' };
@@ -290,7 +302,7 @@ const botSrv = createServer((rq, rs) => { let b = ''; rq.on('data', (c) => { b +
   const method = rq.url.split('/').pop(); let params = {}; try { params = JSON.parse(b || '{}'); } catch (e) {}
   botCalls.push({ method, params, token: rq.url.split('/')[1] });
   const result = method === 'createInvoiceLink' ? 'https://t.me/$smoke_' + params.payload : method === 'getMyCommands' ? [] : method === 'getUpdates' ? [] :
-    method === 'getWebhookInfo' ? { url: '', pending_update_count: 0 } : true;
+    method === 'getWebhookInfo' ? { url: '', pending_update_count: 0 } : method === 'getChatMenuButton' ? { type: 'commands' } : true;
   rs.writeHead(200, { 'content-type': 'application/json' }); rs.end(JSON.stringify({ ok: true, result }));
 }); });
 await new Promise((res) => botSrv.listen(BOT_PORT, '127.0.0.1', res));
@@ -434,14 +446,40 @@ try {
     await hookRaw({ update_id: 5, message: { message_id: 9, from: S1, chat: { id: S1.id, type: 'private' }, date: 1, text: '/paysupport' } });
     await hookRaw({ update_id: 6, message: { message_id: 10, from: { ...S1, language_code: 'ru' }, chat: { id: S1.id, type: 'private' }, date: 1, text: '/terms@bvr_games_bot' } });
     const sm = botCalls.filter((c) => c.method === 'sendMessage');
+    // /start on three languages: a greeting and «Играть» → the game (web_app); /start <param> → the direct link with
+    // ?startapp=<param> (the way an invite reaches the game); anything else → a hint with the button; a group → silence
+    const say = async (from, text, chat = { id: from.id, type: 'private' }) => {
+      botCalls.length = 0;
+      await hookRaw({ update_id: 7, message: { message_id: 11, from, chat, date: 1, text } });
+      return botCalls.filter((c) => c.method === 'sendMessage');
+    };
+    const btn = (m) => m && m.params.reply_markup && m.params.reply_markup.inline_keyboard[0][0];
+    for (const [lang, word, play] of [['ru', 'хоккей', 'Играть'], ['en', 'hockey', 'Play'], ['id', 'hoki', 'Main'], ['de', 'hockey', 'Play']]) {
+      const [m] = await say({ ...S1, language_code: lang }, '/start');
+      const b = btn(m);
+      ok(m && new RegExp(word, 'i').test(m.params.text) && b && b.text === play && b.web_app && b.web_app.url === 'https://bvr-hockey26.vercel.app/' && !b.url,
+        `/start (${lang}) → greeting + «${play}» web_app → the game ${JSON.stringify(m && m.params)}`);
+    }
+    let [ms] = await say(S1, '/start dbg_ABC12');
+    ok(btn(ms) && btn(ms).url === 'https://t.me/bvr_games_bot/hockeytg?startapp=dbg_ABC12' && !btn(ms).web_app, `/start with a parameter → the direct link with startapp ${JSON.stringify(btn(ms))}`);
+    [ms] = await say(S1, '/start bad<param>');
+    ok(btn(ms) && btn(ms).web_app && !btn(ms).url, '/start with a malformed parameter → just the game');
+    [ms] = await say({ ...S1, language_code: 'ru' }, 'привет, а где игра?');
+    ok(ms && /бот игры/.test(ms.params.text) && /\/paysupport/.test(ms.params.text) && btn(ms) && btn(ms).web_app, `a plain message → the hint ${JSON.stringify(ms && ms.params)}`);
+    [ms] = await say({ ...S1, language_code: 'id' }, 'halo');
+    ok(ms && /bot game/i.test(ms.params.text), 'a plain message in Indonesian');
+    ok((await say(S1, '/start', { id: -100123, type: 'group' })).length === 0, 'a group chat: no answer');
     ok(sm.length === 2 && /support/i.test(sm[0].params.text) && /Telegram id/.test(sm[1].params.text) && /монет/.test(sm[1].params.text), `/paysupport and /terms answer ${JSON.stringify(sm.map((x) => x.params.text.slice(0, 40)))}`);
     // the one-time setup: without the secret 403; with it — setWebhook with the secret and the commands
     ok((await fetch(API + '/tg/setup?do=install', { method: 'POST' })).status === 403, 'setup without the secret → 403');
     botCalls.length = 0;
     r = await fetch(API + '/tg/setup?do=install', { method: 'POST', headers: { 'X-Setup-Secret': HOOK_SECRET } });
-    const sw = botCalls.find((c) => c.method === 'setWebhook'), sc = botCalls.find((c) => c.method === 'setMyCommands');
+    const sw = botCalls.find((c) => c.method === 'setWebhook'), sc = botCalls.find((c) => c.method === 'setMyCommands' && !c.params.language_code);
+    const smb = botCalls.find((c) => c.method === 'setChatMenuButton');
+    ok(smb && smb.params.menu_button.type === 'web_app' && smb.params.menu_button.web_app.url === 'https://bvr-hockey26.vercel.app/' && smb.params.menu_button.text === 'Играть',
+      `setup: no game menu button → «Играть» set ${JSON.stringify(smb && smb.params)}`);
     ok(r.status === 200 && sw && sw.params.url === API + '/tg/webhook' && sw.params.secret_token === HOOK_SECRET && sw.params.allowed_updates.includes('pre_checkout_query') &&
-       sc && sc.params.commands.map((c) => c.command).join() === 'paysupport,terms', `setup: setWebhook + setMyCommands ${JSON.stringify([r.status, sw && sw.params, sc && sc.params])}`);
+       sc && sc.params.commands.map((c) => c.command).join() === 'start,paysupport,terms', `setup: setWebhook + setMyCommands ${JSON.stringify([r.status, sw && sw.params, sc && sc.params])}`);
   }
 
 
