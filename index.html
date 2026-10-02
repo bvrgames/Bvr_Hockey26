@@ -66,6 +66,8 @@
   }
 
   #pad{position:absolute;inset:0;z-index:5;pointer-events:none}
+  /* вспышка по краям экрана (силовой по вам, гол): под кнопками и табло, цвет — --fxc */
+  #fxedge{position:absolute;inset:0;z-index:4;pointer-events:none;opacity:0;box-shadow:inset 0 0 14vmin 3vmin var(--fxc,rgba(255,50,50,.65))}
   .btn{position:absolute;pointer-events:auto;border-radius:50%;display:flex;flex-direction:column;
     align-items:center;justify-content:center;border:1.5px solid rgba(255,255,255,.30);
     background:rgba(14,18,28,.42);backdrop-filter:blur(6px);transition:transform .07s, background .07s}
@@ -2463,7 +2465,8 @@ function simCfg(){
    браузере вместе с отрисовкой). Пока он > 0, кадр так же берёт два числа впустую, и цифры матча не меняются.
    Убрать — отдельной задачей с новой базой balance. */
 var FX={trauma:0, t:0, ph:0, s:0x2545f491, old:0,
-        zoom:0, streak:0, trail:[], parts:[]};   /* толчок камеры, шлейф шайбы (с), частицы — см. ниже */
+        zoom:0, streak:0, trail:[], parts:[],    /* толчок камеры, шлейф шайбы (с), частицы — см. ниже */
+        edge:0, edgeMax:0, pulse:false};         /* вспышка по краям: осталось / длительность (с), пульсирует ли */
 var FX_TIER={s:0.40, m:0.70, l:0.85};    /* травма за малый / средний / большой удар */
 var FX_AMP=0.035, FX_DECAY=2.2;          /* сдвиг проекции при травме 1; потеря травмы в секунду */
 function fxRand(){
@@ -2482,6 +2485,7 @@ function fxUpdate(dt){
   if(FX.old>0) FX.old=Math.max(0, FX.old-dt*30);
   if(FX.zoom>0){ FX.zoom*=Math.exp(-dt*14); if(FX.zoom<1e-4) FX.zoom=0; }   /* ~0.15 с назад */
   if(FX.streak>0){ FX.streak=Math.max(0, FX.streak-dt); if(!FX.streak) FX.trail.length=0; }
+  if(FX.edge>0) FX.edge=Math.max(0, FX.edge-dt);
   for(var i=FX.parts.length-1;i>=0;i--){
     var q=FX.parts[i];
     q.x+=q.vx*dt; q.y+=q.vy*dt; q.z+=q.vz*dt; q.vy-=9*dt; q.life-=dt;
@@ -2490,7 +2494,24 @@ function fxUpdate(dt){
   }
   FX.t+=dt;
 }
-function fxReset(){ FX.trauma=0; FX.old=0; FX.zoom=0; FX.streak=0; FX.trail.length=0; FX.parts.length=0; }
+function fxReset(){ FX.trauma=0; FX.old=0; FX.zoom=0; FX.streak=0; FX.trail.length=0; FX.parts.length=0; FX.edge=0; }
+/* вспышка по краям экрана: цвет, длительность, пульс (гол). «Меньше тряски» — без вспышек */
+var fxEdgeEl=null, _fxEdgeOp=0;
+function fxEdge(col, dur, pulse){
+  if(SHAKE_LESS) return;
+  if(!fxEdgeEl){ fxEdgeEl=document.createElement('div'); fxEdgeEl.id='fxedge'; cv.parentNode.insertBefore(fxEdgeEl, cv.nextSibling); }
+  fxEdgeEl.style.setProperty('--fxc', col); FX.edge=FX.edgeMax=dur; FX.pulse=!!pulse;
+}
+/* раз в кадр: прозрачность вспышки (DOM трогаем, только когда она меняется) */
+function fxDom(){
+  var op=0;
+  if(FX.edge>0 && state!=='menu' && state!=='over'){
+    var k=FX.edge/FX.edgeMax;
+    op=FX.pulse ? k*(0.6+0.4*Math.cos((FX.edgeMax-FX.edge)*10.5)) : k;
+  }
+  op=Math.round(op*40)/40;
+  if(op!==_fxEdgeOp && fxEdgeEl){ _fxEdgeOp=op; fxEdgeEl.style.opacity=op; }
+}
 
 /* Частицы ударов: ice — ледяная крошка, spark — искры. На 2D-накладке, как снежная пыль, и так же зависят от
    качества: на «низком» (spray 0) их нет — там только тряска, толчок и вспышки; на «среднем» — половина. */
@@ -5584,6 +5605,7 @@ function frameStepInner(dt){
   if(!MENU.covers()) pfRender();   /* меню и экран поворота непрозрачны — площадку под ними не рисуем */
 
   if(msgT>0){ msgT-=dt; if(msgT<=0) msgBox.style.opacity=0; }
+  fxDom();
 
   if(chargeT>0){ powEl.style.opacity=1; powI.style.width=(chargeT/0.85*100)+'%'; }
   else powEl.style.opacity=0;
@@ -6953,6 +6975,8 @@ EV.on('hit',     function(e){
   SFX.hit();
   if(e.hard){ buzz(45,'hard'); fxKick('l',11,16); }
   else { fxKick('m',8,14); if(e.vt===HUMAN) buzz(45,'hard'); }
+  fxBurst(e.x, e.z, e.hard?14:8, 'ice');
+  if(players[e.v] && players[e.v]===controlled) fxEdge('rgba(255,50,50,.65)', 0.12);
   if(!e.clean) flash(T('penalty'),T('penaltySub'),1.6);
   else if(e.hard) flash(T('hit'),'',0.8);
 });
@@ -7683,7 +7707,7 @@ window.__hk={hs:function(){return HS;},net:function(){return NET;},setCam:functi
     return __hk.fxState();
   },
   fxState:function(){ return {trauma:+FX.trauma.toFixed(3), zoom:+FX.zoom.toFixed(4), streak:+FX.streak.toFixed(3),
-    parts:FX.parts.length, less:SHAKE_LESS}; },
+    parts:FX.parts.length, edge:+FX.edge.toFixed(3), pulse:FX.pulse, less:SHAKE_LESS}; },
   benchGpu:function(n,skip){ n=n||60; var bx=players.map(function(p){ return p.boxed; });
     if(skip) players.forEach(function(p){ p.boxed=true; });
     RDT=1/60; render(); gl.readPixels(0,0,1,1,gl.RGBA,gl.UNSIGNED_BYTE,_px1);
