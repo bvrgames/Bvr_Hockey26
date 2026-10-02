@@ -127,6 +127,10 @@ for (const S of SETUPS) {
       }, PAD_KEYS);
       for (const b of bad) fails.push(`${S.name} ${lang}: label does not fit: ${b}`);
     }
+    // vibration in Telegram: a game event goes to HapticFeedback; off in Settings — nothing
+    const hp = await page.evaluate(`(function(){ var v=__hk.vibro(); window.__hap=[]; __hk.ev.emit('post',{}); var on=window.__hap.slice();
+      window.__hap=[]; __hk.vibro(false); __hk.ev.emit('post',{}); var off=window.__hap.slice(); __hk.vibro(v.on); return {v:v, on:on, off:off}; })()`);
+    if (!hp.v.haptic || hp.on.join() !== 'heavy' || hp.off.length) fails.push(`${S.name}: Telegram haptics on the post ${JSON.stringify(hp)}`);
     for (const e of g.logs.filter(isError)) fails.push(`${S.name} [${e.type}] ${e.text}`);
     for (const e of await page.evaluate('__hk.errors()')) fails.push(`${S.name} [window] ${e}`);
   } catch (e) {

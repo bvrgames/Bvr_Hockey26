@@ -68,6 +68,10 @@ for (const name of browsers) {
     if (end.shots + end.passes === 0) fails.push('no shot or pass in the whole run — AI is stuck?');
     // ice (phase C): marks are painted on the GPU, the ice wears as the match goes on, and WebGL stays error-free
     if (!(end.ice && end.ice.strokes > 0)) fails.push('no skate marks painted on the ice');
+    // vibration outside Telegram: navigator.vibrate (Android browsers), nothing when off in Settings
+    const vb = await page.evaluate(`(function(){ var rec=[]; navigator.vibrate=function(p){ rec.push(p); return true; };
+      var v=__hk.vibro(); __hk.ev.emit('post',{}); __hk.vibro(false); __hk.ev.emit('post',{}); __hk.vibro(v.on); return {v:v, rec:rec}; })()`);
+    if (vb.v.haptic || vb.rec.length !== 1) fails.push(`vibration outside Telegram: ${JSON.stringify(vb)}`);
     if (!(end.ice && end.ice.wear > 0 && end.ice.wear <= 1)) fails.push(`ice wear out of range: ${end.ice && end.ice.wear}`);
     if (end.glErr) fails.push(`WebGL error 0x${end.glErr.toString(16)}`);
     // secondary animation (phase D): springs move when the quality level has them, and stay moderate

@@ -1636,13 +1636,21 @@ if(!TEST.ai) prefGet('difficulty', function(v, src){
   /* локальное значение приходит сразу, до построения меню; облачное — позже, тогда перерисовываем */
   if(src==='cloud') paintOpts();
 });
-var HAPTIC = !!(TG && TG.HapticFeedback && TG.HapticFeedback.impactOccurred);
+/* Отдача. В Telegram (Bot API 6.1+) — HapticFeedback: на iPhone другого пути нет (navigator.vibrate там не работает).
+   Вне Telegram — navigator.vibrate. Раньше HAPTIC значил «объект HapticFeedback есть», а telegram-web-app.js создаёт
+   его и в обычном браузере, и в старом клиенте (версия < 6.1), где вызовы уходят в никуда, — до navigator.vibrate
+   дело не доходило. В Telegram на Android добавляем navigator.vibrate: «light» там — 7 мс на малой амплитуде,
+   на многих телефонах не ощущается (вибромотор один — два вызова подряд не дают двойной отдачи). */
+var HAPTIC=false, ANDROID=/Android/i.test(navigator.userAgent);
+try{ HAPTIC=!!(inTelegram() && TG.HapticFeedback && TG.HapticFeedback.impactOccurred && TG.isVersionAtLeast && TG.isVersionAtLeast('6.1'));
+     if(TG && /^android/.test(TG.platform||'')) ANDROID=true; }catch(e){}
 var VIBRO=true;
 try{ var _sv=localStorage.getItem('bvr_vibro'); if(_sv==='0') VIBRO=false; }catch(e){}
 /* вибро и громкость — настройки игрока (CloudStorage, копия в localStorage: bvr_vibro, bvr_music, bvr_sfx) */
 prefGet('vibro', function(v){ if(v==='0'||v==='1'){ VIBRO=(v==='1'); if(typeof MENU!=='undefined' && MENU.ready) MENU.repaint(); } });
 prefGet('music', function(v){ var x=parseFloat(v); if(x>=0 && x<=1){ VOL.mus=x; if(typeof MUSIC!=='undefined'){ MUSIC.apply(); if(MENU.ready) MENU.repaint(); } } });
 prefGet('sfx', function(v){ var x=parseFloat(v); if(x>=0 && x<=1){ VOL.sfx=x; applySfx(); if(typeof MENU!=='undefined' && MENU.ready) MENU.repaint(); } });
+/* kind: goal — гол, hard — силовой / штанга, shot — бросок, soft — мелочи (смена игрока, тычок) */
 function buzz(ms, kind){
   if(!VIBRO) return;
   if(HAPTIC){
@@ -1651,10 +1659,9 @@ function buzz(ms, kind){
       else if(kind==='hard') TG.HapticFeedback.impactOccurred('heavy');
       else if(kind==='soft') TG.HapticFeedback.impactOccurred('light');
       else                   TG.HapticFeedback.impactOccurred('medium');
-      return;
     }catch(e){ HAPTIC=false; }
   }
-  if(navigator.vibrate){ try{ navigator.vibrate(ms); }catch(e){} }
+  if((!HAPTIC || ANDROID) && navigator.vibrate){ try{ navigator.vibrate(ms); }catch(e){} }
 }
 
 /* ---------- площадка: X = длина, Z = ширина ---------- */
@@ -5168,7 +5175,7 @@ function launchPred(kind, arg, me){
   } else {
     var sa=shotAim(me), dx2=sa.tx-from[0], dz2=sa.tz-from[1], L2=Math.hypot(dx2,dz2)||1, sp=17+arg*17;
     vx=dx2/L2*sp; vz=dz2/L2*sp;
-    playAction(me, arg>0.55?'slap_shot':'wrist_shot', arg>0.55?0.9:0.65); SFX.shot(arg); buzz(18,'soft');
+    playAction(me, arg>0.55?'slap_shot':'wrist_shot', arg>0.55?0.9:0.65); SFX.shot(arg); buzz(22,'shot');
   }
   PUCKP={on:true, mode:'fly', t0:now, x:from[0], y:0.05, z:from[1], vx:vx, vy:vy, vz:vz, w:0};
   GACT.pred={kind:kind, t:now};
@@ -6826,7 +6833,7 @@ paintLang();
    ПОДПИСЧИКИ СОБЫТИЙ: звук, вибро, камера, надписи
    (раньше эти вызовы сидели прямо в симуляции; поведение то же)
    ============================================================ */
-EV.on('shot',    function(e){ if(predictedOwn(e,'shot')) return; SFX.shot(e.power); buzz(18,'soft');
+EV.on('shot',    function(e){ if(predictedOwn(e,'shot')) return; SFX.shot(e.power); buzz(22,'shot');
                               var p=players[e.p]; if(e.remote && p) playAction(p, e.power>0.55?'slap_shot':'wrist_shot', e.power>0.55?0.9:0.65); });
 EV.on('pass',    function(e){ if(predictedOwn(e,'pass')) return; SFX.stick(); var p=players[e.p]; if(e.remote && p) playAction(p,'pass_forehand',0.45); });
 EV.on('pickup',  function(e){ if(e.remote && GACT.pickT && performance.now()-GACT.pickT<2000 && HS[HUMAN].ctrl && players.indexOf(HS[HUMAN].ctrl)===e.p){ GACT.pickT=0; return; } SFX.stick(); });
@@ -7551,6 +7558,8 @@ window.__hk={hs:function(){return HS;},net:function(){return NET;},setCam:functi
   perf:function(on){ if(on!==undefined) PERF.on=!!on; return PERF.out; },
   /* цена кадра на GPU: n раз render + readPixels(1 px), мс на кадр (skip — не рисовать игроков) */
   rskip:function(o){ for(var k in o) RSKIP[k]=!!o[k]; return RSKIP; },
+  /* отдача: vibro(true|false) — как переключатель в Настройках (без сохранения); путь: haptic (Telegram) / vibrate */
+  vibro:function(v){ if(v!==undefined) VIBRO=!!v; return {on:VIBRO, haptic:HAPTIC, android:ANDROID}; },
   benchGpu:function(n,skip){ n=n||60; var bx=players.map(function(p){ return p.boxed; });
     if(skip) players.forEach(function(p){ p.boxed=true; });
     RDT=1/60; render(); gl.readPixels(0,0,1,1,gl.RGBA,gl.UNSIGNED_BYTE,_px1);

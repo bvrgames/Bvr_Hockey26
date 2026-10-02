@@ -26,7 +26,9 @@ export function fakeTelegram({ fullscreen = true, safe = {}, content = {}, lang 
       // openInvoice: the last invoice is kept in window.__tgInvoice; window.__tgInvoiceClose('paid'|'cancelled'|'failed') closes it
       openInvoice:function(url, cb){ window.__tgInvoice={url:url, n:((window.__tgInvoice||{}).n||0)+1};
         window.__tgInvoiceClose=function(st){ window.__tgInvoiceClose=null; if(cb) cb(st); }; },
-      HapticFeedback:{impactOccurred:noop, notificationOccurred:noop, selectionChanged:noop},
+      // HapticFeedback: calls are recorded in window.__hap ('light', 'heavy', 'n:success', 'sel')
+      HapticFeedback:(function(){ var rec=function(x){ (window.__hap=window.__hap||[]).push(x); };
+        return { impactOccurred:function(s){ rec(s); }, notificationOccurred:function(s){ rec('n:'+s); }, selectionChanged:function(){ rec('sel'); } }; })(),
       // BackButton: calls are recorded in window.__tgBack (visible, clicks); window.__tgBackClick() presses it
       BackButton:(function(){ var cbs=[]; window.__tgBack={visible:false, shows:0, hides:0};
         window.__tgBackClick=function(){ cbs.slice().forEach(function(f){ f(); }); };

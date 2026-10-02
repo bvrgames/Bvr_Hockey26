@@ -72,7 +72,9 @@
   macOS `afconvert`), плашка «BvR — трек»; кнопки/подсказки «включить звук» нет (с 02.10) — музыка стартует с первого
   касания любого места; громкость 0 в Настройках = выключена (сохраняется). Звук матча на iPhone не глушится переключателем
   «Без звука»: `navigator.audioSession.type='playback'` (iOS 16.4+), на старых — тихая петля `<audio>`; свернули игру —
-  звук на паузе (`visibilitychange`, Telegram `deactivated`). Шрифт Fira Sans Extra Condensed
+  звук на паузе (`visibilitychange`, Telegram `deactivated`).
+  Вибрация (02.10): в Telegram 6.1+ — HapticFeedback (бросок medium, силовой/штанга heavy, гол success), вне Telegram и
+  дополнительно на Android — `navigator.vibrate`; выключена в Настройках — ничего. `__hk.vibro()` показывает путь. Шрифт Fira Sans Extra Condensed
   (`assets/src/fonts`). На главном ещё Профиль (статистика матчей, локально + CloudStorage) и Магазин (витрина
   «скоро» — покупки ждут сервер монет Worker + D1). Этап 4 (Правила: схемы, устройство игрока) — готов.
   Этап 5 — тренировка: 10 уроков и свободная тренировка (раздел 5 плана), медали в CloudStorage, `smoke:train`.
