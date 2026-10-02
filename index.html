@@ -24,6 +24,9 @@
     box-shadow:0 3px 14px rgba(0,0,0,.55);font-variant-numeric:tabular-nums}
   #hud>div{display:flex;align-items:center;gap:7px;padding:0 10px;font-size:12px;font-weight:700;letter-spacing:.04em}
   #hud .sc{background:rgba(255,255,255,.08);font-size:14px}
+  /* гол: цифра счёта прыгает — сжатие и возврат с перелётом */
+  #hud .sc.pop{animation:scpop .45s cubic-bezier(.34,1.56,.64,1)}
+  @keyframes scpop{0%{transform:scale(1.75);color:#ffd166}60%{color:#ffd166}100%{transform:scale(1)}}
   #hud .clk{color:#ffd166}
   .sw{width:8px;height:15px;border-radius:2px}
 
@@ -2537,6 +2540,14 @@ function fxShot(p, power){
 function fxPost(){
   fxBurst(puck.x, puck.z, 10, 'spark'); fxBurst(puck.x, puck.z, 6, 'ice');
   if(QC().spray>0) FX.ring={x:puck.x, y:Math.max(0.3,puck.y), z:puck.z, t:0};
+}
+/* гол: t — забившая команда */
+function fxGoal(t){
+  fxKick('l');
+  fxEdge(t===HUMAN ? 'rgba(255,176,20,.9)' : 'rgba(255,40,40,.8)', 1.2, true);   /* насыщенно: на светлом льду бледное не видно */
+  fxBurst(puck.x, puck.z, 24, 'ice');
+  var el=document.getElementById(t===0?'s1':'s2');
+  if(el){ el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); }
 }
 function fxBusy(){ return FX.parts.length>0 || FX.streak>0 || !!FX.ring; }
 /* на накладке: частицы и шлейф шайбы (последние положения шайбы на экране, тает за 0.2 с) */
@@ -7000,7 +7011,7 @@ EV.on('hit',     function(e){
 });
 EV.on('post',    function(){ SFX.post(); buzz(30,'hard'); fxKick('m',7,12); fxPost(); });
 EV.on('save',    function(e){ SFX.save(); if(e.kind==='line') flash(T('save'),'',0.7); });
-EV.on('goal',    function(e){ SFX.whistle(); SFX.horn(); buzz([60,50,120],'goal');
+EV.on('goal',    function(e){ SFX.whistle(); SFX.horn(); buzz([60,50,120],'goal'); fxGoal(e.t);
                               flash(T('goal'), e.t===HUMAN?T('ourGoal'):T('theirGoal'), 1.4); });
 EV.on('stoppage',function(e){ SFX.whistle(); buzz(25); flash(T(e.reason),'',1.3); });
 EV.on('match:start', function(){ SFX.whistle(); fxReset(); });
