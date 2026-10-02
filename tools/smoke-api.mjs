@@ -469,6 +469,12 @@ try {
     [ms] = await say({ ...S1, language_code: 'id' }, 'halo');
     ok(ms && /bot game/i.test(ms.params.text), 'a plain message in Indonesian');
     ok((await say(S1, '/start', { id: -100123, type: 'group' })).length === 0, 'a group chat: no answer');
+    // /paysupport sends to a person; /terms says what stars and coins are and what the game stores
+    for (const lang of ['ru', 'en', 'id']) {
+      const [ps] = await say({ ...S1, language_code: lang }, '/paysupport'), [tm] = await say({ ...S1, language_code: lang }, '/terms');
+      ok(ps && /@Bikmetov_vr/.test(ps.params.text) && /3/.test(ps.params.text), `/paysupport (${lang}) → @Bikmetov_vr ${ps && ps.params.text}`);
+      ok(tm && /Telegram id|id Telegram/.test(tm.params.text) && /username/.test(tm.params.text) && /\/paysupport/.test(tm.params.text) && /(монет|coins|koin)/i.test(tm.params.text), `/terms (${lang}) ${tm && tm.params.text.slice(0, 80)}`);
+    }
     ok(sm.length === 2 && /support/i.test(sm[0].params.text) && /Telegram id/.test(sm[1].params.text) && /монет/.test(sm[1].params.text), `/paysupport and /terms answer ${JSON.stringify(sm.map((x) => x.params.text.slice(0, 40)))}`);
     // ---- coins for stars (the shop): one way, one transaction, idempotent by idem, never below zero, outside the caps
     {

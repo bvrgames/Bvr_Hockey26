@@ -330,15 +330,25 @@ export function botApiFrom(token, base = 'https://api.telegram.org') {
 const L3 = (lang) => (lang === 'ru' || lang === 'id' ? lang : 'en');
 const ruPlural = (n, one, few, many) => { const a = n % 10, b = n % 100; return a === 1 && b !== 11 ? one : a >= 2 && a <= 4 && (b < 10 || b >= 20) ? few : many; };
 export const BOT_TEXTS = {
+  // nobody reads the bot's chat: support goes to a person
   paysupport: {
-    ru: 'Поддержка по платежам BVR Hockey 26.\nЕсли звёзды не пришли после оплаты или нужен возврат — напишите сюда, что случилось, и время покупки. Ответим в течение 3 дней.',
-    en: 'BVR Hockey 26 payment support.\nIf your stars did not arrive after paying or you need a refund, write here what happened and when you bought. We answer within 3 days.',
-    id: 'Dukungan pembayaran BVR Hockey 26.\nJika bintang tidak masuk setelah membayar atau kamu perlu pengembalian dana, tulis di sini apa yang terjadi dan kapan kamu membeli. Kami menjawab dalam 3 hari.',
+    ru: 'Поддержка по платежам BVR Hockey 26.\nНапишите @Bikmetov_vr: что случилось, когда покупали и сколько звёзд. Ответим в течение 3 дней.',
+    en: 'BVR Hockey 26 payment support.\nWrite to @Bikmetov_vr: what happened, when you bought and how many stars. We answer within 3 days.',
+    id: 'Dukungan pembayaran BVR Hockey 26.\nTulis ke @Bikmetov_vr: apa yang terjadi, kapan kamu membeli dan berapa bintang. Kami menjawab dalam 3 hari.',
   },
   terms: {
-    ru: 'Условия покупки — BVR Hockey 26\n\n• Звёзды игры покупаются за Telegram Stars и зачисляются после подтверждения оплаты.\n• Звёзды — для оформления (лёд, форма), отключения рекламы и обмена на монеты в Магазине (обратно монеты на звёзды не меняются). Звёзды не участвуют в ставках и не имеют денежной стоимости; монеты нельзя вывести или обменять на деньги.\n• Возврат — через /paysupport. При возврате купленные звёзды списываются; если они уже потрачены, баланс не уходит ниже нуля.\n• Игра хранит ваш Telegram id, имя и статистику матчей.',
-    en: 'Purchase terms — BVR Hockey 26\n\n• In-game stars are bought for Telegram Stars and credited once the payment is confirmed.\n• Stars are for cosmetics (ice, kits), turning off ads and coins in the Shop (coins never turn back into stars). Stars are never staked and have no cash value; coins cannot be withdrawn or exchanged for money.\n• Refunds — via /paysupport. A refund takes the bought stars back; if they are already spent, the balance never goes below zero.\n• The game stores your Telegram id, name and match stats.',
-    id: 'Ketentuan pembelian — BVR Hockey 26\n\n• Bintang game dibeli dengan Telegram Stars dan masuk setelah pembayaran dikonfirmasi.\n• Bintang untuk tampilan (es, seragam), mematikan iklan dan ditukar ke koin di Toko (koin tidak bisa ditukar kembali ke bintang). Bintang tidak dipakai untuk taruhan dan tidak bernilai uang; koin tidak bisa ditarik atau ditukar ke uang.\n• Pengembalian dana — lewat /paysupport. Saat dikembalikan, bintang yang dibeli ditarik; jika sudah terpakai, saldo tidak turun di bawah nol.\n• Game menyimpan id Telegram, nama, dan statistik laga kamu.',
+    ru: 'Условия — BVR Hockey 26\n\n• Звёзды покупаются за Telegram Stars. Они нужны для оформления (лёд, форма), отключения рекламы и обмена на монеты.\n' +
+        '• Монеты — только внутриигровая валюта: их нельзя вывести или обменять на деньги (и на звёзды).\n' +
+        '• Возврат — через /paysupport. При возврате звёзды списываются, но баланс не уходит ниже нуля.\n' +
+        '• Игра хранит ваш Telegram id, имя, username, язык, платформу и статистику матчей.',
+    en: 'Terms — BVR Hockey 26\n\n• Stars are bought for Telegram Stars. They are for looks (ice, kits), turning off ads and exchanging for coins.\n' +
+        '• Coins are an in-game currency only: they cannot be withdrawn or exchanged for money (or for stars).\n' +
+        '• Refunds — via /paysupport. A refund takes the stars back, but the balance never goes below zero.\n' +
+        '• The game stores your Telegram id, name, username, language, platform and match stats.',
+    id: 'Ketentuan — BVR Hockey 26\n\n• Bintang dibeli dengan Telegram Stars. Bintang dipakai untuk tampilan (es, seragam), mematikan iklan dan ditukar ke koin.\n' +
+        '• Koin hanya mata uang dalam game: tidak bisa ditarik atau ditukar ke uang (maupun ke bintang).\n' +
+        '• Pengembalian dana — lewat /paysupport. Saat dikembalikan, bintang ditarik, tetapi saldo tidak turun di bawah nol.\n' +
+        '• Game menyimpan id Telegram, nama, username, bahasa, platform, dan statistik laga kamu.',
   },
   start: {
     ru: 'BVR Hockey 26 — аркадный хоккей 5 на 5 прямо в Telegram: матчи с ИИ и с друзьями, тренировка, монеты за победы.\nЖми «Играть»!',
