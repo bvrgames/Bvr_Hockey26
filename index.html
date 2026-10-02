@@ -1484,7 +1484,6 @@ function randTip(){ var a=T('tips'); return (a && a.length) ? a[Math.floor(Math.
 function setText(id,txt){ var e=document.getElementById(id); if(e) e.textContent=txt; }
 
 /* ---------- утилиты ---------- */
-function rnd(a,b){return a+Math.random()*(b-a);}
 function clamp(v,a,b){return v<a?a:(v>b?b:v);}
 function lerp(a,b,t){return a+(b-a)*t;}
 function hex(h){return [parseInt(h.substr(1,2),16),parseInt(h.substr(3,2),16),parseInt(h.substr(5,2),16)];}
@@ -1690,7 +1689,7 @@ function rinkOutline(step){
 }
 
 /* ---------- камера ---------- */
-var cam={x:0,y:15.2,z:-12.4,pitch:0.80,yaw:0,shake:0, targetYaw:0, targetDist:0, focusX:0, focusZ:0};
+var cam={x:0,y:15.2,z:-12.4,pitch:0.80,yaw:0, targetYaw:0, targetDist:0, focusX:0, focusZ:0};
 var CAMLOCK=false;
 var camYawT=0;
 var F;
@@ -2446,10 +2445,51 @@ function simCfg(){
   c.lv[HUMAN]='normal'; c.lv[o]=NET.on?'normal':DIFF;
 }
 
+/* ---------- ощущение удара (фаза F): только картинка, симуляцию не трогает ----------
+   Тряска камеры — «травма» 0..1: удары её добавляют, она затухает; сдвиг = травма² (лёгкий удар почти не виден,
+   сильный бьёт). Колебание — сумма синусов, а не случайный сдвиг каждый кадр (тот дрожал).
+   Новые эффекты не берут Math.random: в одиночной игре им пользуется симуляция (?seed его подменяет), и каждый вызов
+   сдвигает случайные решения матча. У эффектов свой генератор.
+   old — счётчик прежней тряски (те же +11/+8/+7 и −30 в секунду). Прежняя тряска брала два Math.random на кадр, пока
+   он больше нуля, — эти вызовы входят в последовательность случайных чисел матча (npm run balance гоняет матч в
+   браузере вместе с отрисовкой). Пока он > 0, кадр так же берёт два числа впустую, и цифры матча не меняются.
+   Убрать — отдельной задачей с новой базой balance. */
+var FX={trauma:0, t:0, ph:0, s:0x2545f491, old:0};
+var FX_TIER={s:0.40, m:0.70, l:0.85};    /* травма за малый / средний / большой удар */
+var FX_AMP=0.035, FX_DECAY=2.2;          /* сдвиг проекции при травме 1; потеря травмы в секунду */
+function fxRand(){
+  var a=FX.s=(FX.s+0x6d2b79f5)|0; a=Math.imul(a^(a>>>15),1|a); a^=a+Math.imul(a^(a>>>7),61|a);
+  return ((a^(a>>>14))>>>0)/4294967296;
+}
+function fxRnd(a,b){ return a+fxRand()*(b-a); }
+/* удар: tier — 's' | 'm' | 'l'; новая фаза колебания — только если камера стояла (иначе рывок посреди тряски) */
+function fxKick(tier, oldAdd, oldCap){
+  if(FX.trauma<=0) FX.ph=fxRnd(0,100);
+  FX.trauma=Math.min(1, FX.trauma+FX_TIER[tier]);
+  if(oldAdd) FX.old=Math.min(oldCap, FX.old+oldAdd);
+}
+function fxUpdate(dt){
+  if(FX.trauma>0) FX.trauma=Math.max(0, FX.trauma-FX_DECAY*dt);
+  if(FX.old>0) FX.old=Math.max(0, FX.old-dt*30);
+  FX.t+=dt;
+}
+/* сдвиг проекции [sx, sy] на этот кадр */
+var _fxs=[0,0];
+function fxShake(){
+  if(FX.trauma<=0){ _fxs[0]=_fxs[1]=0; return _fxs; }
+  var k=FX.trauma*FX.trauma*FX_AMP, u=FX.t*30+FX.ph;
+  _fxs[0]=k*(Math.sin(u*1.7)*0.7+Math.sin(u*3.1)*0.3);
+  _fxs[1]=k*(Math.sin(u*2.3+1.3)*0.7+Math.sin(u*3.7)*0.3);
+  return _fxs;
+}
+
+/* брызги льда пока на Math.random: их вызовы — часть последовательности случайных чисел матча (npm run balance
+   гоняет матч в браузере вместе с брызгами), перевод на fxRand меняет цифры матча — отдельной задачей */
+function mrnd(a,b){ return a+Math.random()*(b-a); }
 var spray=[];
 function addSpray(p){
-  spray.push({x:p.x,y:0.05,z:p.z,vx:-p.vx*0.13+rnd(-.5,.5),vy:rnd(0.5,1.6),vz:-p.vz*0.13+rnd(-.5,.5),
-    life:rnd(0.22,0.5),max:0.5});
+  spray.push({x:p.x,y:0.05,z:p.z,vx:-p.vx*0.13+mrnd(-.5,.5),vy:mrnd(0.5,1.6),vz:-p.vz*0.13+mrnd(-.5,.5),
+    life:mrnd(0.22,0.5),max:0.5});
 }
 
 function sim(dt){
@@ -2577,7 +2617,7 @@ function camUpdate(dt){
     cam.z = lerp(cam.z, targetZ, Math.min(1, dt * 5.0));
   }
 
-  if(cam.shake > 0) cam.shake = Math.max(0, cam.shake - dt * 30);
+  fxUpdate(dt);
 }
 
 /* разметка: halfWidthAt — из shared/sim.js */
@@ -3923,7 +3963,8 @@ function render(){
   if(HD.ok && !QC().lod && !PHI.started) playersHiLoad(0);    /* высокое качество — полные модели */
   F=H*camPreset().fk;
   var sx=0, sy=0;
-  if(cam.shake>0){ sx=rnd(-1,1)*cam.shake*0.0022; sy=rnd(-1,1)*cam.shake*0.0022; }
+  if(FX.old>0){ Math.random(); Math.random(); }   /* см. FX.old */
+  var shk=fxShake(); sx=shk[0]; sy=shk[1];
   buildView(MV); buildProj(MP,sx,sy);
 
   /* Позы считаем один раз за кадр: их же используют проход теней и отражение.
@@ -5337,7 +5378,7 @@ function updateFxOnly(dt){
     var p=players[i];
     if(!p.goalie && !p.boxed && Math.random()<0.10) addSpray(p);
   }
-  if(cam.shake>0) cam.shake=Math.max(0,cam.shake-dt*30);
+  fxUpdate(dt);
   if(clock>0) clock-=dt;
 }
 
@@ -6664,7 +6705,7 @@ function menu3dTick(dt){
   if(!MENU3D.on){ MENU3D.wait+=dt; if(MENU3D.wait<1.2) return; MENU3D.on=true; RSKIP.players=true; st.classList.add('m3d'); document.body.classList.add('m3d'); }
   MENU3D.a+=dt*0.05;
   var a=MENU3D.a, R=27;
-  cam.x=-Math.sin(a)*R; cam.z=-Math.cos(a)*R; cam.y=13.5; cam.pitch=0.42; cam.yaw=a; cam.shake=0;
+  cam.x=-Math.sin(a)*R; cam.z=-Math.cos(a)*R; cam.y=13.5; cam.pitch=0.42; cam.yaw=a; FX.trauma=0; FX.old=0;
   cam.focusX=0; cam.focusZ=0; updYaw();
 }
 function menu3dStop(){
@@ -6843,12 +6884,12 @@ EV.on('poke',    function(e){ SFX.stick(); if(e.btn && e.t===HUMAN) buzz(14,'sof
 EV.on('hit',     function(e){
   if(e.remote && e.hard && players[e.p]) playAction(players[e.p],'body_check',0.7);
   SFX.hit();
-  if(e.hard){ buzz(45,'hard'); cam.shake=Math.min(16,cam.shake+11); }
-  else { cam.shake=Math.min(14,cam.shake+8); if(e.vt===HUMAN) buzz(45,'hard'); }
+  if(e.hard){ buzz(45,'hard'); fxKick('l',11,16); }
+  else { fxKick('m',8,14); if(e.vt===HUMAN) buzz(45,'hard'); }
   if(!e.clean) flash(T('penalty'),T('penaltySub'),1.6);
   else if(e.hard) flash(T('hit'),'',0.8);
 });
-EV.on('post',    function(){ SFX.post(); buzz(30,'hard'); cam.shake=Math.min(12,cam.shake+7); });
+EV.on('post',    function(){ SFX.post(); buzz(30,'hard'); fxKick('m',7,12); });
 EV.on('save',    function(e){ SFX.save(); if(e.kind==='line') flash(T('save'),'',0.7); });
 EV.on('goal',    function(e){ SFX.whistle(); SFX.horn(); buzz([60,50,120],'goal');
                               flash(T('goal'), e.t===HUMAN?T('ourGoal'):T('theirGoal'), 1.4); });
@@ -7561,6 +7602,8 @@ window.__hk={hs:function(){return HS;},net:function(){return NET;},setCam:functi
   rskip:function(o){ for(var k in o) RSKIP[k]=!!o[k]; return RSKIP; },
   /* отдача: vibro(true|false) — как переключатель в Настройках (без сохранения); путь: haptic (Telegram) / vibrate */
   vibro:function(v){ if(v!==undefined) VIBRO=!!v; return {on:VIBRO, haptic:HAPTIC, android:ANDROID}; },
+  /* ощущение удара: fx() — травма тряски; fx('m') — удар уровня s|m|l (как от события) */
+  fx:function(t){ if(t) fxKick(t); return {trauma:+FX.trauma.toFixed(3), sx:+fxShake()[0].toFixed(4)}; },
   benchGpu:function(n,skip){ n=n||60; var bx=players.map(function(p){ return p.boxed; });
     if(skip) players.forEach(function(p){ p.boxed=true; });
     RDT=1/60; render(); gl.readPixels(0,0,1,1,gl.RGBA,gl.UNSIGNED_BYTE,_px1);
