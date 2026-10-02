@@ -431,14 +431,18 @@
   .mlang.on{box-shadow:0 0 0 2px var(--mgold)}
 
   /* подготовка матча */
-  .mprep{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:16px;align-items:center;height:100%}
+  .mprep{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto;gap:10px 16px;align-items:center;height:100%}
+  .mprep .mgo{grid-column:1/3;justify-self:center;width:100%;max-width:560px;height:48px;font-size:22px}
   .mteams{display:flex;align-items:center;justify-content:center;gap:4px}
   .mtc{position:relative;width:min(140px,19vw);padding:7px 6px 9px;text-align:center;border-radius:14px}
   .mtc .lbl{font:700 9px/1 system-ui;letter-spacing:.16em;color:var(--mmute);text-transform:uppercase}
   .mtc .nm{font:italic 800 16px/1 var(--msport);text-transform:uppercase;margin-top:3px;white-space:nowrap}
-  .mtc .sws{display:flex;justify-content:center;gap:5px;margin-top:6px}
-  .mtc .sws i{width:11px;height:11px;border-radius:50%;box-shadow:0 0 0 1px rgba(255,255,255,.35);opacity:.45}
+  .mtc .sws{display:flex;justify-content:center;gap:9px;margin-top:6px}
+  .mtc .sws i{position:relative;width:15px;height:15px;border-radius:50%;box-shadow:0 0 0 1px rgba(255,255,255,.35);opacity:.55;cursor:pointer}
+  .mtc .sws i::before{content:'';position:absolute;inset:-6px}
   .mtc .sws i.on{opacity:1;box-shadow:0 0 0 2px #fff}
+  .mtc .sws i.off{opacity:.18;cursor:default}
+  .mtc.ro .sws i{cursor:default}
   .mtc .nav{position:absolute;top:36%;left:-2px;right:-2px;display:flex;justify-content:space-between;font:800 24px/1 system-ui;color:var(--mgold);pointer-events:none}
   .mtc .nav span{pointer-events:auto;padding:6px 4px}
   .mtc.on{box-shadow:0 0 0 2px var(--mgold),0 10px 30px rgba(0,0,0,.35)}
@@ -447,7 +451,7 @@
   .mvs{font:italic 800 26px/1 var(--msport);color:var(--mgold);text-shadow:0 0 18px rgba(255,209,102,.5);padding:0 2px}
   .mopts{display:flex;flex-direction:column;gap:4px}
   /* низкий экран (Android 360 px): строки настроек плотнее, иначе список уходит под заголовок */
-  @media (max-height:380px){ .mopts{gap:2px} .mopts .mrow{min-height:30px;padding-top:3px;padding-bottom:3px} }
+  @media (max-height:380px){ .mopts{gap:2px} .mopts .mrow{min-height:30px;padding-top:3px;padding-bottom:3px} .mprep .mgo{height:42px} }
   .mwait{display:flex;align-items:center;gap:8px;font:700 12px/1.25 system-ui;color:var(--mcyan)}
   .mdot{width:9px;height:9px;border-radius:50%;background:var(--mcyan);flex:none;animation:mpulse 1.4s infinite}
   .mdot.ok{background:#5ad07f;animation:none}
@@ -1236,8 +1240,8 @@ ru:{
   qLow:'низкое', qMid:'среднее', qHigh:'высокое',
   rotate:'Поверни телефон горизонтально', noPauseOnline:'в онлайне паузы нет',
   min5:'5 мин', tapSnd:'🔊 коснись для звука', soon:'скоро',
-  mQuick:'Быстрый матч', mMode:'Режим игры', mTrain:'Тренировка', mSettings:'Настройки',
-  mModeD:'Против компьютера или с другом', mTrainD:'Уроки и правила хоккея',
+  mQuick:'Быстрый матч', mTrain:'Тренировка', mSettings:'Настройки',
+  mTrainD:'Уроки и правила хоккея',
   mSettingsD:'Язык, графика, звук, вибрация',
   mVsAI:'Против компьютера', mVsAID:'Ты и твоя команда против ИИ · 3 уровня сложности',
   mFriend:'С другом', mFriendD:'Приглашение в чат Telegram · матч считает сервер',
@@ -1327,8 +1331,8 @@ en:{
   qLow:'low', qMid:'medium', qHigh:'high',
   rotate:'Turn your phone sideways', noPauseOnline:'no pause in online matches',
   min5:'5 min', tapSnd:'🔊 tap for sound', soon:'soon',
-  mQuick:'Quick match', mMode:'Game mode', mTrain:'Training', mSettings:'Settings',
-  mModeD:'Against the computer or a friend', mTrainD:'Lessons and hockey rules',
+  mQuick:'Quick match', mTrain:'Training', mSettings:'Settings',
+  mTrainD:'Lessons and hockey rules',
   mSettingsD:'Language, graphics, sound, vibration',
   mVsAI:'Vs computer', mVsAID:'You and your team against the AI · 3 difficulty levels',
   mFriend:'With a friend', mFriendD:'Invite in a Telegram chat · the server runs the match',
@@ -1420,8 +1424,8 @@ id:{
   qLow:'rendah', qMid:'sedang', qHigh:'tinggi',
   rotate:'Putar HP ke posisi mendatar', noPauseOnline:'tidak ada jeda di mode online',
   min5:'5 mnt', tapSnd:'🔊 ketuk untuk suara', soon:'segera',
-  mQuick:'Main cepat', mMode:'Mode permainan', mTrain:'Latihan', mSettings:'Pengaturan',
-  mModeD:'Lawan komputer atau teman', mTrainD:'Pelajaran dan aturan hoki',
+  mQuick:'Main cepat', mTrain:'Latihan', mSettings:'Pengaturan',
+  mTrainD:'Pelajaran dan aturan hoki',
   mSettingsD:'Bahasa, grafis, suara, getar',
   mVsAI:'Lawan komputer', mVsAID:'Kamu dan timmu melawan AI · 3 tingkat kesulitan',
   mFriend:'Dengan teman', mFriendD:'Undang di chat Telegram · server menjalankan laga',
@@ -2386,7 +2390,7 @@ function backToMenu(){
   st.style.display='block';
   /* из урока — к списку уроков; из сетевого матча — к подготовке в той же комнате (реванш); иначе в главное меню */
   var wasTrain=TRAIN.on; trainStop();
-  MENU.setStack(wasTrain ? ['main','train'] : (ONLINE && NET.on ? ['main','mode','friend','prep'] : ['main']));
+  MENU.setStack(wasTrain ? ['main','train'] : (ONLINE && NET.on ? ['main','friend','prep'] : ['main']));
   netStatus(NET.status||T('notConnected'));
   paintTacBadge();
 }
@@ -5609,8 +5613,9 @@ function mJersey(c, num){
     '<path d="M28 74 H72 V80 H28 Z" fill="'+c.p+'"/><text x="50" y="58" text-anchor="middle" font-family="BVR Sport,Arial Narrow,sans-serif" font-style="italic" font-weight="800" font-size="26" fill="'+sh+'">'+num+'</text></svg>';
 }
 var CPU_KIT={j:'#3a4a60', p:'#26303f', h:'#8fd8ff'};
-function mTeamCard(side, club, label, num, ro){
-  var sw=''; for(var i=0;i<CLUBS.length;i++) sw+='<i style="background:'+CLUBS[i].j+'"'+(i===club?' class="on"':'')+'></i>';
+function mTeamCard(side, club, label, num, ro, other){
+  /* образцы формы: касание — выбрать; форма соперника занята (одинаковой формы у команд не бывает) */
+  var sw=''; for(var i=0;i<CLUBS.length;i++) sw+='<i style="background:'+CLUBS[i].j+'"'+(i===club?' class="on"':(i===other?' class="off"':''))+' data-club="'+i+'"></i>';
   return '<div class="mtc mglass'+(ro?' ro':' mf')+'" data-adj="'+side+'"><div class="lbl">'+mEsc(label)+'</div>'+mJersey(CLUBS[club], num)+
     '<div class="nm">'+mEsc(clubName(CLUBS[club]))+'</div><div class="sws">'+sw+'</div><div class="nav"><span data-dir="-1">‹</span><span data-dir="1">›</span></div></div>';
 }
@@ -5623,7 +5628,7 @@ var MSCR={
     var lg=''; [['ru','RU'],['en','EN'],['id','ID']].forEach(function(o){ lg+='<span class="chip'+(LANG===o[0]?' on':'')+'" data-lang="'+o[0]+'">'+o[1]+'</span>'; });
     var qd=clubName(CLUBS[LAST.my])+' — '+clubName(CLUBS[LAST.op])+' · '+T(diffKey()).toLowerCase()+' · '+T('min'+LAST.min);
     return mHead('', '<div class="mlang mf mlast" data-adj="lang" data-ord="2">'+lg+'</div>', true)+
-      '<div class="mleft"><div class="mlist">'+mItem('quick',T('mQuick'),qd)+mItem('mode',T('mMode'),T('mModeD'))+
+      '<div class="mleft"><div class="mlist">'+mItem('quick',T('mQuick'),qd)+mItem('vsai',T('mVsAI'),T('mVsAID'))+mItem('friend',T('mFriend'),T('mFriendD'))+
       mItem('train',T('mTrain'),T('mTrainD')+' · '+T('tMedalsP')+' '+tMedals()+' / 30')+
       mItem('shop',T('mShop'),T('mShopD'))+mItem('settings',T('mSettings'),T('mSettingsD'))+
       (EXT && EXT.ok ? mItem('ext',EXT.label) : '')+'</div></div>'+
@@ -5632,20 +5637,16 @@ var MSCR={
       '<span class="pmini">'+[['pMatches',PROF.m],['pWins',PROF.w],['pGoals',PROF.g],['pBest',PROF.best]].map(function(x){ return '<span><b>'+x[1]+'</b>'+mEsc(T(x[0]))+'</span>'; }).join('')+'</span></div>'+
       '<div class="mwallet mglass">'+walletHtml(true)+'</div></div>';
   },
-  mode:function(){
-    return mHead(T('mMode'))+'<div class="mleft"><div class="mlist">'+mItem('vsai',T('mVsAI'),T('mVsAID'))+mItem('friend',T('mFriend'),T('mFriendD'))+
-      '</div></div><div class="mright" data-paint="modeR"></div>';
-  },
   prep:function(){
     var guest=ONLINE && NET.role==='guest';
     /* гость играет за команду 1: «твоя» — вторая карточка хоста */
     var my=guest?selOp:selMy, op=guest?selMy:selOp;
-    var cards='<div class="mteams">'+mTeamCard(guest?'op':'my', my, T('mMy'), '9', guest)+'<div class="mvs">VS</div>'+
-      mTeamCard(guest?'my':'op', op, T('mOpp'), '17', guest)+'</div>';
+    var cards='<div class="mteams">'+mTeamCard(guest?'op':'my', my, T('mMy'), '9', guest, op)+'<div class="mvs">VS</div>'+
+      mTeamCard(guest?'my':'op', op, T('mOpp'), '17', guest, my)+'</div>';
     var opts='<div class="mopts">'+(ONLINE?'':mRow('diff',T('diff'),mArr(T(diffKey()))))+mRow('min',T('mLen'),mArr(T('min'+selMin)),guest?'ro':'')+
       (stakeOn() ? mRow('stake',T('mStake'),'<span class="ar" data-dir="-1">‹</span>'+stakeLabel(STK.n)+'<span class="ar" data-dir="1">›</span>',guest?'ro':'') : '')+
-      mRow('tac',T('mTac'),mArr(T(TACNAME[selTac])))+(ONLINE?'<div class="mwait" data-paint="prepSt"></div>':'')+
-      '<button class="mbtn mf" id="go" data-act="go"></button></div>';
+      mRow('tac',T('mTac'),mArr(T(TACNAME[selTac])))+(ONLINE?'<div class="mwait" data-paint="prepSt"></div>':'')+'</div>'+
+      '<button class="mbtn mf mgo" id="go" data-act="go"></button>';
     return mHead(T('mPrep'),'<span class="mpill">'+mEsc(ONLINE?T('mFriend'):T('mVsAI'))+'</span>')+
       '<div class="mleft"><div class="mprep">'+cards+opts+'</div></div>';
   },
@@ -5824,12 +5825,6 @@ function ctrlTable(dev){
 }
 /* части экранов, которые зависят от фокуса или сети */
 var MPAINT={
-  modeR:function(el){
-    var f=MENU.focusedAct('mode'), my=CLUBS[LAST.my];
-    el.innerHTML='<div class="mteams"><div class="mtc mglass ro">'+mJersey(my,'9')+'<div class="nm">'+mEsc(clubName(my))+'</div></div><div class="mvs">VS</div>'+
-      (f==='friend' ? '<div class="mtc mglass ro">'+mJersey(CLUBS[LAST.op],'17')+'<div class="nm">@friend</div></div>'
-                    : '<div class="mtc mglass ro">'+mJersey(CPU_KIT,'AI')+'<div class="nm">CPU</div></div>')+'</div>';
-  },
   prepSt:function(el){
     if(!ONLINE){ el.innerHTML=''; return; }
     var t, ok=false;
@@ -6126,7 +6121,6 @@ function mSnow(){
 var ACT={
   back:function(){ MENU.back(); },
   quick:function(){ ONLINE=false; netLeave(); selFromLast(); goStart(); },
-  mode:function(){ MENU.go('mode'); },
   ctrl:function(){ MENU.dev=-1; MENU.go('ctrl'); },
   settings:function(){ MENU.go('settings'); },
   vsai:function(){ ONLINE=false; netLeave(); selFromLast(); MENU.go('prep'); },
@@ -6168,11 +6162,14 @@ function barVal(ev, el, cur, d){
   return Math.round(clamp(cur+d*0.1,0,1)*10)/10;
 }
 function mPick(ev, attr){ var t=ev && ev.target && ev.target.closest && ev.target.closest('['+attr+']'); return t ? t.getAttribute(attr) : null; }
-function prepChanged(){ MENU.build('prep'); MENU.refocus(); netPrepSend(); }
+/* выбор против ИИ запоминается сразу (не только при старте): в следующий раз экран откроется с ним же */
+function prepChanged(){ if(!ONLINE) lastSave(); MENU.build('prep'); MENU.refocus(); netPrepSend(); }
 var ADJ={
   lang:function(el, d, ev){ var L=['ru','en','id'], c=mPick(ev,'data-lang')||L[(L.indexOf(LANG)+d+3)%3]; setLang(c); },
-  my:function(el, d){ if(ONLINE && NET.role==='guest') return; selMy=nextClub(selMy, d, selOp); prepChanged(); },
-  op:function(el, d){ if(ONLINE && NET.role==='guest') return; selOp=nextClub(selOp, d, selMy); prepChanged(); },
+  my:function(el, d, ev){ if(ONLINE && NET.role==='guest') return; var c=mPick(ev,'data-club');
+    if(c!==null){ if(+c===selOp) return; selMy=+c; } else selMy=nextClub(selMy, d, selOp); prepChanged(); },
+  op:function(el, d, ev){ if(ONLINE && NET.role==='guest') return; var c=mPick(ev,'data-club');
+    if(c!==null){ if(+c===selMy) return; selOp=+c; } else selOp=nextClub(selOp, d, selMy); prepChanged(); },
   diff:function(el, d){ var D=['easy','normal','hard']; setDifficulty(D[(D.indexOf(DIFF)+d+3)%3]); prepChanged(); },
   min:function(el, d){ if(ONLINE && NET.role==='guest') return; var i=MIN_OPTS.indexOf(selMin); selMin=MIN_OPTS[(i+d+MIN_OPTS.length)%MIN_OPTS.length]; prepChanged(); },
   tac:function(el, d){ selTac=(selTac+d+3)%3; prepChanged(); },
@@ -6286,10 +6283,10 @@ MENU.netPaint=function(){
 MENU.onNet=function(ev){
   if(state!=='menu' || !ONLINE) return;
   var top=MENU.top();
-  if(NET.role==='guest' && NET.on && top!=='prep'){ MENU.stack=['main','mode','friend','prep']; MENU.show(); return; }
+  if(NET.role==='guest' && NET.on && top!=='prep'){ MENU.stack=['main','friend','prep']; MENU.show(); return; }
   if(NET.role==='host' && NET.on){
-    if(NET.peer){ netPrepSend(); if(top!=='prep'){ MENU.stack=['main','mode','friend','prep']; MENU.show(); return; } }
-    else if(top!=='friend' && top!=='prep'){ MENU.stack=['main','mode','friend']; MENU.show(); return; }
+    if(NET.peer){ netPrepSend(); if(top!=='prep'){ MENU.stack=['main','friend','prep']; MENU.show(); return; } }
+    else if(top!=='friend' && top!=='prep'){ MENU.stack=['main','friend']; MENU.show(); return; }
   }
   MENU.netPaint();
 };
@@ -6717,7 +6714,7 @@ function shareLink(code){
     /* приглашение: сразу «С другом» — «Назад» ведёт в меню, а не закрывает игру */
     ONLINE=true;
     codeEl.value=room.toUpperCase();
-    MENU.friendMode='joinf'; MENU.setStack(['main','mode','friend']);
+    MENU.friendMode='joinf'; MENU.setStack(['main','friend']);
     netConnect(srvEl.value.trim(), room.toUpperCase(), null);
   }
 })();

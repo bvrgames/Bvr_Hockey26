@@ -99,15 +99,17 @@ async function collect(g, tag) {
     let s = await MS(page);
     ok(s.layer === 'menu' && s.stack.join() === 'main' && s.focus === 'quick', `keyboard: start state ${JSON.stringify(s)}`);
     ok(!(await page.evaluate('window.__tgBack.visible')), 'BackButton visible on the main menu');
-    await keys(page, ['ArrowDown', 'Enter']);                      // Game mode
-    s = await MS(page); ok(s.stack.join() === 'main,mode', `keyboard: Game mode not open: ${JSON.stringify(s)}`);
+    await keys(page, ['ArrowDown', 'Enter']);                      // Vs computer: straight to the setup, no «Game mode» step
+    s = await MS(page); ok(s.stack.join() === 'main,prep' && s.focus === 'my', `keyboard: setup not open / focus: ${JSON.stringify(s)}`);
     ok(await page.evaluate('window.__tgBack.visible'), 'BackButton hidden on a sub-screen');
-    await keys(page, ['Enter']);                                   // Vs computer
-    s = await MS(page); ok(s.stack.join() === 'main,mode,prep' && s.focus === 'my', `keyboard: setup not open / focus: ${JSON.stringify(s)}`);
     await keys(page, ['ArrowRight']);                              // my team: red → blue
     await keys(page, ['ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowRight']);   // length 3 → 5
     await keys(page, ['ArrowDown', 'ArrowRight']);                 // tactics: balanced → attack
     s = await MS(page); ok(s.sel.my === 1 && s.sel.min === 5 && s.sel.tac === 1, `keyboard: setup values ${JSON.stringify(s.sel)}`);
+    // the choice is saved at once: Back and in again — the same setup
+    await keys(page, ['Escape']); await to(page, 'vsai');
+    s = await MS(page); ok(s.stack.join() === 'main,prep' && s.sel.my === 1 && s.sel.min === 5 && s.sel.tac === 1, `keyboard: the setup is not remembered ${JSON.stringify(s)}`);
+    await to(page, 'tac', false);                                 // the screen keeps its focus
     await keys(page, ['ArrowDown']); s = await MS(page); ok(s.focus === 'go', `keyboard: focus should be on Start, is ${s.focus}`);
     await keys(page, ['Enter']);
     if (await inMatch(page, 'keyboard')) {
@@ -185,9 +187,8 @@ async function collect(g, tag) {
   const btn = async (i, ms = 90) => { await page.evaluate(`__pad.buttons[${i}]={pressed:true,value:1}`); await page.waitForTimeout(ms);
     await page.evaluate(`__pad.buttons[${i}]={pressed:false,value:0}`); await page.waitForTimeout(90); };
   try {
-    await btn(13); await btn(0);                                   // down, A: Game mode
-    await btn(0);                                                  // A: Vs computer
-    let s = await MS(page); ok(s.stack.join() === 'main,mode,prep' && s.via === 'pad', `gamepad: setup ${JSON.stringify(s)}`);
+    await btn(13); await btn(0);                                   // down, A: Vs computer
+    let s = await MS(page); ok(s.stack.join() === 'main,prep' && s.via === 'pad', `gamepad: setup ${JSON.stringify(s)}`);
     ok((await page.evaluate("document.querySelector('#start .mhints').textContent")).length > 0, 'gamepad: no button hints');
     for (let i = 0; i < 5; i++) await btn(13);                     // to Start
     s = await MS(page); ok(s.focus === 'go', `gamepad: focus ${s.focus}`);
@@ -207,12 +208,18 @@ async function collect(g, tag) {
 {
   const g = await open(LAND); const { page } = g;
   try {
-    await page.tap('#start .mscr.cur [data-act="mode"]'); await page.waitForTimeout(150);
-    let s = await MS(page); ok(s.stack.join() === 'main,mode', `touch: Game mode ${JSON.stringify(s)}`);
+    await page.tap('#start .mscr.cur [data-act="vsai"]'); await page.waitForTimeout(150);
+    let s = await MS(page); ok(s.stack.join() === 'main,prep', `touch: Vs computer ${JSON.stringify(s)}`);
     await page.evaluate('window.__tgBackClick()'); await page.waitForTimeout(150);
     s = await MS(page); ok(s.stack.join() === 'main' && !(await page.evaluate('window.__tgBack.visible')), `BackButton click should go back: ${JSON.stringify(s)}`);
-    await page.tap('#start .mscr.cur [data-act="mode"]'); await page.waitForTimeout(150);
     await page.tap('#start .mscr.cur [data-act="vsai"]'); await page.waitForTimeout(150);
+    // a kit swatch picks the team; the rival's kit cannot be taken
+    const sel0 = (await MS(page)).sel;
+    await page.tap(`#start .mscr.cur [data-adj="my"] [data-club="${sel0.op}"]`); await page.waitForTimeout(150);
+    s = await MS(page); ok(s.sel.my === sel0.my, `touch: took the rival's kit ${JSON.stringify(s.sel)}`);
+    const free = [0, 1, 2, 3].find((c) => c !== sel0.my && c !== sel0.op);
+    await page.tap(`#start .mscr.cur [data-adj="my"] [data-club="${free}"]`); await page.waitForTimeout(150);
+    s = await MS(page); ok(s.sel.my === free && s.sel.op === sel0.op, `touch: kit swatch ${JSON.stringify(s.sel)} (want my=${free})`);
     await page.tap('#start .mscr.cur [data-adj="min"] [data-dir="-1"]'); await page.waitForTimeout(150);   // 5 (saved? no: fresh) 3 → 1
     s = await MS(page); ok(s.sel.min === 1, `touch: length arrow ${JSON.stringify(s.sel)}`);
     await page.tap('#go');
@@ -266,9 +273,9 @@ async function collect(g, tag) {
     await g.page.goto(url(`&nomusic&room=${room}&srv=http://127.0.0.1:${rport}`), { waitUntil: 'load', timeout: 120000 }); return g; };
   const H = await side(), G = await side();
   try {
-    await H.page.waitForFunction('__hk.net().role==="host" && __hk.net().peer && __hk.menuState().stack.join()==="main,mode,friend,prep"', null, { timeout: 30000 })
+    await H.page.waitForFunction('__hk.net().role==="host" && __hk.net().peer && __hk.menuState().stack.join()==="main,friend,prep"', null, { timeout: 30000 })
       .catch(() => fails.push('friend: the host is not on the match setup after the friend joined'));
-    await G.page.waitForFunction('__hk.net().role==="guest" && __hk.menuState().stack.join()==="main,mode,friend,prep"', null, { timeout: 30000 })
+    await G.page.waitForFunction('__hk.net().role==="guest" && __hk.menuState().stack.join()==="main,friend,prep"', null, { timeout: 30000 })
       .catch(() => fails.push('friend: the guest is not on the match setup'));
     ok((await G.page.evaluate("document.getElementById('go').disabled")), 'friend: the guest can press Start');
     await H.page.keyboard.press('ArrowRight'); await H.page.waitForTimeout(100);            // host: my team red → blue
