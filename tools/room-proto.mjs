@@ -1,7 +1,7 @@
 // Server-mode protocol test without browsers (phase 3.2): two WebSocket players in one ?mode=srv room.
 // Checks: hello carries srv:1 for both (the second joins without asking), the host's cfg starts the match on the
 // server and comes back to both, snapshots arrive at ~30/s to both with server time k, per-player input ack a and
-// controlled-player velocities v, the player who holds the stick right actually skates right, a pressed pass comes back
+// controlled-player velocities v, the player who holds the stick right actually skates right (by its velocity), a pressed pass comes back
 // as a bus event (e with seq), and a 15-second match ends with match:end.
 //   --target mock (default): tools/relay-mock.mjs in this process  ·  --target wrangler: `wrangler dev` (workerd + DO)
 // usage: node tools/room-proto.mjs [--target mock|wrangler]
@@ -54,9 +54,20 @@ try {
   const gi = idx(G, 1), p0 = pos(G, gi);
   let q = 0;
   const iv = setInterval(() => { q++; G.send({ t: 'i', m: [1, 0], b: 0, q, c: [0, 0, 0, 0, 0], tc: 0 }); H.send({ t: 'i', m: [0, 0], b: 0, q, c: [0, 0, 0, 0, 0], tc: 0 }); }, 33);
-  await wait(1200);
+  // The stick toward +x must make the guest's controlled player skate toward +x. Judged by its velocity (snapshot v[2] —
+  // the controlled player of team 1, whoever it is now), not by the distance covered in a fixed time: at the drop of
+  // the puck that player usually still skates the other way (~−2…−3 m/s) and has to turn, and the faceoff crowd may
+  // block it, so 1.2 s gave 2.4…3.9 m against a 3 m threshold — a random fail. Here: within 2.5 s after input is
+  // acknowledged it reaches over 3 m/s toward +x (it reaches ~5.7 in 0.3…0.9 s).
+  const tIn = Date.now(); let vmax = -99, tFast = null;
+  while (Date.now() - tIn < 2500) {
+    await wait(30);
+    const s = G.snaps[G.snaps.length - 1].m;
+    if (s.a > 0) { vmax = Math.max(vmax, s.v[2]); if (tFast === null && s.v[2] > 3) tFast = Date.now() - tIn; }
+    if (tFast !== null && Date.now() - tIn >= 1200) break;      // and keep input going ≥ 1.2 s for the ack check below
+  }
   const gi2 = idx(G, 1), p1 = pos(G, gi2);
-  ok(gi2 !== gi || p1[0] - p0[0] > 3, `guest's player did not skate right: ${JSON.stringify(p0)} → ${JSON.stringify(p1)} (ctrl ${gi}→${gi2})`);
+  ok(tFast !== null, `guest's player did not skate right: top speed toward +x ${vmax} m/s in 2.5 s, ${JSON.stringify(p0)} → ${JSON.stringify(p1)} (ctrl ${gi}→${gi2})`);
   const aG = G.snaps[G.snaps.length - 1].m.a, aH = H.snaps[H.snaps.length - 1].m.a;
   ok(aG > 20 && aG <= q && aH > 20, `input acks: guest a=${aG} host a=${aH} of q=${q}`);
   // give the guest's player the puck is impossible from outside — press pass/check counters and look for any event
