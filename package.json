@@ -20,6 +20,7 @@
     "offball": "node tools/offball.mjs",
     "smoke:tg": "node tools/smoke-tg.mjs && node tools/smoke-tg.mjs --browser webkit",
     "smoke:quality": "node tools/smoke-quality.mjs && node tools/smoke-quality.mjs --browser webkit",
+    "smoke:feel": "node tools/smoke-feel.mjs && node tools/smoke-feel.mjs --browser webkit",
     "smoke:lag": "node tools/smoke-lag.mjs",
     "sim:node": "node tools/sim-node.mjs",
     "load": "node tools/load.mjs",

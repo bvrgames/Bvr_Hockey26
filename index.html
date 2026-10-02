@@ -2541,6 +2541,13 @@ function fxPost(){
   fxBurst(puck.x, puck.z, 10, 'spark'); fxBurst(puck.x, puck.z, 6, 'ice');
   if(QC().spray>0) FX.ring={x:puck.x, y:Math.max(0.3,puck.y), z:puck.z, t:0};
 }
+/* силовой: жёсткий — большой удар, остальные — средний (числа FX.old — как у прежней тряски); крошка в точке
+   столкновения; приняли вы — красная вспышка по краям */
+function fxHit(e){
+  if(e.hard) fxKick('l',11,16); else fxKick('m',8,14);
+  fxBurst(e.x, e.z, e.hard?14:8, 'ice');
+  if(players[e.v] && players[e.v]===controlled) fxEdge('rgba(255,40,40,.8)', 0.12);   /* как у чужого гола */
+}
 /* гол: t — забившая команда */
 function fxGoal(t){
   fxKick('l');
@@ -7002,10 +7009,8 @@ EV.on('poke',    function(e){ SFX.stick(); if(e.btn && e.t===HUMAN) buzz(14,'sof
 EV.on('hit',     function(e){
   if(e.remote && e.hard && players[e.p]) playAction(players[e.p],'body_check',0.7);
   SFX.hit();
-  if(e.hard){ buzz(45,'hard'); fxKick('l',11,16); }
-  else { fxKick('m',8,14); if(e.vt===HUMAN) buzz(45,'hard'); }
-  fxBurst(e.x, e.z, e.hard?14:8, 'ice');
-  if(players[e.v] && players[e.v]===controlled) fxEdge('rgba(255,50,50,.65)', 0.12);
+  if(e.hard) buzz(45,'hard'); else if(e.vt===HUMAN) buzz(45,'hard');
+  fxHit(e);
   if(!e.clean) flash(T('penalty'),T('penaltySub'),1.6);
   else if(e.hard) flash(T('hit'),'',0.8);
 });
@@ -7733,6 +7738,18 @@ window.__hk={hs:function(){return HS;},net:function(){return NET;},setCam:functi
     if(kind==='hit')  EV.emit('hit',{p:op, t:1-HUMAN, v:mi, vt:HUMAN, clean:true, x:me.x, z:me.z, hard:1});
     if(kind==='post') EV.emit('post',{t:HUMAN, p:mi, bar:false});
     if(kind==='goal') EV.emit('goal',{t:HUMAN, p:mi, assist:-1, own:0, noShot:0});
+    return __hk.fxState();
+  },
+  /* только эффекты, без звука и статистики (smoke:feel проверяет, что они не берут Math.random): shot | hit | post |
+     goal | fade (ничего нового) | reset (всё погасить); затем frames кадров затухания */
+  fxRaw:function(kind, frames){
+    var me=controlled||HS[HUMAN].ctrl, mi=players.indexOf(me);
+    if(kind==='shot') fxShot(me, 0.9);
+    if(kind==='hit') fxHit({p:-1, v:mi, x:me.x, z:me.z, hard:1});
+    if(kind==='post') fxPost();
+    if(kind==='goal') fxGoal(HUMAN);
+    if(kind==='reset') fxReset();
+    for(var i=0;i<(frames||0);i++) fxUpdate(1/60);
     return __hk.fxState();
   },
   fxState:function(){ return {trauma:+FX.trauma.toFixed(3), zoom:+FX.zoom.toFixed(4), streak:+FX.streak.toFixed(3),
