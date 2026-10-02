@@ -417,7 +417,7 @@ try {
     ok(r.j.status === 'paid' && r.j.balance === 50, `stars: the order is paid ${JSON.stringify(r.j)}`);
     a = await checkout(S1, o1);
     ok(a && a.ok === false, `pre_checkout: a paid order → ok:false ${JSON.stringify(a)}`);
-    ok((await call('GET', '/v1/profile', initData(S1))).j.coins === 0, 'stars never turn into coins');
+    ok((await call('GET', '/v1/profile', initData(S1))).j.coins === 0, 'buying stars gives no coins by itself (coins only through the shop)');
     // a second order (s120) and a refund of the first: −50
     const o2 = (await call('POST', '/v1/stars/invoice', initData(S1), { pack: 's120' })).j.order, ch2 = ch1 + 'b';
     await pay(S1, o2, ch2, 100);
@@ -470,6 +470,46 @@ try {
     ok(ms && /bot game/i.test(ms.params.text), 'a plain message in Indonesian');
     ok((await say(S1, '/start', { id: -100123, type: 'group' })).length === 0, 'a group chat: no answer');
     ok(sm.length === 2 && /support/i.test(sm[0].params.text) && /Telegram id/.test(sm[1].params.text) && /монет/.test(sm[1].params.text), `/paysupport and /terms answer ${JSON.stringify(sm.map((x) => x.params.text.slice(0, 40)))}`);
+    // ---- coins for stars (the shop): one way, one transaction, idempotent by idem, never below zero, outside the caps
+    {
+      const X = { id: A.id + 40, first_name: 'Shop', last_name: 'Per', language_code: 'ru' }, ix = initData(X);
+      const buy = (pack, idem, idata = ix) => call('POST', '/v1/shop/coins', idata, { pack, idem });
+      const bal = async () => { const j = (await call('GET', '/v1/profile', ix)).j; return [j.coins, j.stars]; };
+      let pr = (await call('GET', '/v1/profile', ix)).j;
+      ok(pr.coinPacks && pr.coinPacks.map((x) => `${x.coins}/${x.stars}`).join(' ') === '100/20 300/50 700/100', `shop: coin packs from the server ${JSON.stringify(pr.coinPacks)}`);
+      ok((await buy('c100', 'idem-zero-0001')).status === 402 && JSON.stringify(await bal()) === '[0,0]', 'shop: no stars → 402, nothing changes');
+      const ord = (await call('POST', '/v1/stars/invoice', ix, { pack: 's300' })).j.order, chX = 'stxSHOP' + Date.now();
+      await pay(X, ord, chX, 250);
+      ok(JSON.stringify(await bal()) === '[0,300]', 'shop: 300 stars bought for the test');
+      let rr = await buy('c100', 'idem-c100-0001');
+      ok(rr.status === 200 && rr.j.coins === 100 && rr.j.stars === 20 && rr.j.balance.coins === 100 && rr.j.balance.stars === 280 && !rr.j.repeat, `shop: c100 → +100 coins −20 stars ${JSON.stringify(rr.j)}`);
+      rr = await buy('c300', 'idem-c300-0001');
+      ok(rr.status === 200 && rr.j.balance.coins === 400 && rr.j.balance.stars === 230, `shop: c300 → +300 −50 ${JSON.stringify(rr.j)}`);
+      rr = await buy('c700', 'idem-c700-0001');
+      ok(rr.status === 200 && rr.j.balance.coins === 1100 && rr.j.balance.stars === 130, `shop: c700 → +700 −100 ${JSON.stringify(rr.j)}`);
+      rr = await buy('c700', 'idem-c700-0001');
+      ok(rr.status === 200 && rr.j.repeat === true && JSON.stringify(await bal()) === '[1100,130]', `shop: the same idem again takes nothing twice ${JSON.stringify(rr.j)}`);
+      rr = await buy('c100', 'idem-c700-0001');
+      ok(rr.j.repeat === true && JSON.stringify(await bal()) === '[1100,130]', 'shop: the same idem with another pack — still nothing');
+      await buy('c700', 'idem-c700-0002');
+      rr = await buy('c300', 'idem-c300-0002');
+      ok(rr.status === 402 && rr.j.need === 50 && rr.j.have === 30 && JSON.stringify(await bal()) === '[1800,30]', `shop: 30 stars left, c300 → 402, not below zero ${JSON.stringify(rr.j)}`);
+      ok((await buy('c999', 'idem-x-000001')).status === 422 && (await buy('c100', 'bad idem!')).status === 422 && (await buy('c100', 'idem-unsigned-01', null)).status === 401,
+        'shop: unknown pack / bad idem → 422, unsigned → 401');
+      // bought coins are outside the daily match cap: a win still pays its 15, the day counts 15
+      rr = await call('POST', '/v1/match', ix, summary());
+      ok(rr.status === 200 && rr.j.coins === 15 && rr.j.day.coins === 15 && rr.j.balance === 1815, `shop: bought coins are not in the daily cap ${JSON.stringify(rr.j)}`);
+      // a refund of the stars after they went on coins: the stars left go (30 of 300), the coins stay, the order marks 270
+      await refund(X, chX, 250);
+      ok(JSON.stringify(await bal()) === '[1815,0]', `refund after the exchange: stars 0, coins kept ${JSON.stringify(await bal())}`);
+      ok((await call('GET', '/v1/stars/order?id=' + ord, ix)).j.status === 'refunded', 'refund after the exchange: the order is refunded');
+      const lgX = JSON.parse(execFileSync(join(ROOT, 'node_modules', '.bin', 'wrangler'), ['d1', 'execute', 'DB', '--local', '--persist-to', persist, '--json', '--command',
+        `SELECT reason, delta, currency, ref FROM ledger WHERE user_id = ${X.id} AND reason IN ('stars_to_coins', 'coins_bought') ORDER BY id; SELECT refund_short FROM star_orders WHERE id = '${ord}'`],
+        { cwd: join(ROOT, 'server'), stdio: 'pipe', env: { ...process.env, WRANGLER_SEND_METRICS: 'false', CI: '1' } }).toString());
+      const rowsX = lgX[0].results.map((x) => `${x.reason}:${x.delta}:${x.currency}`).join(' ');
+      ok(rowsX === 'stars_to_coins:-20:stars coins_bought:100:coins stars_to_coins:-50:stars coins_bought:300:coins stars_to_coins:-100:stars coins_bought:700:coins stars_to_coins:-100:stars coins_bought:700:coins'
+        && lgX[1].results[0].refund_short === 270, `shop: two ledger rows per purchase, refund_short 270 ${rowsX} ${JSON.stringify(lgX[1].results)}`);
+    }
     // the one-time setup: without the secret 403; with it — setWebhook with the secret and the commands
     ok((await fetch(API + '/tg/setup?do=install', { method: 'POST' })).status === 403, 'setup without the secret → 403');
     botCalls.length = 0;
@@ -615,7 +655,8 @@ try {
       `admin: overview players ${JSON.stringify(o && o.players)}`);
     ok(o.matches.day.ai >= 10 && o.matches.day.server >= 2 && o.matches.n30 >= 12 && o.matches.avgLen > 0 && o.matches.done > 0.5 && o.matches.byDay.ai[29] === o.matches.day.ai,
       `admin: overview matches ${JSON.stringify(o.matches.day)} n30 ${o.matches.n30} avg ${o.matches.avgLen} done ${o.matches.done}`);
-    ok(o.coins.issued > 100 && o.coins.circ > 0 && o.stakes.n >= 1 && o.stars.buys === 2 && o.stars.sold === 50 + 120 && o.stars.xall === 50 + 100 + 50 && o.stars.refunds === 2 && o.stars.unmatched === 1,
+    ok(o.coins.issued > 100 && o.coins.circ > 0 && o.stakes.n >= 1 && o.stars.buys === 3 && o.stars.sold === 50 + 120 + 300 && o.stars.xall === 50 + 100 + 50 + 250 && o.stars.refunds === 3 && o.stars.unmatched === 1 &&
+       o.stars.short === 2 && o.stars.shortStars === 100 + 270 && o.shop.n === 4 && o.shop.coinsAll === 1800 && o.shop.starsAll === 270 && o.shop.coins1 === 1800 && o.shop.stars30 === 270,
       `admin: overview coins / stakes / stars ${JSON.stringify([o.coins, o.stakes, o.stars])}`);
     ok(o.platforms.android >= 1 && o.platforms.ios >= 1 && o.platforms.pc >= 1 && o.langs.some((l) => l[0] === 'id'), `admin: platforms and languages ${JSON.stringify([o.platforms, o.langs])}`);
     r = await get('/v1/admin/players?q=track_me', initData(ADMIN));
@@ -624,7 +665,8 @@ try {
     ok((await get('/v1/admin/players?q=' + T1.id, initData(ADMIN))).j.rows[0].id === T1.id, 'admin: search by id');
     ok((await get('/v1/admin/players?q=%25', initData(ADMIN))).j.total === 0, 'admin: % in the search is a plain character');
     r = await get('/v1/admin/players?sort=bought', initData(ADMIN));
-    ok(r.j.rows[0].id === S1.id && r.j.rows[0].bought === 150 && r.j.total >= 10 && r.j.size === 50, `admin: sorted by Stars bought ${JSON.stringify(r.j.rows[0])}`);
+    ok(r.j.rows[0].id === A.id + 40 && r.j.rows[0].bought === 250 && r.j.rows[1].id === S1.id && r.j.rows[1].bought === 150 && r.j.total >= 10 && r.j.size === 50,
+      `admin: sorted by Stars bought ${JSON.stringify(r.j.rows.slice(0, 2))}`);
     r = await get('/v1/admin/players?sort=seen&page=1', initData(ADMIN));
     ok(r.status === 200 && r.j.page === 1 && Array.isArray(r.j.rows), 'admin: a second page');
     r = await get(`/v1/admin/player?id=${A.id + 31}`, initData(ADMIN));
@@ -638,9 +680,13 @@ try {
     r = await get(`/v1/admin/player?id=${SH.id}`, initData(ADMIN));
     ok(r.j.stakes.length >= 1 && r.j.matches.length >= 2 && r.j.matches.some((m) => m.net === 'server'), `admin: card with stakes and server matches ${JSON.stringify([r.j.stakes.length, r.j.matches.map((m) => m.net)])}`);
     r = await get('/v1/admin/payments', initData(ADMIN));
-    ok(r.j.total === 3 && r.j.rows.some((x) => x.status === 'unmatched') && r.j.rows.filter((x) => x.status === 'refunded' && x.charge && x.name === 'Star Buyer').length === 2,
+    ok(r.j.total === 4 && r.j.rows.some((x) => x.status === 'unmatched') && r.j.rows.filter((x) => x.status === 'refunded' && x.charge && x.name === 'Star Buyer').length === 2,
       `admin: payments ${JSON.stringify(r.j.rows.map((x) => x.status + ':' + (x.charge || '')))}`);
-    ok((await get('/v1/admin/payments?status=refunded', initData(ADMIN))).j.total === 2, 'admin: payments filtered by status');
+    ok((await get('/v1/admin/payments?status=refunded', initData(ADMIN))).j.total === 3, 'admin: payments filtered by status');
+    r = await get('/v1/admin/payments?status=short', initData(ADMIN));
+    ok(r.j.total === 2 && r.j.rows.some((x) => x.short === 270 && x.name === 'Shop Per'), `admin: refunds short of stars shown apart ${JSON.stringify(r.j.rows.map((x) => [x.name, x.short]))}`);
+    r = await get(`/v1/admin/player?id=${A.id + 40}`, initData(ADMIN));
+    ok(r.j.shop && r.j.shop.length === 4 && r.j.shop[0].coins === 700 && r.j.shop[0].stars === 100, `admin: the card lists coins bought for stars ${JSON.stringify(r.j.shop)}`);
     ok((await get('/v1/admin/player?id=abc', initData(ADMIN))).status === 422, 'admin: a bad id → 422');
   }
 
@@ -724,6 +770,28 @@ try {
       await g.page.waitForTimeout(500);
       sb = await g.page.evaluate(() => __hk.sb());
       ok(sb.st === 'cancel' && sb.text.length > 5 && (await g.page.evaluate(() => __hk.coins().stars)) === 50, `stars: 'cancelled' → a calm message, nothing credited ${JSON.stringify(sb)}`);
+      // ---- the shop: coins for stars — confirm, buy, coins fly into the wallet; not enough stars → «top up»
+      await g.page.evaluate(() => { __hk.menu('main'); __hk.menu('shop'); });
+      await g.page.waitForTimeout(300);
+      let sh = await g.page.evaluate(() => __hk.sh());
+      ok(sh.ok && sh.cards === 3, `shop: three coin packs in the shop ${JSON.stringify(sh)}`);
+      const c0 = await g.page.evaluate(() => __hk.coins());
+      await g.page.click('#start section.cur .mshc[data-pack="c100"]');
+      await g.page.waitForTimeout(200);
+      sh = await g.page.evaluate(() => __hk.sh());
+      ok(sh.st === 'ask' && /100/.test(sh.text) && /20/.test(sh.text), `shop: a tap asks first ${JSON.stringify(sh.text)}`);
+      await g.page.click('#start section.cur [data-act="cyes"]');
+      let flewC = 0;
+      for (let t = 0; t < 60; t++) { await g.page.waitForTimeout(100); sh = await g.page.evaluate(() => __hk.sh()); flewC = Math.max(flewC, sh.fly); if (sh.st === 'done' && !sh.fly && t > 10) break; }
+      const c1 = await g.page.evaluate(() => ({ ...__hk.coins(), wal: document.querySelector('#start section.cur [data-coins]').textContent }));
+      ok(sh.st === 'done' && flewC >= 3 && c1.coins === c0.coins + 100 && c1.stars === c0.stars - 20 && c1.wal === String(c1.coins), `shop: bought — +100 coins flew, −20 stars ${JSON.stringify([c0.coins, c0.stars, c1.coins, c1.stars, flewC])}`);
+      await g.page.click('#start section.cur .mshc[data-pack="c300"]');
+      await g.page.waitForTimeout(200);
+      sh = await g.page.evaluate(() => __hk.sh());
+      ok(sh.st === 'no' && (await g.page.$('#start section.cur [data-act="topup"]')), `shop: ${c1.stars} stars for 50 → not enough, «top up» ${JSON.stringify(sh.text)}`);
+      await g.page.click('#start section.cur .mshq [data-act="topup"]');
+      await g.page.waitForTimeout(300);
+      ok((await g.page.evaluate(() => __hk.menuState().stack.join('>'))) === 'main>shop>stars', 'shop: «top up» opens the stars packs');
       // the request aborted on purpose above; the 403 of /v1/admin/me (a regular player) is the expected answer
       const errs = g.logs.filter(isError).filter((e) => !/ERR_FAILED/.test(e.text) && !/status of 403/.test(e.text));
       ok(!errs.length, `game: page errors ${JSON.stringify(errs).slice(0, 400)}`);

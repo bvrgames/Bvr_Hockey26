@@ -1,7 +1,8 @@
 // Screenshots of the star top-up (docs/EVENTS.md «Звёзды»): `wrangler dev` (Worker + a throwaway local D1, a test bot
 // token, the Bot API faked by a local server), the game in a fake Telegram with signed initData, landscape 844×390 at
 // dpr 2, RU / EN / ID: the wallet with «+» on the main menu and the profile, the packs screen, waiting for the payment
-// and the stars credited (the payment is posted to the bot's webhook as Telegram would). shots/stars/<screen>-<lang>.png;
+// and the stars credited (the payment is posted to the bot's webhook as Telegram would); the shop: coins for stars —
+// packs, the question, bought, not enough stars. shots/stars/<screen>-<lang>.png;
 // exit 1 on a failed check.
 // usage: node tools/stars-shots.mjs [--lang ru] [--port 8813]
 import { createHmac } from 'node:crypto';
@@ -85,6 +86,25 @@ try {
       await page.waitForFunction(() => window.__tgInvoiceClose && __hk.sb().st === 'open', null, { timeout: 10000 });
       await page.evaluate(() => __tgInvoiceClose('cancelled')); await page.waitForTimeout(300);
       await page.screenshot({ path: `shots/stars/cancel-${lang}.png` });
+      // the shop: coins for stars (170 stars now) — the packs, the question, bought, not enough
+      await page.evaluate(`__hk.menu('main'); __hk.menu('shop')`); await page.waitForTimeout(400);
+      await page.screenshot({ path: `shots/stars/shop-${lang}.png` });
+      await page.click('#start section.cur .mshc[data-pack="c300"]'); await page.waitForTimeout(250);
+      await page.screenshot({ path: `shots/stars/shop-ask-${lang}.png` });
+      await page.click('#start section.cur [data-act="cyes"]');
+      await page.waitForFunction(() => __hk.sh().st === 'done' && __hk.sh().fly > 0, null, { timeout: 10000 }).catch(() => {});
+      await page.waitForTimeout(400);
+      await page.screenshot({ path: `shots/stars/shop-fly-${lang}.png` });
+      await page.waitForFunction(() => __hk.sh().st === 'done' && !__hk.sh().fly, null, { timeout: 10000 }).catch(() => {});
+      ok((await page.evaluate(() => [__hk.coins().coins, __hk.coins().stars].join())) === '300,120', `${lang}: 300 coins for 50 stars`);
+      await page.waitForTimeout(300);
+      await page.screenshot({ path: `shots/stars/shop-done-${lang}.png` });
+      await page.click('#start section.cur .mshc[data-pack="c700"]'); await page.waitForTimeout(250);
+      await page.click('#start section.cur [data-act="cyes"]');
+      await page.waitForFunction(() => __hk.sh().st === 'done' && !__hk.sh().fly && __hk.coins().coins === 1000, null, { timeout: 10000 }).catch(() => {});
+      await page.click('#start section.cur .mshc[data-pack="c300"]'); await page.waitForTimeout(250);
+      await page.screenshot({ path: `shots/stars/shop-nostars-${lang}.png` });
+      ok((await page.evaluate(() => [__hk.sh().st, __hk.coins().stars].join())) === 'no,20', `${lang}: 20 stars left, 300 for 50 → not enough`);
       const errs = g.logs.filter(isError).filter((e) => !/status of 403/.test(e.text));   // /v1/admin/me → 403: a regular player
       ok(!errs.length, `${lang}: no page errors ${JSON.stringify(errs).slice(0, 300)}`);
     } finally { await g.browser.close(); }

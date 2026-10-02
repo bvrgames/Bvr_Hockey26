@@ -47,6 +47,9 @@
  *                                              never below zero (short — what was already spent), ledger 'stars_refund'
  *   starUnmatched({ uid, name, charge, amount, payload, now })   a payment no order matches, kept as 'unmatched'
  *   starsBalance(uid) → stars
+ *   coinsBuy({ uid, idem, coins, stars, now }) → 'ok' | 'funds' | 'repeat'   in one transaction: stars −stars (never below
+ *                                              zero: 'funds', nothing changes), coins +coins, ledger 'stars_to_coins' and
+ *                                              'coins_bought' (ref = idem); 'repeat' — this idem is in already, nothing changes
  *   touch(user, platform, now)                 who the player is on every signed request (creates the row if new)
  *   the developer's page (read only): adminOverview(t) → raw counts (coins.js overviewShape), adminPlayers({ q, id, sort,
  *   page, size }) → { total, rows }, adminPlayer(id) → { user, matches, stakes, ledger, orders }, adminPayments({ status,
@@ -181,9 +184,9 @@ export function rewardParts(s, conf = confFrom(null)) {
 export const dayStart = (sec) => sec - (sec % 86400);
 
 // ---------- stakes: a coin bet on a match with a friend (server mode only), docs/EVENTS.md «Ставка на матч»
-// Only coins are staked. Stars (Telegram Stars) are a donation currency: they are never staked and never turn into
-// coins — otherwise this would be gambling on real money. The stake is outside the daily coin caps (own ledger
-// reasons). The outcome is decided only by the room's own result (the server match), never by a client:
+// Only coins are staked, stars never. Since 02.10 coins can also be bought for stars (the shop, one way: stars → coins,
+// never back), so a staked coin may have been paid for; coins still never turn into stars or money and cannot be
+// withdrawn. The stake is outside the daily coin caps (own ledger reasons). The outcome is decided only by the room's own result (the server match), never by a client:
 //   the room has a result: the winner takes both stakes, a draw gives each their own back; a player who dropped and
 //   did not come back (result.left) loses the stake whatever the score (both gone — both get it back);
 //   no result (the match never ended, the server went down, the room forgot it) — both get it back.
@@ -297,7 +300,8 @@ export class StakeRoom {
 }
 
 // ---------- stars: in-game stars bought for Telegram Stars (XTR), docs/EVENTS.md «Звёзды»
-// Stars are a donation currency only (ice, kits, no ads): never staked, never turned into coins. The prices are here and
+// Stars are a donation currency (ice, kits, no ads) and can be exchanged for coins in the shop (COIN_PACKS below, one
+// way: coins never turn into stars, coins never turn into money); stars are never staked. The prices are here and
 // only here — the client gets them from the server (/v1/profile, /v1/stars/packs); an order keeps the pack it was made
 // with, so changing a price never touches orders already made. id — what the client sends, stars — what the player
 // gets, price — Telegram Stars the player pays.
@@ -332,9 +336,9 @@ export const BOT_TEXTS = {
     id: 'Dukungan pembayaran BVR Hockey 26.\nJika bintang tidak masuk setelah membayar atau kamu perlu pengembalian dana, tulis di sini apa yang terjadi dan kapan kamu membeli. Kami menjawab dalam 3 hari.',
   },
   terms: {
-    ru: 'Условия покупки — BVR Hockey 26\n\n• Звёзды игры покупаются за Telegram Stars и зачисляются после подтверждения оплаты.\n• Звёзды — только для оформления (лёд, форма) и отключения рекламы. Они не меняются на монеты, не участвуют в ставках и не имеют денежной стоимости.\n• Возврат — через /paysupport. При возврате купленные звёзды списываются; если они уже потрачены, баланс не уходит ниже нуля.\n• Игра хранит ваш Telegram id, имя и статистику матчей.',
-    en: 'Purchase terms — BVR Hockey 26\n\n• In-game stars are bought for Telegram Stars and credited once the payment is confirmed.\n• Stars are only for cosmetics (ice, kits) and turning off ads. They never turn into coins, are never staked and have no cash value.\n• Refunds — via /paysupport. A refund takes the bought stars back; if they are already spent, the balance never goes below zero.\n• The game stores your Telegram id, name and match stats.',
-    id: 'Ketentuan pembelian — BVR Hockey 26\n\n• Bintang game dibeli dengan Telegram Stars dan masuk setelah pembayaran dikonfirmasi.\n• Bintang hanya untuk tampilan (es, seragam) dan mematikan iklan. Bintang tidak bisa ditukar ke koin, tidak dipakai untuk taruhan dan tidak bernilai uang.\n• Pengembalian dana — lewat /paysupport. Saat dikembalikan, bintang yang dibeli ditarik; jika sudah terpakai, saldo tidak turun di bawah nol.\n• Game menyimpan id Telegram, nama, dan statistik laga kamu.',
+    ru: 'Условия покупки — BVR Hockey 26\n\n• Звёзды игры покупаются за Telegram Stars и зачисляются после подтверждения оплаты.\n• Звёзды — для оформления (лёд, форма), отключения рекламы и обмена на монеты в Магазине (обратно монеты на звёзды не меняются). Звёзды не участвуют в ставках и не имеют денежной стоимости; монеты нельзя вывести или обменять на деньги.\n• Возврат — через /paysupport. При возврате купленные звёзды списываются; если они уже потрачены, баланс не уходит ниже нуля.\n• Игра хранит ваш Telegram id, имя и статистику матчей.',
+    en: 'Purchase terms — BVR Hockey 26\n\n• In-game stars are bought for Telegram Stars and credited once the payment is confirmed.\n• Stars are for cosmetics (ice, kits), turning off ads and coins in the Shop (coins never turn back into stars). Stars are never staked and have no cash value; coins cannot be withdrawn or exchanged for money.\n• Refunds — via /paysupport. A refund takes the bought stars back; if they are already spent, the balance never goes below zero.\n• The game stores your Telegram id, name and match stats.',
+    id: 'Ketentuan pembelian — BVR Hockey 26\n\n• Bintang game dibeli dengan Telegram Stars dan masuk setelah pembayaran dikonfirmasi.\n• Bintang untuk tampilan (es, seragam), mematikan iklan dan ditukar ke koin di Toko (koin tidak bisa ditukar kembali ke bintang). Bintang tidak dipakai untuk taruhan dan tidak bernilai uang; koin tidak bisa ditarik atau ditukar ke uang.\n• Pengembalian dana — lewat /paysupport. Saat dikembalikan, bintang yang dibeli ditarik; jika sudah terpakai, saldo tidak turun di bawah nol.\n• Game menyimpan id Telegram, nama, dan statistik laga kamu.',
   },
   start: {
     ru: 'BVR Hockey 26 — аркадный хоккей 5 на 5 прямо в Telegram: матчи с ИИ и с друзьями, тренировка, монеты за победы.\nЖми «Играть»!',
@@ -354,9 +358,9 @@ export const BOT_TEXTS = {
   ],
   invoiceTitle: (n, lang) => ({ ru: `${n} ${ruPlural(n, 'звезда', 'звезды', 'звёзд')} — BVR Hockey`, en: `${n} stars — BVR Hockey`, id: `${n} bintang — BVR Hockey` })[L3(lang)],
   invoiceDesc: {
-    ru: 'Звёзды BVR Hockey 26: оформление льда, форма команды, отключение рекламы. Не меняются на монеты.',
-    en: 'BVR Hockey 26 stars: ice designs, team kits, no ads. They never turn into coins.',
-    id: 'Bintang BVR Hockey 26: desain es, seragam tim, tanpa iklan. Tidak bisa ditukar ke koin.',
+    ru: 'Звёзды BVR Hockey 26: оформление льда, форма команды, отключение рекламы, обмен на монеты в игре.',
+    en: 'BVR Hockey 26 stars: ice designs, team kits, no ads, coins in the game shop.',
+    id: 'Bintang BVR Hockey 26: desain es, seragam tim, tanpa iklan, koin di toko game.',
   },
   checkoutNo: {
     ru: 'Этот счёт уже недействителен. Открой пополнение в игре заново.',
@@ -364,6 +368,29 @@ export const BOT_TEXTS = {
     id: 'Tagihan ini sudah tidak berlaku. Buka isi ulang di game lagi.',
   },
 };
+
+// ---------- coins for stars (the shop): one way, stars → coins. Coins are an in-game currency only: never withdrawn,
+// never exchanged for money or back into stars. Bought coins are outside the daily match caps (own ledger reasons).
+// Like STAR_PACKS — one edit here, the client takes them from the server. id — what the client sends, coins — what
+// the player gets, stars — what it costs.
+export const COIN_PACKS = [
+  { id: 'c100', coins: 100, stars: 20 },
+  { id: 'c300', coins: 300, stars: 50 },
+  { id: 'c700', coins: 700, stars: 100 },
+];
+// POST /v1/shop/coins { pack, idem } → 200 { coins, stars, balance: { coins, stars }, repeat? } · 402 { reason: 'stars',
+// need, have } · 422. One transaction (store.coinsBuy): stars −N (never below zero), coins +M, two ledger rows
+// ('stars_to_coins', 'coins_bought', ref = idem). The same idem again changes nothing (200, repeat: true).
+async function postShopCoins(request, d, user, now) {
+  let b = null; try { const t = await request.text(); if (t.length < 1024) b = JSON.parse(t); } catch (e) {}
+  const pack = COIN_PACKS.find((p) => b && p.id === b.pack);
+  if (!pack) return json(422, { reason: 'pack' });
+  if (typeof b.idem !== 'string' || !/^[A-Za-z0-9_-]{8,64}$/.test(b.idem)) return json(422, { reason: 'idem' });
+  const r = await d.store.coinsBuy({ uid: user.id, idem: b.idem, coins: pack.coins, stars: pack.stars, now });
+  const balance = { coins: await d.store.balance(user.id), stars: await d.store.starsBalance(user.id) };
+  if (r === 'funds') return json(402, { reason: 'stars', need: pack.stars, have: balance.stars });
+  return json(200, { pack: pack.id, coins: pack.coins, stars: pack.stars, balance, ...(r === 'repeat' ? { repeat: true } : {}) });
+}
 
 const orderId = () => { const b = new Uint8Array(12); crypto.getRandomValues(b); return hex(b); };
 const ORDER_RE = /^[0-9a-f]{24}$/;
@@ -564,7 +591,10 @@ export function overviewShape(r, now) {
                n30: n0(r.matchStats.n), avgLen: Math.round(n0(r.matchStats.avg_len)), done: r.matchStats.cnt ? n0(r.matchStats.done) / r.matchStats.cnt : 0 },
     coins: { issued: n0(r.coins.issued), spent: n0(r.coins.spent), circ: n0(r.coins.circ), staked: n0(k.lockedPot) },
     stakes: { n: n0(k.n), pot: n0(k.pot), refunds: n0(k.refunds), refundPot: n0(k.refundPot) },
-    stars: { buys: n0(s.buys), sold: n0(s.sold), x1: n0(s.x1), x30: n0(s.x30), xall: n0(s.xall), refunds: n0(s.refunds), refundX: n0(s.refundX), unmatched: n0(s.unmatched) },
+    stars: { buys: n0(s.buys), sold: n0(s.sold), x1: n0(s.x1), x30: n0(s.x30), xall: n0(s.xall), refunds: n0(s.refunds), refundX: n0(s.refundX), unmatched: n0(s.unmatched),
+             short: n0(s.short), shortStars: n0(s.shortStars) },
+    shop: { n: n0(r.shop.n), coins1: n0(r.shop.coins1), coins30: n0(r.shop.coins30), coinsAll: n0(r.shop.coinsAll),
+            stars1: n0(r.shop.stars1), stars30: n0(r.shop.stars30), starsAll: n0(r.shop.starsAll) },
     platforms, langs: r.langs.map((x) => [x.k || '', x.n]),
   };
 }
@@ -595,7 +625,8 @@ async function adminRoute(route, request, d, user, now) {
       return json(200, await d.store.adminPlayer(id));
     }
     case 'GET /v1/admin/payments': {
-      const st = ['paid', 'pending', 'refunded', 'failed', 'unmatched'].includes(q.get('status')) ? q.get('status') : null;
+      // 'short' — refunds that could not take all the stars back (spent, e.g. on coins): the ones to look at for abuse
+      const st = ['paid', 'pending', 'refunded', 'failed', 'unmatched', 'short'].includes(q.get('status')) ? q.get('status') : null;
       const r = await d.store.adminPayments({ status: st, page, size: PAGE });
       return json(200, { total: r.total, page, size: PAGE, rows: r.rows });
     }
@@ -658,7 +689,7 @@ async function getProfile(d, user, now) {
               : { m: 0, w: 0, d: 0, l: 0, g: 0, ga: 0, streak: 0, best: 0, online: 0 },
     inventory: u ? u.inventory : [], equipped: null,
     day: { coins: earned, cap: conf('AI_COIN_CAP_DAY'), duo: earnedDuo, duoCap: conf('DUO_COIN_CAP_DAY') },
-    packs: STAR_PACKS,
+    packs: STAR_PACKS, coinPacks: COIN_PACKS,
   });
 }
 
@@ -681,7 +712,8 @@ export async function handleCoins(request, d) {
   const R = {
     'POST /v1/match': (dd, user, now) => postMatch(request, dd, user, now),
     'GET /v1/profile': (dd, user, now) => getProfile(dd, user, now),
-    'GET /v1/stars/packs': () => json(200, { packs: STAR_PACKS }),
+    'GET /v1/stars/packs': () => json(200, { packs: STAR_PACKS, coinPacks: COIN_PACKS }),
+    'POST /v1/shop/coins': (dd, user, now) => postShopCoins(request, dd, user, now),
     'POST /v1/stars/invoice': (dd, user, now) => postInvoice(request, dd, user, now),
     'GET /v1/stars/order': (dd, user) => getOrder(request, dd, user),
   }[route];

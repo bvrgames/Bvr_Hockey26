@@ -19,7 +19,7 @@ function BVRDev(K) {
     pl: { q: '', sort: 'seen', page: 0, data: null, t: 0 }, pay: { status: '', page: 0, data: null } };
   var TABS = ['Обзор', 'Игроки', 'Платежи'];
   var SORTS = [['seen', 'Последний вход'], ['matches', 'Матчи'], ['coins', 'Монеты'], ['stars', 'Звёзды'], ['bought', 'Куплено']];
-  var PAYST = [['', 'Все'], ['paid', 'Оплачены'], ['pending', 'Ожидают'], ['refunded', 'Возвраты'], ['failed', 'Ошибка'], ['unmatched', 'Не опознаны']];
+  var PAYST = [['', 'Все'], ['paid', 'Оплачены'], ['pending', 'Ожидают'], ['refunded', 'Возвраты'], ['short', 'Недостача'], ['failed', 'Ошибка'], ['unmatched', 'Не опознаны']];
   // three series, checked for the dark menu surface (dataviz validate_palette: lightness band, CVD, contrast)
   var C = { ai: '#3f8cf5', server: '#b8821a', host: '#b05cc8', one: '#3f8cf5' };
 
@@ -90,7 +90,7 @@ function BVRDev(K) {
   function mode(m) { return m.mode === 'ai' ? 'с ИИ' : m.net === 'server' ? 'двое · сервер' : m.net === 'host' ? 'двое · хост' : 'двое'; }
   var RES = { win: 'победа', draw: 'ничья', loss: 'поражение', left: 'вышел' };
   var REASON = { match_ai: 'матч с ИИ', match_duo: 'матч вдвоём', stake: 'ставка', stake_win: 'ставка выиграна', stake_back: 'ставка вернулась',
-    stars_buy: 'покупка звёзд', stars_refund: 'возврат звёзд', purchase: 'покупка', admin: 'вручную' };
+    stars_buy: 'покупка звёзд', stars_refund: 'возврат звёзд', stars_to_coins: 'звёзды → монеты', coins_bought: 'монеты за звёзды', purchase: 'покупка', admin: 'вручную' };
   var OST = { pending: ['ожидает', 'wait'], paid: ['оплачен', 'ok'], refunded: ['возврат', 'bad'], failed: ['ошибка', 'bad'], unmatched: ['не опознан', 'bad'],
     locked: ['идёт', 'wait'], settled: ['рассчитана', 'ok'] };
   function badge(s) { var o = OST[s] || [s, '']; return '<span class="xd-s ' + o[1] + '">' + E(o[0]) + '</span>'; }
@@ -188,7 +188,10 @@ function BVRDev(K) {
     h += '<div class="xd-row"><div><h4>Монеты</h4><div class="xd-k">' + tile(num(c.issued), 'выдано') + tile(num(c.spent), 'потрачено') + tile(num(c.circ), 'в обороте') + tile(num(c.staked), 'в ставках сейчас') + '</div>' +
       '<h4>Ставки</h4><div class="xd-k">' + tile(num(k.n), 'матчей со ставкой') + tile(num(k.pot), 'сумма (банк)') + tile(num(k.refunds), 'возвратов') + tile(num(k.refundPot), 'вернулось монет') + '</div></div>' +
       '<div><h4>Звёзды</h4><div class="xd-k">' + tile(num(s.buys), 'покупок') + tile(num(s.sold), 'звёзд продано') + tile(num(s.x1), 'Stars за день') + tile(num(s.x30), 'за месяц') +
-      tile(num(s.xall), 'за всё время') + tile(num(s.refunds) + ' · ' + num(s.refundX), 'возвраты · Stars') + (s.unmatched ? tile('<span class="neg">' + num(s.unmatched) + '</span>', 'не опознаны') : '') + '</div></div></div>';
+      tile(num(s.xall), 'за всё время') + tile(num(s.refunds) + ' · ' + num(s.refundX), 'возвраты · Stars') + (s.unmatched ? tile('<span class="neg">' + num(s.unmatched) + '</span>', 'не опознаны') : '') +
+      tile(s.short ? '<span class="neg">' + num(s.short) + ' · ' + num(s.shortStars) + '</span>' : '0', 'возвраты с недостачей · звёзд') + '</div>' +
+      '<h4>Монеты за звёзды</h4><div class="xd-k">' + tile(num(o.shop.n), 'обменов') + tile(num(o.shop.coins1), 'монет сегодня') + tile(num(o.shop.coins30), 'за 30 дней') +
+      tile(num(o.shop.coinsAll), 'за всё время') + tile(num(o.shop.stars1), 'звёзд сегодня') + tile(num(o.shop.stars30), 'за 30 дней') + tile(num(o.shop.starsAll), 'за всё время') + '</div></div></div>';
     h += '<div class="xd-row"><div><h4>Платформы</h4>' + hbars([['iOS', o.platforms.ios], ['Android', o.platforms.android], ['ПК', o.platforms.pc], ['Веб', o.platforms.web], ['нет данных', o.platforms.other]]) + '</div>' +
       '<div><h4>Языки</h4>' + hbars(o.langs.length ? o.langs.map(function (l) { return [l[0] || '—', l[1]]; }) : [['—', 0]]) + '</div></div>';
     return h + '<div class="xd-msg" style="padding:8px 0 0;font-size:10.5px">Сутки — по UTC. Числа обновляются раз в минуту (' + dt(o.at) + ').</div>';
@@ -233,6 +236,9 @@ function BVRDev(K) {
         return '<div class="xd-r"@G><span>' + dt(k.at) + '</span><span class="num">' + k.amount + '</span><span>' + (k.role === 'host' ? 'хост' : 'гость') + '</span><span>' + badge(k.status) + '</span><span>' + out + '</span><span>' + E(k.opp || '') + ' ' + k.oppId + '</span></div>';
       })) : msg('Ставок нет'));
     h += '<h4>Покупки звёзд</h4>' + (d.orders.length ? orders(d.orders, false) : msg('Покупок нет'));
+    h += '<h4>Монеты за звёзды</h4>' + (d.shop && d.shop.length ? table('.8fr .6fr .6fr minmax(0,1.5fr)', [['Когда'], ['Монеты', 1], ['Звёзды', 1], ['Ключ']],
+      d.shop.map(function (x) { return '<div class="xd-r"@G><span>' + dt(x.at) + '</span><span class="num pos">+' + x.coins + '</span><span class="num neg">−' + x.stars + '</span><span class="mono">' + E(x.idem) + '</span></div>'; }))
+      : msg('Обменов нет'));
     h += '<h4>Журнал (ledger)</h4>' + (d.ledger.length ? table('.8fr .55fr .5fr .9fr .55fr minmax(0,1fr)', [['Когда'], ['Валюта'], ['Сумма', 1], ['Причина'], ['Баланс', 1], ['Ссылка']],
       d.ledger.map(function (l) {
         return '<div class="xd-r"@G><span>' + dt(l.at) + '</span><span>' + (l.currency === 'stars' ? 'звёзды' : 'монеты') + '</span><span class="num ' + (l.delta < 0 ? 'neg' : 'pos') + '">' + (l.delta > 0 ? '+' : '') + l.delta +

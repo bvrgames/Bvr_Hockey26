@@ -177,12 +177,21 @@ export function d1Store(db) {
                     SUM(CASE WHEN status IN ('paid', 'refunded', 'unmatched') AND paid_at >= ? THEN price ELSE 0 END) AS x30,
                     SUM(CASE WHEN status IN ('paid', 'refunded', 'unmatched') THEN price ELSE 0 END) AS xall,
                     SUM(status = 'refunded') AS refunds, SUM(CASE WHEN status = 'refunded' THEN price ELSE 0 END) AS refundX,
-                    SUM(status = 'unmatched') AS unmatched FROM star_orders`).bind(t.today, t.d30),
+                    SUM(status = 'unmatched') AS unmatched, SUM(status = 'refunded' AND refund_short > 0) AS short,
+                    SUM(CASE WHEN status = 'refunded' THEN refund_short ELSE 0 END) AS shortStars FROM star_orders`).bind(t.today, t.d30),
         db.prepare('SELECT COALESCE(platform, \'\') AS k, COUNT(*) AS n FROM users GROUP BY k'),
         db.prepare('SELECT COALESCE(language_code, \'\') AS k, COUNT(*) AS n FROM users GROUP BY k ORDER BY n DESC LIMIT 8'),
+        db.prepare(`SELECT SUM(reason = 'coins_bought') AS n,
+                    SUM(CASE WHEN reason = 'coins_bought' AND created_at >= ? THEN delta ELSE 0 END) AS coins1,
+                    SUM(CASE WHEN reason = 'coins_bought' AND created_at >= ? THEN delta ELSE 0 END) AS coins30,
+                    SUM(CASE WHEN reason = 'coins_bought' THEN delta ELSE 0 END) AS coinsAll,
+                    SUM(CASE WHEN reason = 'stars_to_coins' AND created_at >= ? THEN -delta ELSE 0 END) AS stars1,
+                    SUM(CASE WHEN reason = 'stars_to_coins' AND created_at >= ? THEN -delta ELSE 0 END) AS stars30,
+                    SUM(CASE WHEN reason = 'stars_to_coins' THEN -delta ELSE 0 END) AS starsAll
+                    FROM ledger WHERE reason IN ('coins_bought', 'stars_to_coins')`).bind(t.today, t.d30, t.today, t.d30),
       ]);
       const R = (i) => r[i].results, F = (i) => r[i].results[0] || {};
-      return { users: F(0), newByDay: R(1), matchesByDay: R(2), matchStats: F(3), coins: { ...F(4), circ: F(0).circ }, stakes: F(5), stars: F(6), platforms: R(7), langs: R(8) };
+      return { users: F(0), newByDay: R(1), matchesByDay: R(2), matchStats: F(3), coins: { ...F(4), circ: F(0).circ }, stakes: F(5), stars: F(6), platforms: R(7), langs: R(8), shop: F(9) };
     },
     async adminPlayers({ q, id, sort, page, size }) {
       const where = q ? "WHERE (u.user_id = ? OR u.name LIKE ? ESCAPE '\\' OR u.username LIKE ? ESCAPE '\\')" : '';
@@ -212,17 +221,41 @@ export function d1Store(db) {
                     WHERE s.host_uid = ? OR s.guest_uid = ? ORDER BY s.created_at DESC LIMIT 20`).bind(id, id, id, id, id),
         db.prepare(`SELECT id, delta, currency, reason, ref, balance_after AS balance, created_at AS at FROM ledger WHERE user_id = ? ORDER BY id DESC LIMIT 50`).bind(id),
         db.prepare(`SELECT * FROM star_orders WHERE user_id = ? ORDER BY created_at DESC LIMIT 50`).bind(id),
+        db.prepare(`SELECT c.created_at AS at, c.delta AS coins, -s.delta AS stars, c.ref AS idem FROM ledger c
+                    LEFT JOIN ledger s ON s.user_id = c.user_id AND s.reason = 'stars_to_coins' AND s.ref = c.ref
+                    WHERE c.user_id = ? AND c.reason = 'coins_bought' ORDER BY c.id DESC LIMIT 50`).bind(id),
       ]);
-      return { user: r[0].results[0] || null, matches: r[1].results, stakes: r[2].results, ledger: r[3].results, orders: r[4].results.map(orderRow) };
+      return { user: r[0].results[0] || null, matches: r[1].results, stakes: r[2].results, ledger: r[3].results, orders: r[4].results.map(orderRow),
+               shop: r[5].results };
     },
     async adminPayments({ status, page, size }) {
-      const where = status ? 'WHERE o.status = ?' : '', args = status ? [status] : [];
+      const where = status === 'short' ? "WHERE o.status = 'refunded' AND o.refund_short > 0" : status ? 'WHERE o.status = ?' : '';
+      const args = status && status !== 'short' ? [status] : [];
       const r = await db.batch([
         db.prepare(`SELECT COUNT(*) AS n FROM star_orders o ${where}`).bind(...args),
         db.prepare(`SELECT o.*, u.name, u.username FROM star_orders o LEFT JOIN users u ON u.user_id = o.user_id ${where}
                     ORDER BY o.created_at DESC, o.id LIMIT ? OFFSET ?`).bind(...args, size, page * size),
       ]);
       return { total: r[0].results[0].n, rows: r[1].results.map((x) => ({ ...orderRow(x), name: x.name, username: x.username })) };
+    },
+    // ---- coins for stars (coins.js «coins for stars»): one batch; below zero stars → the trigger users_stars_nonneg aborts
+    // it ('funds'), the same idem again → the unique ledger(user_id, reason, ref) aborts it ('repeat')
+    async coinsBuy(p) {
+      try {
+        await db.batch([
+          db.prepare('UPDATE users SET stars = stars - ?, coins = coins + ?, updated_at = ? WHERE user_id = ?').bind(p.stars, p.coins, p.now, p.uid),
+          db.prepare(`INSERT INTO ledger (user_id, delta, currency, reason, ref, balance_after, created_at)
+                      VALUES (?, ?, 'stars', 'stars_to_coins', ?, (SELECT stars FROM users WHERE user_id = ?), ?)`).bind(p.uid, -p.stars, p.idem, p.uid, p.now),
+          db.prepare(`INSERT INTO ledger (user_id, delta, currency, reason, ref, balance_after, created_at)
+                      VALUES (?, ?, 'coins', 'coins_bought', ?, (SELECT coins FROM users WHERE user_id = ?), ?)`).bind(p.uid, p.coins, p.idem, p.uid, p.now),
+        ]);
+      } catch (e) {
+        const m = String(e && e.message);
+        if (/insufficient|NOT NULL/i.test(m)) return 'funds';
+        if (/UNIQUE|constraint/i.test(m)) return 'repeat';
+        throw e;
+      }
+      return 'ok';
     },
     async starsBalance(uid) { const r = await one('SELECT stars FROM users WHERE user_id = ?', uid); return r ? r.stars : 0; },
     async balance(uid) { const r = await one('SELECT coins FROM users WHERE user_id = ?', uid); return r ? r.coins : 0; },
