@@ -256,6 +256,9 @@ async function collect(g, tag) {
     await page.tap(noPortrait ? '#start .mscr.cur .mbrand' : '#rotate');
     await page.waitForTimeout(700);
     m = await page.evaluate('__hk.music()');
+    // iPhone silent switch: the audio session is «playback» where the browser has the API (Safari / WKWebView 16.4+)
+    ok((m.session === 'none' || m.session === 'playback') && m.ac === 'running', `audio session / context after the tap ${JSON.stringify(m)}`);
+    console.log(`note: audio session ${m.session}, AudioContext ${m.ac}`);
     ok(!m.blocked && m.playing && /^assets\/dist\/music-|\/assets\/dist\/music-/.test(m.src.replace(/^https?:\/\/[^/]+\//, '')), `after the first tap the music should play ${JSON.stringify(m)}`);
     await page.evaluate('__hk.start()');
     if (await inMatch(page, 'music fade')) {

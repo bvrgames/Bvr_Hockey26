@@ -1492,6 +1492,30 @@ function rgb(c){return 'rgb('+(c[0]|0)+','+(c[1]|0)+','+(c[2]|0)+')';}
 function mix(a,b,t){return [a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t];}
 
 /* ---------- звук ---------- */
+/* Беззвучный режим iPhone. WebKit играет Web Audio как «ambient» — переключатель «Без звука» его глушит.
+   navigator.audioSession.type='playback' (Safari / WKWebView с iOS 16.4) — звук игры идёт всегда, как у видео
+   (ставим до создания AudioContext). Где API нет (iOS старше): тихий зацикленный <audio> — пока он играет, WebKit
+   держит сессию «playback» и Web Audio тоже слышно (soundUnlock, с первого касания). Android беззвучный режим к звуку
+   медиа не применяет. Цена: «playback» на iPhone останавливает музыку других приложений, как любое видео. */
+var IOS_LIKE=/iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && (navigator.maxTouchPoints||0)>1);
+var SND={session:false, silent:null, off:false};
+try{ if(navigator.audioSession){ navigator.audioSession.type='playback'; SND.session=navigator.audioSession.type==='playback'; } }catch(e){}
+function silentWavUrl(){
+  var n=4000, b=new ArrayBuffer(44+n), v=new DataView(b), i;   /* 0.5 с тишины, 8 кГц, 8 бит */
+  function str(o,t){ for(var k=0;k<t.length;k++) v.setUint8(o+k,t.charCodeAt(k)); }
+  str(0,'RIFF'); v.setUint32(4,36+n,true); str(8,'WAVE'); str(12,'fmt '); v.setUint32(16,16,true); v.setUint16(20,1,true);
+  v.setUint16(22,1,true); v.setUint32(24,8000,true); v.setUint32(28,8000,true); v.setUint16(32,1,true); v.setUint16(34,8,true);
+  str(36,'data'); v.setUint32(40,n,true);
+  for(i=0;i<n;i++) v.setUint8(44+i,128);
+  return URL.createObjectURL(new Blob([b],{type:'audio/wav'}));
+}
+function silentLoop(){
+  if(SND.session || !IOS_LIKE || document.hidden) return;
+  try{
+    if(!SND.silent){ var a=new Audio(silentWavUrl()); a.loop=true; a.setAttribute('playsinline',''); a.setAttribute('x-webkit-airplay','deny'); SND.silent=a; }
+    if(SND.silent.paused){ var p=SND.silent.play(); if(p && p.catch) p.catch(function(){}); }
+  }catch(e){}
+}
 var AC=null,master=null,crowdGain=null;
 /* громкость из Настроек: музыка меню и звуки матча (0…1) */
 var VOL={mus:0.7, sfx:1};
@@ -6339,7 +6363,7 @@ MUSIC.next=function(){
   MUSIC.paint(true);
   if(MUSIC.cur>0 || MUSIC.want()) MUSIC.play();
 };
-MUSIC.want=function(){ return !MUSIC.off && state==='menu' && VOL.mus>0; };
+MUSIC.want=function(){ return !MUSIC.off && !SND.off && state==='menu' && VOL.mus>0; };
 MUSIC.play=function(){
   if(!MUSIC.el || MUSIC.pending) return;
   MUSIC.pending=true; MUSIC.apply();
@@ -6386,7 +6410,29 @@ MUSIC.paint=function(fade){
   if(fade && tx.innerHTML){ tx.classList.add('fade'); setTimeout(function(){ tx.innerHTML=html; tx.classList.remove('fade'); }, 450); }
   else tx.innerHTML=html;
 };
-['touchend','pointerdown','keydown','click'].forEach(function(ev){ window.addEventListener(ev, function(){ MUSIC.unlock(); }, true); });
+/* касание / клавиша: звук разрешён — AudioContext, тихая петля iPhone (беззвучный режим), музыка */
+function soundUnlock(){
+  if(document.hidden) return;
+  audioInit(); applySfx();
+  if(AC && AC.state!=='running'){ try{ AC.resume(); }catch(e){} }
+  silentLoop();
+  MUSIC.unlock();
+}
+['touchend','pointerdown','keydown','click'].forEach(function(ev){ window.addEventListener(ev, soundUnlock, true); });
+/* свернули игру (или Telegram свернул мини-приложение): звук на паузе — с «playback» он иначе играл бы в фоне */
+function soundPause(off){
+  SND.off=off;
+  if(off){
+    if(AC && AC.state==='running'){ try{ AC.suspend(); }catch(e){} }
+    if(MUSIC.el && !MUSIC.el.paused) MUSIC.el.pause();
+    if(SND.silent && !SND.silent.paused) SND.silent.pause();
+  } else {
+    if(AC && AC.state!=='running'){ try{ AC.resume(); }catch(e){} }
+    silentLoop();   /* музыку вернёт MUSIC.tick */
+  }
+}
+document.addEventListener('visibilitychange', function(){ soundPause(document.hidden); });
+try{ if(TG && TG.onEvent){ TG.onEvent('deactivated', function(){ soundPause(true); }); TG.onEvent('activated', function(){ soundPause(false); }); } }catch(e){}
 
 /* шрифт меню: грузится после показа меню, не задерживая его (до загрузки — системный) */
 function mFontLoad(){
@@ -7390,7 +7436,7 @@ window.__hk={hs:function(){return HS;},net:function(){return NET;},setCam:functi
   trainLoad:function(){ return new Promise(function(r){ trainLoad(r); }); }, trainJs:function(){ return TRAINJS.st; },
   trainState:function(){ return {on:TRAIN.on, i:TRAIN.i, key:TRAIN.L?TRAIN.L.key:null, n:TRAIN.n, tries:TRAIN.tries, t:+TRAIN.t.toFixed(2),
     res:TRAIN.res, prog:JSON.parse(JSON.stringify(TPROG)), medals:tMedals()}; },
-  music:function(){ return {off:MUSIC.off, blocked:MUSIC.blocked, name:MUSIC.name, playing:!!(MUSIC.el && !MUSIC.el.paused), cur:+MUSIC.cur.toFixed(2),
+  music:function(){ return {session:navigator.audioSession ? navigator.audioSession.type : 'none', silent:!!(SND.silent && !SND.silent.paused), ac:AC ? AC.state : 'none', off:MUSIC.off, blocked:MUSIC.blocked, name:MUSIC.name, playing:!!(MUSIC.el && !MUSIC.el.paused), cur:+MUSIC.cur.toFixed(2),
             vol:VOL.mus, routed:MUSIC.routed, src:MUSIC.el?MUSIC.el.currentSrc:''}; },
   tac:function(){return TACTIC;}, tacSet:function(t,v){TACTIC[t]=v;},
   rush:function(t,v){gkRush[t]=v;}, pause:function(){togglePause();},
