@@ -54,8 +54,8 @@ for (const o of ORIENT) {
     }
     await page.evaluate('__hk.train(3); __hk.trainBot(true)'); await page.waitForFunction('__hk.trainState().res', null, { timeout: 30000 }); await page.waitForTimeout(400); await shot('lesson-result');
     await page.evaluate("__hk.menu('main')"); await page.waitForTimeout(200);
-    await page.evaluate("__hk.menu('main'); __hk.menu('rules')"); await page.waitForTimeout(200); await shot('rules-controls');
-    await nav(['KeyE', 'ArrowDown', 'ArrowDown']); await shot('rules-hockey');
+    await page.evaluate("__hk.menu('main'); __hk.menu('settings'); __hk.menu('ctrl')"); await page.waitForTimeout(200); await shot('controls');
+    await page.evaluate("__hk.menu('main'); __hk.menu('train', 1)"); await page.waitForTimeout(200); await nav(['ArrowDown', 'ArrowDown']); await shot('train-rules');
     await page.evaluate("__hk.menu('main')"); await page.waitForTimeout(200);
     await page.evaluate('__hk.start()');
     await page.waitForFunction('__hk.st()==="play" || __hk.st()==="face"', null, { timeout: 60000 });

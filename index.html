@@ -298,7 +298,12 @@
   .mprof .pmini span{display:flex;flex-direction:column;align-items:center;gap:2px;padding:3px 2px;border-radius:7px;background:rgba(255,255,255,.06);
     font:700 7.5px/1 system-ui;letter-spacing:.06em;text-transform:uppercase;color:var(--mmute);white-space:nowrap;overflow:hidden}
   .mprof .pmini b{font:italic 800 14px/1 var(--msport);color:#fff;letter-spacing:0}
-  .mprof.on,.mprofbig.on,.mshop.on{box-shadow:0 0 0 2px var(--mgold),0 10px 30px rgba(0,0,0,.35)}
+  .mctl{display:flex;align-items:center;gap:10px;width:100%;max-width:380px;padding:9px 14px;cursor:pointer}
+  .mctl>span:first-child{display:flex;flex-direction:column;gap:3px;flex:1;min-width:0}
+  .mctl b{font:italic 800 19px/1.05 var(--msport);text-transform:uppercase}
+  .mctl i{font:600 12px/1.2 system-ui,-apple-system,sans-serif;font-style:normal;color:var(--mdim)}
+  .mctl .ar{font:800 26px/1 system-ui;color:var(--mgold)}
+  .mprof.on,.mprofbig.on,.mshop.on,.mctl.on{box-shadow:0 0 0 2px var(--mgold),0 10px 30px rgba(0,0,0,.35)}
   .mprof .pn,.mprofbig .pn{display:flex;flex-direction:column;gap:3px;min-width:0}
   .mprof .pn b{font:italic 800 16px/1 var(--msport);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .mprof .pn i{font:700 11px/1.1 system-ui;font-style:normal;color:var(--mdim);white-space:nowrap}
@@ -441,6 +446,8 @@
   .mtc svg{width:60%;height:auto;margin-top:3px;filter:drop-shadow(0 6px 10px rgba(0,0,0,.45))}
   .mvs{font:italic 800 26px/1 var(--msport);color:var(--mgold);text-shadow:0 0 18px rgba(255,209,102,.5);padding:0 2px}
   .mopts{display:flex;flex-direction:column;gap:4px}
+  /* низкий экран (Android 360 px): строки настроек плотнее, иначе список уходит под заголовок */
+  @media (max-height:380px){ .mopts{gap:2px} .mopts .mrow{min-height:30px;padding-top:3px;padding-bottom:3px} }
   .mwait{display:flex;align-items:center;gap:8px;font:700 12px/1.25 system-ui;color:var(--mcyan)}
   .mdot{width:9px;height:9px;border-radius:50%;background:var(--mcyan);flex:none;animation:mpulse 1.4s infinite}
   .mdot.ok{background:#5ad07f;animation:none}
@@ -1229,8 +1236,8 @@ ru:{
   qLow:'низкое', qMid:'среднее', qHigh:'высокое',
   rotate:'Поверни телефон горизонтально', noPauseOnline:'в онлайне паузы нет',
   min5:'5 мин', tapSnd:'🔊 коснись для звука', soon:'скоро',
-  mQuick:'Быстрый матч', mMode:'Режим игры', mTrain:'Тренировка', mRules:'Правила', mSettings:'Настройки',
-  mModeD:'Против компьютера или с другом', mTrainD:'Уроки с медалями', mRulesD:'Управление и правила хоккея',
+  mQuick:'Быстрый матч', mMode:'Режим игры', mTrain:'Тренировка', mSettings:'Настройки',
+  mModeD:'Против компьютера или с другом', mTrainD:'Уроки и правила хоккея',
   mSettingsD:'Язык, графика, звук, вибрация',
   mVsAI:'Против компьютера', mVsAID:'Ты и твоя команда против ИИ · 3 уровня сложности',
   mFriend:'С другом', mFriendD:'Приглашение в чат Telegram · матч считает сервер',
@@ -1245,7 +1252,7 @@ ru:{
   mLangD:'Язык игры. Выбор сохраняется.', mGfxD:'Авто — игра сама держит 60 кадров: на слабом телефоне снижает качество.',
   mFpsD:'Счётчик кадров в углу экрана во время матча.', mMusicD:'Музыка в меню. Когда начинается матч, она затихает.',
   mSfxD:'Звуки матча: клюшки, броски, свисток, трибуны.', mVibD:'Лёгкая отдача: гол, силовой, нажатия в меню.',
-  mCtrl:'Управление', mHockey:'Правила хоккея', mTouch:'Экран', mKbd:'Клавиатура', mPad:'Геймпад',
+  mCtrl:'Управление', mCtrlD:'Что делают кнопки и жесты — на экране, клавиатуре и геймпаде.', tLessons:'Уроки', mHockey:'Правила хоккея', mTouch:'Экран', mKbd:'Клавиатура', mPad:'Геймпад',
   mStickL:'Левая половина экрана — джойстик', mMove:'движение', mPauseK:'пауза', mSwitch:'смена игрока', mPress:'прессинг (держать)',
   mTacK:'тактика', mDpad:'крестовина',
   rOff:'Офсайд', rOffD:'Нельзя въезжать в зону соперника раньше шайбы. Загорелось «офсайд» — выйди за синюю линию, и игра пойдёт дальше. Тронешь шайбу в зоне — свисток и вбрасывание.',
@@ -1320,8 +1327,8 @@ en:{
   qLow:'low', qMid:'medium', qHigh:'high',
   rotate:'Turn your phone sideways', noPauseOnline:'no pause in online matches',
   min5:'5 min', tapSnd:'🔊 tap for sound', soon:'soon',
-  mQuick:'Quick match', mMode:'Game mode', mTrain:'Training', mRules:'Rules', mSettings:'Settings',
-  mModeD:'Against the computer or a friend', mTrainD:'Lessons with medals', mRulesD:'Controls and hockey rules',
+  mQuick:'Quick match', mMode:'Game mode', mTrain:'Training', mSettings:'Settings',
+  mModeD:'Against the computer or a friend', mTrainD:'Lessons and hockey rules',
   mSettingsD:'Language, graphics, sound, vibration',
   mVsAI:'Vs computer', mVsAID:'You and your team against the AI · 3 difficulty levels',
   mFriend:'With a friend', mFriendD:'Invite in a Telegram chat · the server runs the match',
@@ -1336,7 +1343,7 @@ en:{
   mLangD:'Game language. Your choice is saved.', mGfxD:'Auto keeps 60 fps: the game lowers quality on a slow phone.',
   mFpsD:'Frame counter in the corner during a match.', mMusicD:'Menu music. It fades out when a match starts.',
   mSfxD:'Match sounds: sticks, shots, whistle, crowd.', mVibD:'Light feedback: goals, hits, menu taps.',
-  mCtrl:'Controls', mHockey:'Hockey rules', mTouch:'Touch', mKbd:'Keyboard', mPad:'Gamepad',
+  mCtrl:'Controls', mCtrlD:'What each button and gesture does — touch, keyboard and gamepad.', tLessons:'Lessons', mHockey:'Hockey rules', mTouch:'Touch', mKbd:'Keyboard', mPad:'Gamepad',
   mStickL:'Left half of the screen is the stick', mMove:'move', mPauseK:'pause', mSwitch:'switch player', mPress:'press (hold)',
   mTacK:'tactics', mDpad:'D-pad',
   rOff:'Offside', rOffD:'Do not enter the attacking zone ahead of the puck. When OFFSIDE lights up, skate back over the blue line and play goes on. Touch the puck in the zone — whistle and a faceoff.',
@@ -1413,8 +1420,8 @@ id:{
   qLow:'rendah', qMid:'sedang', qHigh:'tinggi',
   rotate:'Putar HP ke posisi mendatar', noPauseOnline:'tidak ada jeda di mode online',
   min5:'5 mnt', tapSnd:'🔊 ketuk untuk suara', soon:'segera',
-  mQuick:'Main cepat', mMode:'Mode permainan', mTrain:'Latihan', mRules:'Aturan', mSettings:'Pengaturan',
-  mModeD:'Lawan komputer atau teman', mTrainD:'Pelajaran dengan medali', mRulesD:'Kontrol dan aturan hoki',
+  mQuick:'Main cepat', mMode:'Mode permainan', mTrain:'Latihan', mSettings:'Pengaturan',
+  mModeD:'Lawan komputer atau teman', mTrainD:'Pelajaran dan aturan hoki',
   mSettingsD:'Bahasa, grafis, suara, getar',
   mVsAI:'Lawan komputer', mVsAID:'Kamu dan timmu melawan AI · 3 tingkat kesulitan',
   mFriend:'Dengan teman', mFriendD:'Undang di chat Telegram · server menjalankan laga',
@@ -1429,7 +1436,7 @@ id:{
   mLangD:'Bahasa game. Pilihanmu disimpan.', mGfxD:'Otomatis menjaga 60 fps: kualitas turun di ponsel yang lambat.',
   mFpsD:'Penghitung frame di sudut layar saat laga.', mMusicD:'Musik menu. Pelan-pelan hilang saat laga dimulai.',
   mSfxD:'Suara laga: tongkat, tembakan, peluit, penonton.', mVibD:'Getar ringan: gol, benturan, ketukan menu.',
-  mCtrl:'Kontrol', mHockey:'Aturan hoki', mTouch:'Layar', mKbd:'Keyboard', mPad:'Gamepad',
+  mCtrl:'Kontrol', mCtrlD:'Fungsi tiap tombol dan gerakan — layar, keyboard, dan gamepad.', tLessons:'Pelajaran', mHockey:'Aturan hoki', mTouch:'Layar', mKbd:'Keyboard', mPad:'Gamepad',
   mStickL:'Separuh kiri layar adalah stik', mMove:'gerak', mPauseK:'jeda', mSwitch:'ganti pemain', mPress:'menekan (tahan)',
   mTacK:'taktik', mDpad:'D-pad',
   rOff:'Offside', rOffD:'Jangan masuk zona lawan sebelum keping. Saat OFFSIDE menyala, keluar lewat garis biru dan permainan lanjut. Sentuh keping di zona — peluit dan face-off.',
@@ -5524,7 +5531,7 @@ var selMy=0, selOp=3, selMin=3, selTac=0;
 var ONLINE=false;
 var MIN_OPTS=[1,3,5];
 var MENU={stack:['main'], foc:{}, ready:false, via:'touch', lastL:undefined, pad:{}, rep:{k:null,t:0}, bb:null,
-          rulesTab:0, dev:-1, topic:0, friendMode:'create', ctrlOnly:false, sec:{}};
+          trainTab:0, dev:-1, topic:0, friendMode:'create', sec:{}};
 try{ if(window.matchMedia && matchMedia('(pointer:fine)').matches) MENU.via='key'; }catch(e){}
 
 /* последний матч против ИИ — для «Быстрого матча» (CloudStorage + localStorage) */
@@ -5618,7 +5625,7 @@ var MSCR={
     return mHead('', '<div class="mlang mf mlast" data-adj="lang" data-ord="2">'+lg+'</div>', true)+
       '<div class="mleft"><div class="mlist">'+mItem('quick',T('mQuick'),qd)+mItem('mode',T('mMode'),T('mModeD'))+
       mItem('train',T('mTrain'),T('mTrainD')+' · '+T('tMedalsP')+' '+tMedals()+' / 30')+
-      mItem('shop',T('mShop'),T('mShopD'))+mItem('rules',T('mRules'),T('mRulesD'))+mItem('settings',T('mSettings'),T('mSettingsD'))+
+      mItem('shop',T('mShop'),T('mShopD'))+mItem('settings',T('mSettings'),T('mSettingsD'))+
       (EXT && EXT.ok ? mItem('ext',EXT.label) : '')+'</div></div>'+
       '<div class="mright"><div class="mprof mglass mf mlast" data-act="profile" data-ord="1">'+mAvatar()+'<span class="pn"><b>'+mEsc(mUserName())+'</b>'+
       '<i>'+mEsc(T('mProfile'))+' · '+PROF.w+'–'+PROF.d+'–'+PROF.l+'</i></span>'+
@@ -5654,8 +5661,10 @@ var MSCR={
       '<div class="mrow mf" data-adj="gfx" data-info="mGfxD"><span class="k">'+mEsc(T('mGfx'))+'</span><span class="v mseg" id="qT">'+q+'</span></div>'+
       mRow('fps',T('mFps'),mTog(SHOWFPS),'',' data-info="mFpsD"')+(inPause?'':mRow('mus',T('mMusic'),mBar('mus',VOL.mus),'',' data-info="mMusicD"'))+
       mRow('sfx',T('mSfx'),mBar('sfx',VOL.sfx),'',' data-info="mSfxD"')+mRow('vib',T('mVib'),mTog(VIBRO),'',' data-info="mVibD"');
+    /* «Управление» — отдельный блок справа: открывает схему кнопок (экран, клавиатура, геймпад) */
     return mHead(T('mSettings'))+'<div class="mleft"><div class="mopts">'+rows+'</div></div>'+
-      '<div class="mright"><div class="mcard mglass" data-paint="setR"></div></div>';
+      '<div class="mright"><div class="mcard mglass" data-paint="setR"></div>'+
+      '<div class="mctl mglass mf" data-act="ctrl" data-info="mCtrlD"><span><b>'+mEsc(T('mCtrl'))+'</b><i>'+mEsc(T('mTouch')+' · '+T('mKbd')+' · '+T('mPad'))+'</i></span><span class="ar">›</span></div></div>';
   },
   welcome:function(){
     return mHead(T('mTrain'))+'<div class="mleft"><div class="mwel">'+
@@ -5664,13 +5673,21 @@ var MSCR={
       '<div class="mright"><div class="mteams"><div class="mtc mglass ro">'+mJersey(CLUBS[0],'9')+'<div class="nm">2 '+mEsc(T('tMin'))+'</div></div></div></div>';
   },
   train:function(){
+    var tabs='';
+    [['tLessons',0],['mHockey',1]].forEach(function(o){ tabs+='<span class="mtab'+(MENU.trainTab===o[1]?' cur':'')+'" data-tab="'+o[1]+'">'+mEsc(T(o[0]))+'</span>'; });
+    /* вкладки — в шапке, в порядке фокуса последние: вход на экран — сразу на первый урок */
+    var head=mHead(T('mTrain'), '<div class="mtabs mf mlast" data-adj="ttab" style="margin-left:auto">'+tabs+'</div>'+
+      '<span class="mpill">'+mEsc(T('tMedalsP'))+' '+tMedals()+' / 30</span>');
     var it='';
+    if(MENU.trainTab===1){
+      RULES.forEach(function(r,i){ it+=mItem('topic',T(r[0]),'','','',' data-i="'+i+'"'); });
+      return head+'<div class="mleft"><div class="mlist sm">'+it+'</div></div><div class="mright"><div class="mcard mglass mrule" data-paint="ruleR"></div></div>';
+    }
     for(var i=0;i<11;i++){
       var pr=TPROG.l[LESSONS[i].key]||{}, md=i<10 ? '<span class="md '+(['e','b','s','g'][pr.m|0])+'"></span>' : '';
       it+='<div class="mi mf'+(pr.done?' ok':'')+'" data-act="lesson" data-i="'+i+'"><span class="n">'+(i<10?i+1:'∞')+'</span><span class="t">'+mEsc(LT(i).n)+'</span>'+md+'</div>';
     }
-    return mHead(T('mTrain'), '<span class="mpill">'+mEsc(T('tMedalsP'))+' '+tMedals()+' / 30</span>')+
-      '<div class="mleft"><div class="mles">'+it+'</div></div><div class="mright"><div class="mcard mglass mlcard" data-paint="lessonR"></div></div>';
+    return head+'<div class="mleft"><div class="mles">'+it+'</div></div><div class="mright"><div class="mcard mglass mlcard" data-paint="lessonR"></div></div>';
   },
   profile:function(){
     var st=[['pMatches',PROF.m],['pWins',PROF.w],['pDraws',PROF.d],['pLosses',PROF.l],['pGoals',PROF.g+' : '+PROF.ga],['pBest',PROF.best],['pOnline',PROF.online]];
@@ -5709,20 +5726,10 @@ var MSCR={
       '<div class="mleft">'+c+'<div class="mshopg'+(cs?' sm':'')+'">'+h+'</div>'+(cs?'':'<div class="mnote dim" style="margin-top:8px">'+
       mEsc(T(COINS===null?'shSoon':'shEarn')).replace('{c}', icHtml('coin'))+'</div>')+'</div>';
   },
-  rules:function(){
-    var tabs='';
-    if(!MENU.ctrlOnly){
-      [['mCtrl',0],['mHockey',1]].forEach(function(o){ tabs+='<span class="mtab'+(MENU.rulesTab===o[1]?' cur':'')+'" data-tab="'+o[1]+'">'+mEsc(T(o[0]))+'</span>'; });
-      tabs='<div class="mtabs mf" data-adj="tab" style="margin-left:auto">'+tabs+'</div>';
-    }
-    var title=MENU.ctrlOnly?T('mCtrl'):T('mRules');
-    if(MENU.ctrlOnly || MENU.rulesTab===0){
-      var live=autoDev(), dv=''; [['mTouch',0],['mKbd',1],['mPad',2]].forEach(function(o){ dv+='<span class="mtab'+(curDev()===o[1]?' cur':'')+(live===o[1]?' live':'')+'" data-dev="'+o[1]+'">'+mEsc(T(o[0]))+'</span>'; });
-      return mHead(title, tabs)+'<div class="mleft"><div class="mtabs mf" data-adj="dev" style="margin-bottom:8px">'+dv+'</div>'+
-        '<div class="mscheme">'+ctrlScheme(curDev())+'</div></div><div class="mright">'+ctrlTable(curDev())+'</div>';
-    }
-    var it=''; RULES.forEach(function(r,i){ it+=mItem('topic',T(r[0]),'','','',' data-i="'+i+'"'); });
-    return mHead(title, tabs)+'<div class="mleft"><div class="mlist sm">'+it+'</div></div><div class="mright"><div class="mcard mglass mrule" data-paint="ruleR"></div></div>';
+  ctrl:function(){
+    var live=autoDev(), dv=''; [['mTouch',0],['mKbd',1],['mPad',2]].forEach(function(o){ dv+='<span class="mtab'+(curDev()===o[1]?' cur':'')+(live===o[1]?' live':'')+'" data-dev="'+o[1]+'">'+mEsc(T(o[0]))+'</span>'; });
+    return mHead(T('mCtrl'))+'<div class="mleft"><div class="mtabs mf" data-adj="dev" style="margin-bottom:8px">'+dv+'</div>'+
+      '<div class="mscheme">'+ctrlScheme(curDev())+'</div></div><div class="mright">'+ctrlTable(curDev())+'</div>';
   }
 };
 var SHOP_ICON={
@@ -5849,12 +5856,13 @@ var MPAINT={
     Array.prototype.forEach.call(el.querySelectorAll('[data-slot]'), function(s){ var n=H[s.getAttribute('data-slot')]; if(n) s.appendChild(n); });
   },
   setR:function(el){
-    var f=MENU.focusedEl('settings'), k=(f && f.getAttribute('data-info'))||'mGfxD', row=f&&f.querySelector('.k');
+    var f=MENU.focusedEl('settings'), k=(f && f.getAttribute('data-info'))||'mGfxD', row=f&&f.querySelector('.k,b');
     el.innerHTML='<h3>'+mEsc(row?row.textContent:T('mGfx'))+'</h3><div class="mnote">'+mEsc(T(k))+'</div>'+
       '<div class="mnote dim" style="margin-top:6px">'+mEsc(T('mDevD'))+'</div>';
   },
   lessonR:function(el){
-    var f=MENU.focusedEl('train'), i=f && f.getAttribute('data-i')!==null ? +f.getAttribute('data-i') : 0;
+    var f=MENU.focusedEl('train'), i=f && f.getAttribute('data-act')==='lesson' ? +f.getAttribute('data-i') : (MENU.lesI||0);
+    MENU.lesI=i;
     var L=LESSONS[i], lt=LT(i), pr=TPROG.l[L.key]||{};
     if(L.free){ el.innerHTML='<h3>'+mEsc(lt.n)+'</h3><div class="mnote">'+mEsc(T('tFreeD'))+'</div><button class="mbtn mf" data-act="lstart" data-i="'+i+'">'+mEsc(T('tStart'))+'</button>'; return; }
     var g='<div>✓ '+mEsc(T('tDone'))+': '+mEsc(lt.d)+'</div>';
@@ -5884,7 +5892,8 @@ var MPAINT={
     else el.innerHTML=k ? ((st==='make'||st==='wait'||!PACKS)?'<span class="mdot"></span>':'')+mEsc(T(k)) : '';
   },
   ruleR:function(el){
-    var f=MENU.focusedEl('rules'), i=f&&f.getAttribute('data-i')!==null ? +f.getAttribute('data-i') : 0;
+    var f=MENU.focusedEl('train'), i=f&&f.getAttribute('data-act')==='topic' ? +f.getAttribute('data-i') : (MENU.ruleI||0);
+    MENU.ruleI=i;
     el.innerHTML=RULE_ICON[i]+'<h3>'+mEsc(T(RULES[i][0]))+'</h3><div class="mnote">'+mEsc(T(RULES[i][1]))+'</div>';
   }
 };
@@ -5983,7 +5992,7 @@ MENU.adjEl=function(el, d, ev){
 };
 MENU.tabs=function(d){
   if(MENU.layer()==='menu' && MENU.top()==='ext' && EXT.mod){ EXT.mod.tabs(d); return; }
-  if(MENU.layer()==='menu' && MENU.top()==='rules' && !MENU.ctrlOnly){ MENU.rulesTab=(MENU.rulesTab+d+2)%2; MENU.show(); }
+  if(MENU.layer()==='menu' && MENU.top()==='train'){ trainTab((MENU.trainTab+d+2)%2, false); }
 };
 MENU.back=function(){
   var L=MENU.layer();
@@ -6026,8 +6035,8 @@ MENU.paintHints=function(){
   var top=MENU.top(), v=MENU.via, h='';
   function hint(pad, key, txt){ return '<span class="mh">'+(v==='pad'?pad:key)+mEsc(T(txt))+'</span>'; }
   if(v!=='touch'){
-    var adjS=(top==='prep'||top==='settings'||top==='rules');
-    if((top==='rules' && !MENU.ctrlOnly) || top==='ext') h+=hint(mg('LB')+mg('RB'), mk('Q')+mk('E'), 'mTabs');
+    var adjS=(top==='prep'||top==='settings'||top==='ctrl');
+    if(top==='train' || top==='ext') h+=hint(mg('LB')+mg('RB'), mk('Q')+mk('E'), 'mTabs');
     if(adjS) h+=hint(mg('◀▶'), mk('← →'), 'mChange');
     h+=hint(mg('A'), mk('Enter'), 'mSelect');
     if(top!=='main') h+=hint(mg('B'), mk('Esc'), 'mBack');
@@ -6118,7 +6127,7 @@ var ACT={
   back:function(){ MENU.back(); },
   quick:function(){ ONLINE=false; netLeave(); selFromLast(); goStart(); },
   mode:function(){ MENU.go('mode'); },
-  rules:function(){ MENU.ctrlOnly=false; MENU.dev=-1; MENU.go('rules'); },
+  ctrl:function(){ MENU.dev=-1; MENU.go('ctrl'); },
   settings:function(){ MENU.go('settings'); },
   vsai:function(){ ONLINE=false; netLeave(); selFromLast(); MENU.go('prep'); },
   friend:function(){ ONLINE=true; MENU.friendMode='create'; MENU.go('friend'); },
@@ -6132,7 +6141,7 @@ var ACT={
   go:function(){ goStart(); },
   topic:function(){},
   noop:function(){},
-  train:function(){ trainLoad(); MENU.go('train'); },
+  train:function(){ trainLoad(); MENU.trainTab=0; MENU.go('train'); },
   wgo:function(){ onboardDone(); trainStart(0); },
   wlater:function(){ onboardDone(); MENU.setStack(['main']); },
   lesson:function(el){ trainStart(+el.getAttribute('data-i')); },
@@ -6148,7 +6157,7 @@ var ACT={
   ext:function(){ extOpen(); },
   x:function(el, ev){ if(EXT.mod) EXT.mod.act(el.getAttribute('data-x'), el, ev); },
   resume:function(){ setPaused(false); },
-  pctrl:function(){ openPauseSub('rules'); },
+  pctrl:function(){ openPauseSub('ctrl'); },
   pset:function(){ openPauseSub('settings'); },
   menu:function(){ backToMenu(); },
   again:function(){ if(TRAIN.on) trainStart(TRAIN.i); else startMatchAgain(); }
@@ -6179,14 +6188,23 @@ var ADJ={
   mus:function(el, d, ev){ VOL.mus=barVal(ev, el, VOL.mus, d); prefSet('music', String(VOL.mus)); MUSIC.apply(); MENU.build(MENU.top()); MENU.refocus(); },
   sfx:function(el, d, ev){ VOL.sfx=barVal(ev, el, VOL.sfx, d); prefSet('sfx', String(VOL.sfx)); applySfx(); MENU.build(MENU.top()); MENU.refocus(); },
   vib:function(){ VIBRO=!VIBRO; prefSet('vibro', VIBRO?'1':'0'); if(VIBRO) buzz(12,'soft'); MENU.build(MENU.top()); MENU.refocus(); },
-  tab:function(el, d, ev){ var t=mPick(ev,'data-tab'); MENU.rulesTab = t!==null ? +t : (MENU.rulesTab+d+2)%2; MENU.show(); },
+  ttab:function(el, d, ev){ var t=mPick(ev,'data-tab'); trainTab(t!==null ? +t : (MENU.trainTab+d+2)%2, true); },
   x:function(el, d, ev){ if(EXT.mod) EXT.mod.adj(el.getAttribute('data-x'), el, d, ev); },
-  dev:function(el, d, ev){ var t=mPick(ev,'data-dev'); MENU.dev = t!==null ? +t : (curDev()+d+3)%3; MENU.build('rules'); MENU.refocus(); }
+  dev:function(el, d, ev){ var t=mPick(ev,'data-dev'); MENU.dev = t!==null ? +t : (curDev()+d+3)%3; MENU.build('ctrl'); MENU.refocus(); }
 };
+
+/* «Тренировка»: вкладки «Уроки» и «Правила хоккея». keepTabs — фокус остаётся на вкладках (касание, ← →) */
+function trainTab(t, keepTabs){
+  if(t===MENU.trainTab) return;
+  MENU.trainTab=t; MENU.build('train');
+  var it=MENU.items('menu');
+  MENU.foc.train=keepTabs ? it.length-1 : 0;
+  MENU.show(true);
+}
 
 /* ---------- пауза: подэкраны в #start поверх матча ---------- */
 function openPauseSub(id){
-  MENU.ctrlOnly=(id==='rules'); MENU.dev=-1;
+  MENU.dev=-1;
   document.getElementById('pausescr').style.display='none';
   var st=document.getElementById('start'); st.style.display='block';
   MENU.stack=['@pause', id]; MENU.foc[id]=0;
@@ -6195,7 +6213,7 @@ function openPauseSub(id){
 function closePauseSub(){
   if(MENU.stack[0]!=='@pause') return;
   var st=document.getElementById('start'); st.style.display='none'; st.classList.remove('overgame');
-  MENU.stack=['main']; MENU.ctrlOnly=false;
+  MENU.stack=['main'];
   if(PAUSED) document.getElementById('pausescr').style.display='flex';
 }
 function paintPause(){
@@ -7368,7 +7386,7 @@ window.__hk={hs:function(){return HS;},net:function(){return NET;},setCam:functi
   lt:function(p){lastTouch=p;}, pz:function(){return prevZone;},
   lang:function(c){ setLang(c); },
   /* меню: menu('prep') — открыть экран; menuState() — слой, стек, фокус; music() — состояние музыки */
-  menu:function(id, tab){ if(tab!==undefined) MENU.rulesTab=tab; if(id==='main') MENU.setStack(['main']); else MENU.go(id); },
+  menu:function(id, tab){ if(tab!==undefined) MENU.trainTab=tab; if(id==='main') MENU.setStack(['main']); else MENU.go(id); },
   menuState:function(){ var L=MENU.layer(), it=MENU.items(L), f=it[Math.min(MENU.foc[MENU.key(L)]||0, it.length-1)];
     return {layer:L, stack:MENU.stack.slice(), focus:f?(f.getAttribute('data-act')||f.getAttribute('data-adj')||f.id):null, n:it.length,
             sel:{my:selMy, op:selOp, min:selMin, tac:selTac, diff:DIFF}, online:ONLINE, via:MENU.via, back:MENU.bb, matchMin:MATCH_MIN}; },

@@ -118,7 +118,7 @@ async function collect(g, tag) {
       await keys(page, ['Escape']);
       s = await MS(page); ok(s.layer === 'pause' && s.focus === 'resume', `keyboard: pause ${JSON.stringify(s)}`);
       await keys(page, ['ArrowDown', 'Enter']);                    // Controls
-      s = await MS(page); ok(s.layer === 'menu' && s.stack.join() === '@pause,rules', `keyboard: Controls from the pause ${JSON.stringify(s)}`);
+      s = await MS(page); ok(s.layer === 'menu' && s.stack.join() === '@pause,ctrl', `keyboard: Controls from the pause ${JSON.stringify(s)}`);
       await keys(page, ['ArrowRight']);                            // another device tab
       await keys(page, ['Escape']);
       s = await MS(page); ok(s.layer === 'pause' && s.focus === 'pctrl', `keyboard: Esc from Controls should return to the pause, on Controls ${JSON.stringify(s)}`);
@@ -146,8 +146,19 @@ async function collect(g, tag) {
       s = await MS(page); ok(s.stack.join() === 'main,shop', `keyboard: shop ${JSON.stringify(s)}`);
       await keys(page, ['ArrowRight', 'Escape']);
     }
+    // no «Rules» on the main menu: Controls live in Settings, hockey rules — a tab of Training
+    ok(!(await page.evaluate("document.querySelector('#start .mscr.cur [data-act=\"rules\"]')")), 'main menu: the Rules item is still there');
+    await to(page, 'settings'); await to(page, 'ctrl', false); await keys(page, ['Enter']);
+    s = await MS(page); ok(s.stack.join() === 'main,settings,ctrl', `keyboard: Controls from Settings ${JSON.stringify(s)}`);
+    await keys(page, ['Escape', 'Escape']);
+    await to(page, 'train');
+    s = await MS(page); ok(s.stack.join() === 'main,train' && s.focus === 'lesson', `keyboard: Training ${JSON.stringify(s)}`);
+    await keys(page, ['KeyE']);
+    const rl = await page.evaluate("({n: document.querySelectorAll('#start .mscr.cur [data-act=\"topic\"]').length, card: !!document.querySelector('#start .mscr.cur .mrule svg')})");
+    s = await MS(page); ok(rl.n === 6 && rl.card && s.focus === 'topic', `keyboard: the hockey rules tab in Training ${JSON.stringify(rl)} ${JSON.stringify(s)}`);
+    await keys(page, ['KeyQ', 'Escape']);
     // Settings: language (Right) and music volume (Left), then reload
-    await to(page, 'settings');
+    await to(page, 'settings'); await to(page, 'lang', false);   // the screen remembers its focus (Controls, above)
     s = await MS(page); ok(s.stack.join() === 'main,settings' && s.focus === 'lang', `keyboard: Settings ${JSON.stringify(s)}`);
     await keys(page, ['ArrowRight']);                              // ru → en
     const t = await page.evaluate("document.querySelector('#start .mscr.cur .mtitle').textContent");
