@@ -2466,7 +2466,8 @@ function simCfg(){
    Убрать — отдельной задачей с новой базой balance. */
 var FX={trauma:0, t:0, ph:0, s:0x2545f491, old:0,
         zoom:0, streak:0, trail:[], parts:[],    /* толчок камеры, шлейф шайбы (с), частицы — см. ниже */
-        edge:0, edgeMax:0, pulse:false};         /* вспышка по краям: осталось / длительность (с), пульсирует ли */
+        edge:0, edgeMax:0, pulse:false,          /* вспышка по краям: осталось / длительность (с), пульсирует ли */
+        ring:null};                              /* кольцо на штанге {x,y,z,t} */
 var FX_TIER={s:0.40, m:0.70, l:0.85};    /* травма за малый / средний / большой удар */
 var FX_AMP=0.035, FX_DECAY=2.2;          /* сдвиг проекции при травме 1; потеря травмы в секунду */
 function fxRand(){
@@ -2486,6 +2487,7 @@ function fxUpdate(dt){
   if(FX.zoom>0){ FX.zoom*=Math.exp(-dt*14); if(FX.zoom<1e-4) FX.zoom=0; }   /* ~0.15 с назад */
   if(FX.streak>0){ FX.streak=Math.max(0, FX.streak-dt); if(!FX.streak) FX.trail.length=0; }
   if(FX.edge>0) FX.edge=Math.max(0, FX.edge-dt);
+  if(FX.ring && (FX.ring.t+=dt)>0.25) FX.ring=null;
   for(var i=FX.parts.length-1;i>=0;i--){
     var q=FX.parts[i];
     q.x+=q.vx*dt; q.y+=q.vy*dt; q.z+=q.vz*dt; q.vy-=9*dt; q.life-=dt;
@@ -2494,7 +2496,7 @@ function fxUpdate(dt){
   }
   FX.t+=dt;
 }
-function fxReset(){ FX.trauma=0; FX.old=0; FX.zoom=0; FX.streak=0; FX.trail.length=0; FX.parts.length=0; FX.edge=0; }
+function fxReset(){ FX.trauma=0; FX.old=0; FX.zoom=0; FX.streak=0; FX.trail.length=0; FX.parts.length=0; FX.edge=0; FX.ring=null; }
 /* вспышка по краям экрана: цвет, длительность, пульс (гол). «Меньше тряски» — без вспышек */
 var fxEdgeEl=null, _fxEdgeOp=0;
 function fxEdge(col, dur, pulse){
@@ -2531,15 +2533,31 @@ function fxShot(p, power){
   var se=stickEnd(p); fxBurst(se[0], se[1], 10, 'ice');
   if(power>0.7 && QC().spray>0){ FX.streak=0.2; FX.trail.length=0; }
 }
-function fxBusy(){ return FX.parts.length>0 || FX.streak>0; }
+/* штанга: у события нет координат — берём шайбу, какой её видно (у гостя — предсказанную) */
+function fxPost(){
+  fxBurst(puck.x, puck.z, 10, 'spark'); fxBurst(puck.x, puck.z, 6, 'ice');
+  if(QC().spray>0) FX.ring={x:puck.x, y:Math.max(0.3,puck.y), z:puck.z, t:0};
+}
+function fxBusy(){ return FX.parts.length>0 || FX.streak>0 || !!FX.ring; }
 /* на накладке: частицы и шлейф шайбы (последние положения шайбы на экране, тает за 0.2 с) */
 function fxDraw(c){
   for(var i=0;i<FX.parts.length;i++){
     var q=FX.parts[i], s=pt(q.x,q.y,q.z);
     if(s[2]<1) continue;
     c.globalAlpha=clamp(q.life/q.max,0,1);
-    c.fillStyle=q.k==='spark'?'#ffd166':'#9fc3e6';     /* крошка голубоватая: белая на белом льду не видна */
+    c.fillStyle=q.k==='spark'?'#ffa31a':'#9fc3e6';     /* искры оранжевые, крошка голубоватая: белое на льду не видно */
     c.beginPath(); c.arc(s[0],s[1],Math.max(1.2,F/s[2]*(q.k==='spark'?0.04:0.065)),0,6.283); c.fill();
+  }
+  if(FX.ring){
+    var r=FX.ring, rs=pt(r.x,r.y,r.z), k=r.t/0.25;
+    if(rs[2]>1){
+      /* на белом льду белое не видно: золото с тёмной каймой */
+      var rr=F/rs[2]*(0.15+k*0.75), lw=Math.max(1.5,F/rs[2]*0.05);
+      c.globalAlpha=(1-k)*0.45; c.strokeStyle='#3a2a00'; c.lineWidth=lw*2.2;
+      c.beginPath(); c.arc(rs[0],rs[1],rr,0,6.283); c.stroke();
+      c.globalAlpha=(1-k); c.strokeStyle='#ffd166'; c.lineWidth=lw;
+      c.beginPath(); c.arc(rs[0],rs[1],rr,0,6.283); c.stroke();
+    }
   }
   if(FX.streak>0){
     FX.trail.push(pt(puck.x,puck.y,puck.z)); if(FX.trail.length>7) FX.trail.shift();
@@ -6980,7 +6998,7 @@ EV.on('hit',     function(e){
   if(!e.clean) flash(T('penalty'),T('penaltySub'),1.6);
   else if(e.hard) flash(T('hit'),'',0.8);
 });
-EV.on('post',    function(){ SFX.post(); buzz(30,'hard'); fxKick('m',7,12); });
+EV.on('post',    function(){ SFX.post(); buzz(30,'hard'); fxKick('m',7,12); fxPost(); });
 EV.on('save',    function(e){ SFX.save(); if(e.kind==='line') flash(T('save'),'',0.7); });
 EV.on('goal',    function(e){ SFX.whistle(); SFX.horn(); buzz([60,50,120],'goal');
                               flash(T('goal'), e.t===HUMAN?T('ourGoal'):T('theirGoal'), 1.4); });
@@ -7707,7 +7725,7 @@ window.__hk={hs:function(){return HS;},net:function(){return NET;},setCam:functi
     return __hk.fxState();
   },
   fxState:function(){ return {trauma:+FX.trauma.toFixed(3), zoom:+FX.zoom.toFixed(4), streak:+FX.streak.toFixed(3),
-    parts:FX.parts.length, edge:+FX.edge.toFixed(3), pulse:FX.pulse, less:SHAKE_LESS}; },
+    parts:FX.parts.length, edge:+FX.edge.toFixed(3), pulse:FX.pulse, ring:!!FX.ring, less:SHAKE_LESS}; },
   benchGpu:function(n,skip){ n=n||60; var bx=players.map(function(p){ return p.boxed; });
     if(skip) players.forEach(function(p){ p.boxed=true; });
     RDT=1/60; render(); gl.readPixels(0,0,1,1,gl.RGBA,gl.UNSIGNED_BYTE,_px1);
