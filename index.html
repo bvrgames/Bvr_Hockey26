@@ -2115,6 +2115,7 @@ function netTimeReset(){
     /* после паузы вкладки буфер снимков устарел — оставляем последний */
     if(NETV.buf.length) NETV.buf=NETV.buf.slice(-1);
     NETV.offWin.length=0; NETV.jit.length=0; NETV.off=null;
+    NETS={t:0, p:[], pk:null};
   }
 }
 
@@ -5188,7 +5189,7 @@ function netLost(){
 function netRejoined(){
   if(NET.rc){ clearTimeout(NET.rc.timer); NET.rc=null; }
   /* путь до сервера мог стать другим — оценку часов и буфер снимков собираем заново */
-  NETV.buf.length=0; NETV.offWin.length=0; NETV.jit.length=0; NETV.off=null; NETV.sentT={};
+  NETV.buf.length=0; NETV.offWin.length=0; NETV.jit.length=0; NETV.off=null; NETV.sentT={}; NETS={t:0, p:[], pk:null};
   PRED_LOG.length=0; NET.a=null; NET.b=null; NET.stallF=0;
   netBanner();
 }
@@ -5357,8 +5358,14 @@ function netRecvSnap(m){
     }
   }
 }
-/* буфер снимков у гостя: время хоста k, оценка сдвига часов (минимальная задержка за 3 с),
-   адаптивная задержка отрисовки D = интервал снимков + p90 джиттера */
+/* буфер снимков у гостя: время хоста k, оценка сдвига часов (минимальная задержка за 10 с),
+   адаптивная задержка отрисовки D = интервал снимков + p95 джиттера, не больше NET_DMAX.
+   netfix (02.10): мобильный интернет из Индонезии — RTT 200–300, джиттер 100+, потери 2–3 %. Потеря в WebSocket — это
+   повторная отправка TCP: следующие снимки ждут ~RTT и приходят пачкой. Раньше: окно 3 с, p90, потолок 250 мс и
+   экстраполяция 100 мс — буфер пустел на каждой пачке, игроки замирали и прыгали (smoke:lag ID: 6 % кадров).
+   Теперь: окно 10 с, p95, потолок 400 мс, экстраполяция до NET_EXTRAP мс (после 150 мс — с затуханием), а когда
+   снимки догоняют, разница с нарисованным сводится за ~0.1 с (NETS), а не прыжком. */
+var NET_WIN=300, NET_DMAX=400, NET_EXTRAP=350;
 function netBufPush(m){
   var now=Date.now(), k=m.k||now;
   var B=NETV.buf;
@@ -5366,53 +5373,87 @@ function netBufPush(m){
   B.push({t:k, d:m.d});
   while(B.length>2 && B[1].t < k-1500) B.shift();
   var o=now-k;                                          /* задержка + разница часов */
-  NETV.offWin.push(o); if(NETV.offWin.length>90) NETV.offWin.shift();
+  NETV.offWin.push(o); if(NETV.offWin.length>NET_WIN) NETV.offWin.shift();
   var mn=Infinity; for(var i=0;i<NETV.offWin.length;i++) if(NETV.offWin[i]<mn) mn=NETV.offWin[i];
   NETV.off=mn;
-  NETV.jit.push(o-mn); if(NETV.jit.length>90) NETV.jit.shift();
+  NETV.jit.push(o-mn); if(NETV.jit.length>NET_WIN) NETV.jit.shift();
   var js=NETV.jit.slice().sort(function(a,b){return a-b;});
-  var p90=js[Math.floor(js.length*0.9)]||0;
-  var target=clamp(1000/SNAP_HZ*1.2 + p90, 45, 250)/1000;
+  var p95=js[Math.floor(js.length*0.95)]||0;
+  var target=clamp(1000/SNAP_HZ*1.2 + p95, 45, NET_DMAX)/1000;
   NETV.D += (target-NETV.D)*(target>NETV.D?0.3:0.05);  /* растёт быстро, уменьшается плавно */
   if(m.a!==undefined){ NETV.ack=m.a; var st=NETV.sentT[m.a];
     if(st){ var r=performance.now()-st; NETV.rtt = NETV.rtt ? NETV.rtt*0.9+r*0.1 : r; }
     for(var q in NETV.sentT) if(+q<=m.a) delete NETV.sentT[q]; }
 }
 function _lerpAng(a,b,k){ var d=b-a; while(d>Math.PI) d-=Math.PI*2; while(d<-Math.PI) d+=Math.PI*2; return a+d*k; }
+/* экстраполяция: первые 150 мс — по скорости как есть, дальше вдвое медленнее (игрок поворачивает), до NET_EXTRAP */
+function netExtrapMs(e){ e=Math.min(e, NET_EXTRAP); return e<=150 ? e : 150+(e-150)*0.5; }
+/* сглаживание у гостя: offset нарисованного от цели (интерполяция/экстраполяция). Каждый кадр цель должна сдвинуться
+   на скорость × dt; всё, что сверх (снимки догнали экстраполяцию, пачка после паузы), уходит в offset и гасится за
+   ~NETS_TAU. Настоящий телепорт (вбрасывание, штраф) — больше 3 м — без сводки. */
+var NETS={t:0, p:[], pk:null}, NETS_TAU=0.1;
+function netSmooth(st, tx, tz, vx, vz, dt, tele){
+  if(!st.on || tele){ st.on=true; st.ox=0; st.oz=0; }
+  else {
+    var jx=st.tx+vx*dt-tx, jz=st.tz+vz*dt-tz;
+    if(Math.hypot(st.ox+jx, st.oz+jz)>3){ st.ox=0; st.oz=0; }
+    else { st.ox+=jx; st.oz+=jz; }
+    var f=Math.exp(-dt/NETS_TAU); st.ox*=f; st.oz*=f;
+  }
+  st.tx=tx; st.tz=tz;
+  return st;
+}
 function netApply(){
   var Bf=NETV.buf; if(!Bf.length) return;
+  var nowP=performance.now(), sdt=NETS.t ? clamp((nowP-NETS.t)/1000, 0, 0.1) : 0; NETS.t=nowP;
   /* момент на часах хоста, который показываем */
   var rt = (NETV.off!==null) ? Date.now()-NETV.off-NETV.D*1000 : Bf[Bf.length-1].t;
   var i1=Bf.length-1;
   while(i1>0 && Bf[i1-1].t>=rt) i1--;
   var S1=Bf[i1], S0=Bf[Math.max(0,i1-1)], k, PL=NETV.pl;
   PL.fr++; if(PL.rt!==null && rt<PL.rt) PL.back++; PL.rt=rt;
-  if(rt>Bf[Bf.length-1].t){ PL.ex++; if(rt-Bf[Bf.length-1].t>100) PL.hold++; }
-  if(S1.t<=rt){                                         /* новее нет: чуть экстраполируем, не больше 100 мс */
+  if(rt>Bf[Bf.length-1].t){ PL.ex++; if(rt-Bf[Bf.length-1].t>NET_EXTRAP) PL.hold++; }
+  if(S1.t<=rt){                                         /* новее нет: экстраполируем (netExtrapMs) */
     S0=Bf[Math.max(0,Bf.length-2)]; S1=Bf[Bf.length-1];
     var span=Math.max(1,S1.t-S0.t);
-    k=1+Math.min(rt-S1.t,100)/span;
+    k=1+netExtrapMs(rt-S1.t)/span;
   } else {
     var sp=Math.max(1,S1.t-S0.t); k=clamp((rt-S0.t)/sp,0,1);
   }
-  var A=S0.d, B=S1.d, base=20;
+  var A=S0.d, B=S1.d, base=20, spS=Math.max(1,S1.t-S0.t)/1000;
+  /* скорость цели: по паре снимков; на экстраполяции после 150 мс — вдвое меньше (как netExtrapMs) */
+  var vk=(k>1 && rt-S1.t>150) ? 0.5 : 1;
   for(var i=0;i<players.length;i++){
     var o=base+i*6;
     if(o+5>=B.length) break;
     var p=players[i];
     var ax=A[o]!==undefined?A[o]:B[o], az=A[o+1]!==undefined?A[o+1]:B[o+1];
-    if(Math.hypot(B[o]-ax,B[o+1]-az)>3){ p.x=B[o]; p.z=B[o+1]; }      /* телепорт — без «проезда» через поле */
-    else { p.x=ax+(B[o]-ax)*k; p.z=az+(B[o+1]-az)*k; }
+    var tele=Math.hypot(B[o]-ax,B[o+1]-az)>3, tx, tz;
+    if(tele){ tx=B[o]; tz=B[o+1]; }                                   /* телепорт — без «проезда» через поле */
+    else {
+      tx=ax+(B[o]-ax)*k; tz=az+(B[o+1]-az)*k;
+      if(k>1){ var hw=halfWidthAt(tx)-0.3; tx=clamp(tx,-RL+0.3,RL-0.3); if(hw>0) tz=clamp(tz,-hw,hw); }
+    }
+    var ps=NETS.p[i]||(NETS.p[i]={});
+    netSmooth(ps, tx, tz, tele?0:(B[o]-ax)/spS*vk, tele?0:(B[o+1]-az)/spS*vk, sdt, tele);
+    p.x=tx+ps.ox; p.z=tz+ps.oz;
     p.yaw=_lerpAng(A[o+2]!==undefined?A[o+2]:B[o+2], B[o+2], Math.min(k,1));
     var fl=B[o+3];
     p.down=(fl&1)?1:0; p.boxed=(fl&2)?1:0;
     p.stride=B[o+4];
     p.spd=B[o+5];
   }
-  if(Math.hypot(B[0]-A[0],B[2]-A[2])>4){ AUTHPK.x=B[0]; AUTHPK.z=B[2]; }
-  else { AUTHPK.x=A[0]+(B[0]-A[0])*k; AUTHPK.z=A[2]+(B[2]-A[2])*k; }
+  var ptele=Math.hypot(B[0]-A[0],B[2]-A[2])>4, px, pz;
+  if(ptele){ px=B[0]; pz=B[2]; }
+  else {
+    px=A[0]+(B[0]-A[0])*k; pz=A[2]+(B[2]-A[2])*k;
+    if(k>1){ var phw=halfWidthAt(px)-0.35; px=clamp(px,-RL+0.35,RL-0.35); if(phw>0) pz=clamp(pz,-phw,phw); }
+  }
+  AUTHPK.vx=(B[0]-A[0])/spS; AUTHPK.vz=(B[2]-A[2])/spS;
+  var pks=NETS.pk||(NETS.pk={});
+  netSmooth(pks, px, pz, ptele?0:AUTHPK.vx*vk, ptele?0:AUTHPK.vz*vk, sdt, ptele);
+  AUTHPK.x=px+pks.ox; AUTHPK.z=pz+pks.oz;
   AUTHPK.y=A[1]+(B[1]-A[1])*Math.min(k,1);
-  var sdt=Math.max(1,S1.t-S0.t)/1000; AUTHPK.vx=(B[0]-A[0])/sdt; AUTHPK.vz=(B[2]-A[2])/sdt;
   if(!(PUCKP && PUCKP.on)){ puck.x=AUTHPK.x; puck.z=AUTHPK.z; puck.y=AUTHPK.y; }
 }
 var AUTHPK={x:0,y:0.05,z:0,vx:0,vz:0};   /* шайба по снимкам хоста (интерполированная) */
