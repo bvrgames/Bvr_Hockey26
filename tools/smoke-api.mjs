@@ -269,7 +269,7 @@ function summary(o = {}) {
     const r = await handleBotSetup(new Request('https://w.example/tg/setup?do=install', { method: 'POST', headers: { 'X-Setup-Secret': SECRET } }), { secret: SECRET, bot: mbBot });
     const smc = mc.find((c) => c.method === 'setMyCommands');
     ok(r.status === 200 && !mc.some((c) => c.method === 'setChatMenuButton') && smc && smc.params.commands.map((c) => c.command).join() === 'start,help,paysupport,terms',
-      `setup: a game menu button is kept, own commands kept ${JSON.stringify([r.status, smc && smc.params])}`);
+      `setup: the menu button is not touched, own commands kept ${JSON.stringify([r.status, smc && smc.params])}`);
   }
 
   // ---- the developer's page: only ADMIN_IDS by the verified Telegram id
@@ -446,28 +446,31 @@ try {
     await hookRaw({ update_id: 5, message: { message_id: 9, from: S1, chat: { id: S1.id, type: 'private' }, date: 1, text: '/paysupport' } });
     await hookRaw({ update_id: 6, message: { message_id: 10, from: { ...S1, language_code: 'ru' }, chat: { id: S1.id, type: 'private' }, date: 1, text: '/terms@bvr_games_bot' } });
     const sm = botCalls.filter((c) => c.method === 'sendMessage');
-    // /start on three languages: a greeting and «Играть» → the game (web_app); /start <param> → the direct link with
-    // ?startapp=<param> (the way an invite reaches the game); anything else → a hint with the button; a group → silence
+    // /start on three languages: «the BVR games bot» and two web_app buttons — «Хоккей» → hockey, «Все игры» → the hub;
+    // /start <param> → straight into hockey by its direct link with ?startapp=<param> (the way an invite reaches it);
+    // anything else → the hint with the same two buttons; a group → silence
     const say = async (from, text, chat = { id: from.id, type: 'private' }) => {
       botCalls.length = 0;
       await hookRaw({ update_id: 7, message: { message_id: 11, from, chat, date: 1, text } });
       return botCalls.filter((c) => c.method === 'sendMessage');
     };
     const btn = (m) => m && m.params.reply_markup && m.params.reply_markup.inline_keyboard[0][0];
-    for (const [lang, word, play] of [['ru', 'хоккей', 'Играть'], ['en', 'hockey', 'Play'], ['id', 'hoki', 'Main'], ['de', 'hockey', 'Play']]) {
+    const two = (m, hockey, hub) => { const k = m && m.params.reply_markup && m.params.reply_markup.inline_keyboard;
+      return !!k && k.length === 1 && k[0].length === 2 && k[0][0].text === hockey && k[0][0].web_app && k[0][0].web_app.url === 'https://bvr-hockey26.vercel.app/' &&
+        k[0][1].text === hub && k[0][1].web_app && k[0][1].web_app.url === 'https://bvr-games-hub.vercel.app/' && !k[0][0].url && !k[0][1].url; };
+    for (const [lang, word, hockey, hub] of [['ru', 'бот игр BVR', 'Хоккей', 'Все игры'], ['en', 'BVR games bot', 'Hockey', 'All games'], ['id', 'bot game BVR', 'Hoki', 'Semua game'], ['de', 'BVR games bot', 'Hockey', 'All games']]) {
       const [m] = await say({ ...S1, language_code: lang }, '/start');
-      const b = btn(m);
-      ok(m && new RegExp(word, 'i').test(m.params.text) && b && b.text === play && b.web_app && b.web_app.url === 'https://bvr-hockey26.vercel.app/' && !b.url,
-        `/start (${lang}) → greeting + «${play}» web_app → the game ${JSON.stringify(m && m.params)}`);
+      ok(m && m.params.text.includes(word) && two(m, hockey, hub), `/start (${lang}) → greeting + «${hockey}» and «${hub}» web_app ${JSON.stringify(m && m.params)}`);
     }
     let [ms] = await say(S1, '/start dbg_ABC12');
-    ok(btn(ms) && btn(ms).url === 'https://t.me/bvr_games_bot/hockeytg?startapp=dbg_ABC12' && !btn(ms).web_app, `/start with a parameter → the direct link with startapp ${JSON.stringify(btn(ms))}`);
+    ok(btn(ms) && btn(ms).url === 'https://t.me/bvr_games_bot/hockeytg?startapp=dbg_ABC12' && !btn(ms).web_app && btn(ms).text === 'Hockey' && ms.params.reply_markup.inline_keyboard[0].length === 1,
+      `/start with a parameter → straight into hockey by the direct link with startapp ${JSON.stringify(ms && ms.params.reply_markup)}`);
     [ms] = await say(S1, '/start bad<param>');
-    ok(btn(ms) && btn(ms).web_app && !btn(ms).url, '/start with a malformed parameter → just the game');
+    ok(two(ms, 'Hockey', 'All games'), '/start with a malformed parameter → the two buttons');
     [ms] = await say({ ...S1, language_code: 'ru' }, 'привет, а где игра?');
-    ok(ms && /бот игры/.test(ms.params.text) && /\/paysupport/.test(ms.params.text) && btn(ms) && btn(ms).web_app, `a plain message → the hint ${JSON.stringify(ms && ms.params)}`);
+    ok(ms && /бот игр BVR/.test(ms.params.text) && /\/paysupport/.test(ms.params.text) && two(ms, 'Хоккей', 'Все игры'), `a plain message → the hint with both buttons ${JSON.stringify(ms && ms.params)}`);
     [ms] = await say({ ...S1, language_code: 'id' }, 'halo');
-    ok(ms && /bot game/i.test(ms.params.text), 'a plain message in Indonesian');
+    ok(ms && /bot game BVR/.test(ms.params.text) && two(ms, 'Hoki', 'Semua game'), 'a plain message in Indonesian');
     ok((await say(S1, '/start', { id: -100123, type: 'group' })).length === 0, 'a group chat: no answer');
     // /paysupport sends to a person; /terms says what stars and coins are and what the game stores
     for (const lang of ['ru', 'en', 'id']) {
@@ -521,9 +524,7 @@ try {
     botCalls.length = 0;
     r = await fetch(API + '/tg/setup?do=install', { method: 'POST', headers: { 'X-Setup-Secret': HOOK_SECRET } });
     const sw = botCalls.find((c) => c.method === 'setWebhook'), sc = botCalls.find((c) => c.method === 'setMyCommands' && !c.params.language_code);
-    const smb = botCalls.find((c) => c.method === 'setChatMenuButton');
-    ok(smb && smb.params.menu_button.type === 'web_app' && smb.params.menu_button.web_app.url === 'https://bvr-hockey26.vercel.app/' && smb.params.menu_button.text === 'Играть',
-      `setup: no game menu button → «Играть» set ${JSON.stringify(smb && smb.params)}`);
+    ok(!botCalls.some((c) => c.method === 'setChatMenuButton') && botCalls.some((c) => c.method === 'getChatMenuButton'), 'setup: the menu button (the games hub) is never changed');
     ok(r.status === 200 && sw && sw.params.url === API + '/tg/webhook' && sw.params.secret_token === HOOK_SECRET && sw.params.allowed_updates.includes('pre_checkout_query') &&
        sc && sc.params.commands.map((c) => c.command).join() === 'start,paysupport,terms', `setup: setWebhook + setMyCommands ${JSON.stringify([r.status, sw && sw.params, sc && sc.params])}`);
   }

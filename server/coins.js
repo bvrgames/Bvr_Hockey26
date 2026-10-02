@@ -311,9 +311,12 @@ export const STAR_PACKS = [
   { id: 's300', stars: 300, price: 250 },
 ];
 export const BOT_PATH = '/tg/webhook';     // Telegram posts updates here (setWebhook with secret_token)
-// the game as Telegram opens it: the Mini App's address (web_app buttons) and its direct link (t.me/<bot>/<app>, where
-// ?startapp=<param> reaches the game as start_param — the way room invites work, index.html TEST.startParam)
-export const GAME = { url: 'https://bvr-hockey26.vercel.app/', link: 'https://t.me/bvr_games_bot/hockeytg' };
+// @bvr_games_bot is the bot of ALL BVR games: its webhook (one per bot), star payments, /paysupport and /terms serve
+// every game, so payments of other games in this bot have to go through this same Worker too.
+// url — hockey as Telegram opens it (web_app buttons); link — its direct link (t.me/<bot>/<app>, where ?startapp=<param>
+// reaches the game as start_param — the way room invites work, index.html TEST.startParam); hub — all BVR games (the
+// bot's menu button «ИГРАТЬ» opens it; set by the owner, never changed from here)
+export const GAME = { url: 'https://bvr-hockey26.vercel.app/', link: 'https://t.me/bvr_games_bot/hockeytg', hub: 'https://bvr-games-hub.vercel.app/' };
 
 // The Bot API over plain fetch (the same in Workers and Node.js): (method, params) → result, or throws.
 // base — https://api.telegram.org, or a fake one in tests.
@@ -351,18 +354,19 @@ export const BOT_TEXTS = {
         '• Game menyimpan id Telegram, nama, username, bahasa, platform, dan statistik laga kamu.',
   },
   start: {
-    ru: 'BVR Hockey 26 — аркадный хоккей 5 на 5 прямо в Telegram: матчи с ИИ и с друзьями, тренировка, монеты за победы.\nЖми «Играть»!',
-    en: 'BVR Hockey 26 — arcade 5-on-5 hockey right in Telegram: matches against the AI and with friends, training, coins for wins.\nTap «Play»!',
-    id: 'BVR Hockey 26 — hoki arcade 5 lawan 5 langsung di Telegram: laga melawan AI dan bersama teman, latihan, koin untuk kemenangan.\nTekan «Main»!',
+    ru: 'Это бот игр BVR — играй прямо в Telegram.\nХоккей 5 на 5 с ИИ и с друзьями — или выбери любую игру BVR.',
+    en: 'This is the BVR games bot — play right in Telegram.\n5-on-5 hockey against the AI and with friends — or pick any BVR game.',
+    id: 'Ini bot game BVR — main langsung di Telegram.\nHoki 5 lawan 5 melawan AI dan bersama teman — atau pilih game BVR lainnya.',
   },
-  play: { ru: 'Играть', en: 'Play', id: 'Main' },
+  hockey: { ru: 'Хоккей', en: 'Hockey', id: 'Hoki' },
+  hub: { ru: 'Все игры', en: 'All games', id: 'Semua game' },
   other: {
-    ru: 'Я бот игры BVR Hockey 26 — нажми «Играть», чтобы открыть игру. Вопросы по оплате — /paysupport.',
-    en: 'I am the BVR Hockey 26 game bot — tap «Play» to open the game. Payment questions — /paysupport.',
-    id: 'Aku bot game BVR Hockey 26 — tekan «Main» untuk membuka game. Pertanyaan pembayaran — /paysupport.',
+    ru: 'Я бот игр BVR — открой игру кнопкой ниже. Вопросы по оплате — /paysupport.',
+    en: 'I am the BVR games bot — open a game with a button below. Payment questions — /paysupport.',
+    id: 'Aku bot game BVR — buka game dengan tombol di bawah. Pertanyaan pembayaran — /paysupport.',
   },
   commands: [
-    { command: 'start', description: { ru: 'Открыть игру', en: 'Open the game', id: 'Buka game' } },
+    { command: 'start', description: { ru: 'Открыть игры', en: 'Open the games', id: 'Buka game' } },
     { command: 'paysupport', description: { ru: 'Поддержка по платежам', en: 'Payment support', id: 'Dukungan pembayaran' } },
     { command: 'terms', description: { ru: 'Условия покупки', en: 'Purchase terms', id: 'Ketentuan pembelian' } },
   ],
@@ -450,12 +454,13 @@ export function checkoutCheck(o, q) {
   if (q.currency !== 'XTR' || q.total_amount !== o.price) return 'amount';
   return null;
 }
-// «Играть» under the greeting: the game itself (web_app); /start <param> (a deep link t.me/<bot>?start=<param>) opens
-// the game through its direct link with ?startapp=<param> — a web_app button cannot carry start_param, the direct link
-// delivers it exactly like a room invite does
-export function playButton(param, lang) {
-  const text = BOT_TEXTS.play[L3(lang)];
-  return param ? { text, url: GAME.link + '?startapp=' + encodeURIComponent(param) } : { text, web_app: { url: GAME.url } };
+// the buttons under the greeting and the hint: «Хоккей» and «Все игры» (both web_app). /start <param> (a deep link
+// t.me/<bot>?start=<param>, a room invite) — straight into hockey through its direct link with ?startapp=<param>: a
+// web_app button cannot carry start_param, the direct link delivers it exactly like an invite does
+export function playButtons(param, lang) {
+  const l = L3(lang), hockey = BOT_TEXTS.hockey[l];
+  if (param) return [[{ text: hockey, url: GAME.link + '?startapp=' + encodeURIComponent(param) }]];
+  return [[{ text: hockey, web_app: { url: GAME.url } }, { text: BOT_TEXTS.hub[l], web_app: { url: GAME.hub } }]];
 }
 // a message to the bot in a private chat: /start, /paysupport, /terms, anything else — a hint (nobody reads the chat)
 async function botMessage(d, msg) {
@@ -464,11 +469,11 @@ async function botMessage(d, msg) {
   const m = /^\/(start|paysupport|terms)(?:@\w+)?(?:\s+(\S+))?\s*$/.exec(text);
   if (m && m[1] === 'start') {
     const param = /^[A-Za-z0-9_-]{1,64}$/.test(m[2] || '') ? m[2] : null;
-    await d.bot('sendMessage', { chat_id: msg.chat.id, text: BOT_TEXTS.start[lang], reply_markup: { inline_keyboard: [[playButton(param, lang)]] } });
+    await d.bot('sendMessage', { chat_id: msg.chat.id, text: BOT_TEXTS.start[lang], reply_markup: { inline_keyboard: playButtons(param, lang) } });
     return 'start';
   }
   if (m) { await d.bot('sendMessage', { chat_id: msg.chat.id, text: BOT_TEXTS[m[1]][lang] }); return m[1]; }
-  await d.bot('sendMessage', { chat_id: msg.chat.id, text: BOT_TEXTS.other[lang], reply_markup: { inline_keyboard: [[playButton(null, lang)]] } });
+  await d.bot('sendMessage', { chat_id: msg.chat.id, text: BOT_TEXTS.other[lang], reply_markup: { inline_keyboard: playButtons(null, lang) } });
   return 'other';
 }
 export async function onBotUpdate(u, d) {
@@ -559,12 +564,9 @@ async function botSetup(url, d) {
     if (!own.length && (cmds.length || lang !== 'ru')) continue;    // no own list for this language: the default one is shown
     await d.bot('setMyCommands', { language_code: lang, commands: merged(own, lang) });
   }
-  // the menu button: kept if it already opens the game, else «Играть» → the game
-  const mb = await d.bot('getChatMenuButton', {});
-  const mbOk = mb && mb.type === 'web_app' && mb.web_app && typeof mb.web_app.url === 'string' && mb.web_app.url.startsWith(new URL(GAME.url).origin);
-  if (!mbOk) await d.bot('setChatMenuButton', { menu_button: { type: 'web_app', text: BOT_TEXTS.play.ru, web_app: { url: GAME.url } } });
+  // the menu button is the owner's («ИГРАТЬ» → the BVR games hub): never changed from here, only shown
   return json(200, { installed: target, before: pub, info: await d.bot('getWebhookInfo', {}), commands: await d.bot('getMyCommands', {}),
-                     menuButton: mbOk ? { kept: mb } : { set: GAME.url, was: mb } });
+                     menuButton: await d.bot('getChatMenuButton', {}) });
 }
 
 // ---------- the developer's page: read only, ADMIN_IDS only (docs/EVENTS.md «Страница разработчика»)

@@ -103,8 +103,9 @@
   пакетов → `POST /v1/stars/invoice` (заказ `pending` в D1 `star_orders`, счёт `createInvoiceLink` XTR) →
   `openInvoice`; звёзды начисляет только вебхук бота `POST /tg/webhook` (секрет `TG_WEBHOOK_SECRET`):
   `pre_checkout_query` — проверка заказа, `successful_payment` — один раз, `refunded_payment` — списание не ниже нуля
-  (`refund_short`), `/paysupport`, `/terms` (тексты `BOT_TEXTS`); `/start` — приветствие и кнопка «Играть» (web_app на
-  игру, с параметром — прямая ссылка `?startapp=`), другие сообщения — подсказка. Подключение вебхука — `POST /tg/setup` (docs/EVENTS.md
+  (`refund_short`), `/paysupport`, `/terms` (тексты `BOT_TEXTS`); `/start` — «бот игр BVR» и кнопки web_app «Хоккей» и
+  «Все игры» (хаб `bvr-games-hub.vercel.app`), с параметром — сразу в хоккей прямой ссылкой `?startapp=`; другие
+  сообщения — подсказка с теми же кнопками. Кнопку меню бота («ИГРАТЬ» → хаб) не трогать. Подключение вебхука — `POST /tg/setup` (docs/EVENTS.md
   «Звёзды»). Скриншоты — `node tools/stars-shots.mjs`.
   **Перевыпустили токен бота** (02.10 так пропал пункт «Разработчик»: подпись initData не сходилась, все запросы 401/403)
   — новый `BOT_TOKEN` в секрет Worker'а и `POST /tg/setup?do=install` (Telegram снимает вебхук при перевыпуске);
@@ -121,6 +122,10 @@
   (игроки, матчи по видам и дням, монеты, ставки, звёзды, платформы, языки; кэш минута), игроки (поиск, сортировки,
   карточка), платежи (статусы, charge id). Об игроках дополнительно хранятся username, язык, premium, платформа Telegram,
   last_seen (`0004_players.sql`) — больше ничего. docs/EVENTS.md «Страница разработчика», скриншоты — `tools/dev-shots.mjs`.
+
+- **@bvr_games_bot — бот всех игр BVR.** Вебхук у бота один, поэтому вебхук (`/tg/webhook` этого Worker'а), оплата
+  звёзд, `/paysupport` и `/terms` общие для всех игр: оплату других игр в этом боте вести через этот же Worker, второй
+  вебхук не поставить. Кнопка меню бота «ИГРАТЬ» → хаб `https://bvr-games-hub.vercel.app/` — её не менять.
 
 ## Ждёт теста на телефонах
 
