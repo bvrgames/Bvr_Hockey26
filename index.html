@@ -676,6 +676,7 @@ var TEST=(function(){
   /* Сетевой матч считает сервер (по умолчанию, фаза 3.5). ?net=host / startapp=host… — хост-схема вручную.
      Решает тот, кто открывает комнату; если сервер серверного режима не знает или молчит — хост-схема сама. */
   t.srv = !(q.get('net')==='host' || t.sp.host);
+  t.noRoute = q.has('noroute');      /* без выбора маршрута до комнаты (ROUTE) — для сравнений */
   /* ?debug — показать отладочные индикаторы (класс .dbg): скорость, FPS, сеть */
   if(t.debug) document.body.classList.add('debug');
   if(t.seed){
@@ -2276,6 +2277,44 @@ function ndgPong(m){
   if(m.st) NDG.stOff=Math.round(m.st-(Date.now()-r/2));      /* часы сервера минус наши */
 }
 function ndgOpp(m){ var now=performance.now(); NDG.opp.push([now, now-m.k]); }
+/* Выбор маршрута до комнаты (netfix, 02.10). Из Индонезии вход в Cloudflare меняется от соединения к соединению
+   (замер: Джакарта/Сингапур/Гонконг или Марсель, примерно поровну даже на одном IP): через Джакарту до комнаты
+   в Сингапуре ~70 мс, через Марсель ~345. Поэтому, пока ждём в меню, меряем свежее соединение (5 пингов до комнаты)
+   и при плохом RTT входим заново с ключом слота (?re=&tok=): сервер просто заменяет сокет, соперник ничего не видит.
+   Старый сокет клиент не закрывает: его закрывает сервер, заменив новым, — иначе соперник на миг видит «вышел».
+   Хорошо — медиана ≤ ROUTE_OK; иначе ещё раз, всего не больше ROUTE_MAX соединений (Марсель/Париж/Милан три-четыре
+   раза подряд — обычное дело; далеко от комнаты все маршруты долгие, тогда просто лишние попытки, пока ждём в меню).
+   Решаем по 3 ответам, если они все по одну сторону порога (~0.6 с на попытку), иначе по 5.
+   Начался матч — больше не пробуем. ROUTE.list — попытки [вход, медиана] (в итог матча, match:summary.route). */
+var ROUTE_OK=150, ROUTE_MAX=8;
+var ROUTE={tries:0, list:[], done:false, cur:null, timer:null};
+function routeReset(){ clearTimeout(ROUTE.timer); ROUTE={tries:0, list:[], done:!!TEST.noRoute, cur:null, timer:null}; }
+function routeStart(ws){
+  clearTimeout(ROUTE.timer); ROUTE.cur=null;
+  if(ROUTE.done || state!=='menu') return;
+  var cur=ROUTE.cur={ws:ws, rt:[], sent:0, t0:performance.now()};
+  (function ping(){
+    if(ROUTE.cur!==cur || NET.ws!==ws) return;
+    if(cur.sent<5){ netSend({t:'png', n:1e6+cur.sent, k:performance.now()}); cur.sent++; ROUTE.timer=setTimeout(ping, 120); }
+    else ROUTE.timer=setTimeout(routeDecide, 2500);          /* ответы не все — решаем по тем, что есть */
+  })();
+}
+function routePong(m){
+  var cur=ROUTE.cur; if(!cur || NET.ws!==cur.ws) return;
+  cur.rt.push(performance.now()-m.k);
+  var n=cur.rt.length, hi=cur.rt.filter(function(r){ return r>ROUTE_OK; }).length;
+  if(n>=5 || (n>=3 && (hi===0 || hi===n))){ clearTimeout(ROUTE.timer); routeDecide(); }
+}
+function routeDecide(){
+  var cur=ROUTE.cur; if(!cur || NET.ws!==cur.ws) return;
+  ROUTE.cur=null;
+  var v=cur.rt.slice().sort(function(a,b){return a-b;}), med=v.length ? Math.round(v[Math.floor(v.length/2)]) : 9999;
+  var mine=null, d=NDG.diag; if(d && d.conns) d.conns.forEach(function(c){ if(c.slot===NET.role) mine=c; });
+  ROUTE.list.push([mine?mine.colo:'?', med]);
+  if(med<=ROUTE_OK || ROUTE.list.length>=ROUTE_MAX || ROUTE.done || state!=='menu' || !NET.on){ ROUTE.done=true; return; }
+  ROUTE.tries++;
+  netConnect(NET.url, NET.code, null, 'route');
+}
 function ndgDiag(d){ NDG.diag=d; }
 function ndgStats(a){
   var now=performance.now();
@@ -2314,6 +2353,7 @@ setInterval(function(){
     'DO: '+(d?(d.doColo||'?')+' ('+(d.doLoc||'?')+') · hint '+(d.hint||'?')+' · up since '+since:'— (old Worker?)')+
     (d && d.sim ? ' · sim '+d.sim.steps+' steps, max '+d.sim.maxStepMs+' ms' : '')+'\n'+
     'me: '+(mine?mine.colo+' ('+mine.country+')':'—')+' · opp: '+(opp?opp.colo+' ('+opp.country+')':'—')+'\n'+
+    'route '+(ROUTE.list.length?ROUTE.list.map(function(r){ return r[0]+' '+r[1]; }).join(' → '):'—')+(ROUTE.cur?' · probing…':'')+'\n'+
     'RTT→DO   '+f(pd)+'\n'+
     'RTT→opp  '+f(po)+'\n'+
     'snap '+NETDBG.sRate.toFixed(1)+'/s · input '+NETDBG.iRate.toFixed(1)+'/s · interp D '+Math.round(NETV.D*1000)+' ms · rtt(ack) '+Math.round(NETV.rtt||0)+' ms\n'+
@@ -4965,9 +5005,13 @@ function randCode(){
 }
 /* re — возврат в ту же комнату после обрыва (серверный режим): тот же слот по ключу из hello */
 function netConnect(url, code, cb, re){
-  try{ if(NET.ws) NET.ws.close(); }catch(e){}
+  /* маршрут: старый сокет заменит (и закроет) сервер; его сообщения дальше не обрабатываются (NET.ws уже новый) */
+  if(re!=='route'){ try{ if(NET.ws) NET.ws.close(); }catch(e){} }
   if(!re){
     NET.code=code; NET.url=url; NET.peer=false; NET.role=null; NET.srv=false; NET.tok=null;
+    routeReset();
+    if(!NET.reopen) NET.openTry=0;
+    NET.reopen=false;
     if(NET.rc){ clearTimeout(NET.rc.timer); NET.rc=null; netBanner(); }
     clearTimeout(NET.srvT);
     netStatus(T('connecting'));
@@ -4991,10 +5035,20 @@ function netConnect(url, code, cb, re){
   catch(e){ netStatus(T('badAddr')); return; }
   NET.ws=ws;
   var opened=false, greeted=false;
+  /* первое соединение не открылось за 4 с (мобильная сеть: TCP/TLS иногда висит) — ещё раз, новое соединение
+     пойдёт другим маршрутом; два раза, потом ждём, как раньше */
+  if(!re) setTimeout(function(){
+    if(NET.ws!==ws || opened || (NET.openTry=(NET.openTry||0)+1)>2) return;
+    NET.ws=null; try{ ws.close(); }catch(e){}
+    NET.reopen=true; netConnect(url, code, cb);
+  }, 4000);
   setTimeout(function(){
     if(NET.ws!==ws) return;
     /* возврат: попытка без hello за 4 с не удалась — следующая */
-    if(re){ if(!greeted){ NET.ws=null; try{ ws.close(); }catch(e){} netLost(); } }
+    /* новое соединение маршрута не ответило: ещё раз (сокет-то заменить не успели — сервер его не видел) */
+    if(re==='route'){ if(!greeted){ NET.ws=null; try{ ws.close(); }catch(e){} ROUTE.done=true;
+      if(++ROUTE.tries<=ROUTE_MAX+2) netConnect(url, code, null, 'route'); else netStatus(T('lost')); } }
+    else if(re){ if(!greeted){ NET.ws=null; try{ ws.close(); }catch(e){} netLost(); } }
     else if(!opened) netStatus(T('noConnect'));
   }, re?4000:5000);
   ws.onopen=function(){ opened=true; if(!re) netStatus(T('inRoom')+' '+code); };
@@ -5005,10 +5059,11 @@ function netConnect(url, code, cb, re){
     else if(NET.on) netStatus(T('lost'));
   };
   ws.onmessage=function(ev){
+    if(NET.ws!==ws) return;                          /* старый сокет (заменён новым соединением) */
     var m; try{ m=JSON.parse(ev.data); }catch(e){ return; }
     NET.lastRx=performance.now();
     /* сетевая диагностика (фаза 3.0): ответы Durable Object и пинг соперника через релей */
-    if(m.t==='pog'){ ndgPong(m); return; }
+    if(m.t==='pog'){ if(m.n>=1e6) routePong(m); else ndgPong(m); return; }
     if(m.t==='dgr'){ ndgDiag(m); return; }
     if(m.t==='pp'){ netSend({t:'pq',k:m.k}); return; }
     if(m.t==='pq'){ ndgOpp(m); return; }
@@ -5024,7 +5079,7 @@ function netConnect(url, code, cb, re){
       }
       greeted=true;
       /* вернулись, а комната уже другая (сервер её забыл, матч кончился без нас) — возвращаться некуда */
-      if(re && (m.role!==NET.role || !m.srv || (netInMatch() && !m.run))){ netGiveUp(); return; }
+      if(re && re!=='route' && (m.role!==NET.role || !m.srv || (netInMatch() && !m.run))){ netGiveUp(); return; }
       NET.tok=m.tok||null; slotKeySave(code, m.role, NET.tok);
       /* ставки: сервер узнаёт игрока по подписанному initData (только серверная схема и только новый Worker — stk:1;
          старый переслал бы initData сопернику) */
@@ -5036,8 +5091,9 @@ function netConnect(url, code, cb, re){
       NET.peer = m.n>1;
       netStatus(T('room')+' '+code+' · '+(m.role==='host' ? T('youHost') : T('youGuest'))+(NET.srv?' · server':''));
       if(cb) cb();
-      if(re) netRejoined();
+      if(re && re!=='route') netRejoined();
       MENU.onNet('hello');
+      routeStart(ws);
     }
     else if(m.t==='full'){ if(re){ netGiveUp(); return; } NET.on=false; netStatus(T('roomFull')); }
     /* выбор хоста на экране подготовки (гость видит его до старта) */
@@ -5063,7 +5119,7 @@ function netConnect(url, code, cb, re){
       MENU.onNet('peer');
     }
     else if(m.t==='cfg' && netFollow()){
-      clearTimeout(NET.srvT);
+      clearTimeout(NET.srvT); ROUTE.done=true;
       /* после возврата сервер напоминает cfg идущего матча — он у нас уже идёт, продолжаем по снимкам */
       if(m.id && m.id===MATCH.id && netInMatch()) return;
       /* матч начал другой, а модели ещё качаются: играем, экран загрузки — пока их нет */
@@ -7000,6 +7056,7 @@ function goStart(){
   if(ONLINE && NET.on && NET.role==='guest' && stakeOn() && STK.n>0 && !STK.ok[1]){ netSend({t:'stakeOk', n:STK.n}); return; }
   if(ONLINE){
     if(!NET.on || NET.role!=='host' || !NET.peer) return;
+    ROUTE.done=true;
     netSend({t:'cfg',a:selMy,b:selOp,min:selMin,id:mid});
     /* серверный режим: матч начнёт сервер — его cfg придёт обоим, как гостю */
     if(NET.srv){ netSrvWatch('go'); return; }
@@ -7171,6 +7228,7 @@ function buildSummary(sc){
   for(var k in STATS.players){ var q=STATS.players[k]; pl.push({t:q.t, num:q.num, g:q.g, a:q.a, s:q.s, h:q.h}); }
   return {v:1, id:MATCH.id, client:CLIENT_VER, mode:MATCH.mode, role:MATCH.role, net:MATCH.net||null, team:me, difficulty:MATCH.difficulty,
           room:MATCH.mode==='online'?NET.code:null,  /* по коду комнаты Worker сверит счёт серверного матча с Durable Object */
+          route:MATCH.mode==='online' && ROUTE.list.length ? ROUTE.list.slice() : null,
           clubs:MATCH.clubs.slice(), len:MATCH.len, played:Math.round(MATCH.played),
           startedAt:MATCH.startedAt, endedAt:Date.now(), score:sc.slice(), result:res, disconnect:dc,
           teams:[STATS.teams[0], STATS.teams[1]], players:pl, faceoffs:STATS.faceoffs, events:STATS.events,
@@ -7764,7 +7822,7 @@ window.__hk={hs:function(){return HS;},net:function(){return NET;},setCam:functi
   rw:function(){ return {st:RWD.st, id:RWD.id, played:RWD.played, fly:document.querySelectorAll('.rw-fx').length,
     text:document.getElementById('oReward').textContent, wal:document.getElementById('oWal').textContent}; },
   /* сеть: источник картинки шайбы у гостя, задержка интерполяции, RTT — для tools/smoke-lag.mjs */
-  netInfo:function(){ return {src:PDS.mode, pmode:PUCKP&&PUCKP.on?PUCKP.mode:null, D:Math.round(NETV.D*1000), rtt:Math.round(NETV.rtt||0), buf:NETV.buf.length, pl:NETV.pl}; },
+  netInfo:function(){ return {src:PDS.mode, pmode:PUCKP&&PUCKP.on?PUCKP.mode:null, D:Math.round(NETV.D*1000), rtt:Math.round(NETV.rtt||0), buf:NETV.buf.length, pl:NETV.pl, route:ROUTE.list, routeDone:ROUTE.done}; },
   /* раскладка / подписи — для tools/smoke-tg.mjs */
   showFps:function(on){ setShowFps(on); }, fitPad:function(){ fitPadLabels(); }, T:function(k){ return T(k); },
   layoutTop:function(){ layoutTop(); },

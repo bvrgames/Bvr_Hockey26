@@ -116,6 +116,8 @@ EV.emit('shot', { p: 3, t: 0, ... });                 // возвращает pa
   startedAt, endedAt,            // Date.now() клиента, мс
   score: [2, 1], result: 'win' | 'loss' | 'draw' | 'left',   // result — с точки зрения team; 'left' — см. disconnect
   net: 'server' | 'host' | null, // кто считал сетевой матч
+  route: null | [['MRS', 345], ['CGK', 72]],   // сетевой матч: попытки соединения до комнаты перед матчем — вход в
+                                 // Cloudflare (colo) и медиана RTT, мс; матч шёл по последней (PHASE3 «Маршрут до комнаты»)
   disconnect: null | { self: 1, selfLeft: false, opp: true, oppLeft: false },
                                  // обрывы связи в сетевом матче (серверный режим): self — сколько раз отправитель
                                  // переподключался, opp — пропадал ли соперник (за него играл ИИ), selfLeft / oppLeft —
