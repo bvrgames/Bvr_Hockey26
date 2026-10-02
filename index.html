@@ -7201,7 +7201,7 @@ EV.on('match:reward', function(res){
 });
 /* итог не принят сейчас (очередь: 429, 5xx, нет сети) — «начислится позже» */
 EV.on('match:rewardLater', function(e){ if(e.id===MATCH.id) rwState(e.id, 'later'); });
-EV.on('match:rewardNone', function(e){ if(e.id===MATCH.id && RW.id===e.id && RW.st!=='done'){ clearTimeout(RW.timer); RW.st=null; rwPaint(); } });
+EV.on('match:rewardNone', function(e){ if(e.id===MATCH.id && RWD.id===e.id && RWD.st!=='done'){ clearTimeout(RWD.timer); RWD.st=null; rwPaint(); } });
 
 /* ---------- начисление на экране итога ----------
    Анимация — только по ответу сервера (/v1/match, событие match:reward): пока ответа нет — «начисляем…»; ошибка,
@@ -7211,7 +7211,8 @@ EV.on('match:rewardNone', function(e){ if(e.id===MATCH.id && RW.id===e.id && RW.
    Начислено 0 — без летящих монет. Лёгкая для слабых телефонов: ≤ 8 элементов, только transform / opacity, без
    фильтров и теней; prefers-reduced-motion — сразу итог. Вне Telegram и в автотестах итог не отправляется — блока нет. */
 var RW_LATER_MS=8000;
-var RW={id:'', st:null, res:null, played:'', timer:0, raf:0, fly:[], t:[]};
+/* состояние награды на экране итога (не RW: это ширина площадки, BVRSim.RW) */
+var RWD={id:'', st:null, res:null, played:'', timer:0, raf:0, fly:[], t:[]};
 function rwTotal(res){ return (res.coins|0)+(res.stake && res.stake.delta|0); }
 function rwFrom(res){ return Math.max(0, res.balance-rwTotal(res)); }
 function rwRows(res){
@@ -7235,13 +7236,13 @@ function rwWal(v){
 /* что видно сейчас, без анимации */
 function rwPaint(){
   var el=document.getElementById('oReward'), wl=document.getElementById('oWal'); if(!el) return;
-  var on=RW.id===MATCH.id && RW.st;
+  var on=RWD.id===MATCH.id && RWD.st;
   if(wl) wl.style.visibility=on?'':'hidden';
   if(!on){ el.innerHTML=''; el.className=''; return; }
-  if(RW.st!=='done'){
-    el.className='rw-'+RW.st; el.innerHTML=(RW.st==='wait'?'<i></i>':'')+mEsc(T(RW.st==='wait'?'rwWait':'rwLater')); rwWal(COINS); return;
+  if(RWD.st!=='done'){
+    el.className='rw-'+RWD.st; el.innerHTML=(RWD.st==='wait'?'<i></i>':'')+mEsc(T(RWD.st==='wait'?'rwWait':'rwLater')); rwWal(COINS); return;
   }
-  var res=RW.res, tot=rwTotal(res), done=RW.played===RW.id;
+  var res=RWD.res, tot=rwTotal(res), done=RWD.played===RWD.id;
   el.className='rw-done';
   el.innerHTML='<div class="rw-rows">'+rwRows(res)+'</div><div class="rw-tot"><span class="rk">'+mEsc(T('rwTotal'))+'</span>'+
     '<span class="cval">'+icHtml('coin')+'<span class="cn" id="oRwN">'+(tot>0?'+':'')+(done?tot:0)+'</span></span></div>';
@@ -7249,31 +7250,31 @@ function rwPaint(){
 }
 function rwState(id, st, res){
   if(id!==MATCH.id) return;
-  if(RW.id!==id){ RW.id=id; RW.played=''; RW.st=null; }
-  if(RW.st==='done') return;                          /* ответ уже есть: поздний таймаут или повтор не трогают */
-  RW.st=st; if(res) RW.res=res;
-  clearTimeout(RW.timer);
-  if(st==='wait') RW.timer=setTimeout(function(){ rwState(id, 'later'); }, RW_LATER_MS);
+  if(RWD.id!==id){ RWD.id=id; RWD.played=''; RWD.st=null; }
+  if(RWD.st==='done') return;                          /* ответ уже есть: поздний таймаут или повтор не трогают */
+  RWD.st=st; if(res) RWD.res=res;
+  clearTimeout(RWD.timer);
+  if(st==='wait') RWD.timer=setTimeout(function(){ rwState(id, 'later'); }, RW_LATER_MS);
   rwPaint();
   if(st==='done' && resultShown()) rwPlay();
 }
 function resultShown(){ var e=document.getElementById('overscr'); return !!(e && e.style.display==='flex'); }
 /* экран итога открылся: ждём ответа сервера или сразу показываем (и проигрываем) пришедший */
 function rwShow(){
-  if(MATCH.id && RW.id!==MATCH.id && MATCH.sent && STATS_API && TG && TG.initData) rwState(MATCH.id, MATCH.reward ? 'done' : 'wait', MATCH.reward);
+  if(MATCH.id && RWD.id!==MATCH.id && MATCH.sent && STATS_API && TG && TG.initData) rwState(MATCH.id, MATCH.reward ? 'done' : 'wait', MATCH.reward);
   rwPaint();
-  if(RW.st==='done' && RW.id===MATCH.id) rwPlay();
+  if(RWD.st==='done' && RWD.id===MATCH.id) rwPlay();
 }
 function rwStop(){
-  cancelAnimationFrame(RW.raf); RW.raf=0;
-  RW.t.forEach(clearTimeout); RW.t=[];
-  RW.fly.forEach(function(o){ if(o.parentNode) o.parentNode.removeChild(o); }); RW.fly=[];
-  if(RW.st==='done' && RW.played===RW.id) rwPaint();     /* прервали посреди — сразу итог */
+  cancelAnimationFrame(RWD.raf); RWD.raf=0;
+  RWD.t.forEach(clearTimeout); RWD.t=[];
+  RWD.fly.forEach(function(o){ if(o.parentNode) o.parentNode.removeChild(o); }); RWD.fly=[];
+  if(RWD.st==='done' && RWD.played===RWD.id) rwPaint();     /* прервали посреди — сразу итог */
 }
 function rwPlay(){
-  if(RW.st!=='done' || RW.played===RW.id) return;
-  RW.played=RW.id;
-  var res=RW.res, tot=rwTotal(res), from=rwFrom(res), to=res.balance;
+  if(RWD.st!=='done' || RWD.played===RWD.id) return;
+  RWD.played=RWD.id;
+  var res=RWD.res, tot=rwTotal(res), from=rwFrom(res), to=res.balance;
   var nEl=document.getElementById('oRwN'), wl=document.getElementById('oWal'), lay=document.getElementById('overscr');
   var quiet=false; try{ quiet=matchMedia('(prefers-reduced-motion: reduce)').matches; }catch(e){}
   if(!nEl || !wl || tot<=0 || quiet){ rwPaint(); return; }
@@ -7282,29 +7283,29 @@ function rwPlay(){
   (function step(){
     var k=Math.min(1, Math.max(0, (performance.now()-t0)/800)), e=1-Math.pow(1-k, 3);
     nEl.textContent='+'+Math.round(tot*e);
-    RW.raf = k<1 ? requestAnimationFrame(step) : 0;
+    RWD.raf = k<1 ? requestAnimationFrame(step) : 0;
   })();
   /* монеты: от итога к балансу; X и Y на разных кривых — получается дуга */
   var N=Math.min(8, Math.max(3, Math.ceil(tot/5))), got=0;
-  RW.t.push(setTimeout(function(){
+  RWD.t.push(setTimeout(function(){
     var a=nEl.getBoundingClientRect(), b=(wl.querySelector('.ic')||wl).getBoundingClientRect();
     var x0=a.left-16, y0=a.top+a.height/2-11, dx=b.left+b.width/2-11-x0, dy=b.top+b.height/2-11-y0;
     for(var i=0;i<N;i++) (function(i){
       var o=document.createElement('span'); o.className='rw-fx';
       o.innerHTML='<span class="rw-fy">'+icHtml('coin')+'</span>';
       o.style.transform='translate('+x0+'px,'+y0+'px)';
-      lay.appendChild(o); RW.fly.push(o);
-      RW.t.push(setTimeout(function(){
+      lay.appendChild(o); RWD.fly.push(o);
+      RWD.t.push(setTimeout(function(){
         o.style.opacity='1';
         o.style.transform='translate('+(x0+dx)+'px,'+y0+'px)';
         o.firstChild.style.transform='translateY('+dy+'px) scale(.85)';
-        RW.t.push(setTimeout(function(){
+        RWD.t.push(setTimeout(function(){
           if(o.parentNode) o.parentNode.removeChild(o);
           got++;
           rwWal(got>=N ? to : from+Math.round((to-from)*got/N));
           wl.classList.remove('pop'); void wl.offsetWidth; wl.classList.add('pop');
           SFX.coin(got);
-          if(got>=N){ RW.fly=[]; nEl.textContent='+'+tot; }
+          if(got>=N){ RWD.fly=[]; nEl.textContent='+'+tot; }
         }, 620));
       }, 40+i*80));
     })(i);
@@ -7540,7 +7541,7 @@ window.__hk={hs:function(){return HS;},net:function(){return NET;},setCam:functi
     fly:document.querySelectorAll('.rw-fx').length, text:(document.querySelector('#start [data-paint="sbSt"]')||{}).textContent||''}; },
   /* экран итога для теста начисления (tools/smoke-api.mjs, wallet-shots.mjs): матч id «отправлен», ответа ещё нет */
   result:function(id){ if(!id){ backToMenu(); return; } hideResult(); MATCH.id=id; MATCH.sent=true; MATCH.reward=null; state='over'; showResult(); },
-  rw:function(){ return {st:RW.st, id:RW.id, played:RW.played, fly:document.querySelectorAll('.rw-fx').length,
+  rw:function(){ return {st:RWD.st, id:RWD.id, played:RWD.played, fly:document.querySelectorAll('.rw-fx').length,
     text:document.getElementById('oReward').textContent, wal:document.getElementById('oWal').textContent}; },
   /* сеть: источник картинки шайбы у гостя, задержка интерполяции, RTT — для tools/smoke-lag.mjs */
   netInfo:function(){ return {src:PDS.mode, pmode:PUCKP&&PUCKP.on?PUCKP.mode:null, D:Math.round(NETV.D*1000), rtt:Math.round(NETV.rtt||0), buf:NETV.buf.length}; },
