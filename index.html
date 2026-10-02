@@ -53,9 +53,6 @@
     font-family:'BVR Sport','Arial Narrow',system-ui,sans-serif;font-style:italic}
   #rotate .brand b{color:#ffd166}
   #rotate .text{margin-top:14px}
-  #rotate .rsnd{display:none;margin-top:18px;padding:7px 14px;border-radius:999px;font-size:13px;font-weight:700;
-    color:#8fd8ff;border:1px solid rgba(143,216,255,.4);background:rgba(143,216,255,.08)}
-  #rotate.blocked .rsnd{display:block}
   #rotate .rnp{position:absolute;left:0;right:0;bottom:calc(env(safe-area-inset-bottom,0px) + 22px);font-size:12px;
     font-weight:700;color:rgba(255,255,255,.55);letter-spacing:.04em;transition:opacity .5s}
   @keyframes rotatePhone{
@@ -283,7 +280,6 @@
   @keyframes meq{from{transform:scaleY(1)}to{transform:scaleY(.3)}}
   .mnptx{font:italic 800 13px/1.1 var(--msport);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:opacity .45s}
   .mnptx.fade{opacity:0}
-  .mnptx small{font:700 11px/1 system-ui;color:var(--mcyan);margin-left:8px;font-style:normal;text-transform:none}
   .mhints{display:flex;gap:12px;align-items:center;flex:none;margin-left:auto}
   .mh{display:flex;align-items:center;gap:6px;font:italic 800 13px/1 var(--msport);text-transform:uppercase;color:var(--mdim);white-space:nowrap}
   .mg{display:inline-flex;align-items:center;justify-content:center;min-width:21px;height:21px;border-radius:50%;padding:0 5px;
@@ -610,7 +606,6 @@
     <div class="arrow"></div>
     <div class="text" id="rotTxt">Поверни телефон горизонтально</div>
     <div class="brand">BVR HOCKEY <b>26</b></div>
-    <div class="rsnd" id="rotSnd">🔊 коснись для звука</div>
     <div class="rnp" id="rotNp"></div>
   </div>
 
@@ -1239,7 +1234,7 @@ ru:{
   gamepad:'ГЕЙМПАД', connected:'подключён', kmh:'км/ч',
   qLow:'низкое', qMid:'среднее', qHigh:'высокое',
   rotate:'Поверни телефон горизонтально', noPauseOnline:'в онлайне паузы нет',
-  min5:'5 мин', tapSnd:'🔊 коснись для звука', soon:'скоро',
+  min5:'5 мин', soon:'скоро',
   mQuick:'Быстрый матч', mTrain:'Тренировка', mSettings:'Настройки',
   mTrainD:'Уроки и правила хоккея',
   mSettingsD:'Язык, графика, звук, вибрация',
@@ -1330,7 +1325,7 @@ en:{
   gamepad:'GAMEPAD', connected:'connected', kmh:'km/h',
   qLow:'low', qMid:'medium', qHigh:'high',
   rotate:'Turn your phone sideways', noPauseOnline:'no pause in online matches',
-  min5:'5 min', tapSnd:'🔊 tap for sound', soon:'soon',
+  min5:'5 min', soon:'soon',
   mQuick:'Quick match', mTrain:'Training', mSettings:'Settings',
   mTrainD:'Lessons and hockey rules',
   mSettingsD:'Language, graphics, sound, vibration',
@@ -1423,7 +1418,7 @@ id:{
   gamepad:'GAMEPAD', connected:'terhubung', kmh:'km/j',
   qLow:'rendah', qMid:'sedang', qHigh:'tinggi',
   rotate:'Putar HP ke posisi mendatar', noPauseOnline:'tidak ada jeda di mode online',
-  min5:'5 mnt', tapSnd:'🔊 ketuk untuk suara', soon:'segera',
+  min5:'5 mnt', soon:'segera',
   mQuick:'Main cepat', mTrain:'Latihan', mSettings:'Pengaturan',
   mTrainD:'Pelajaran dan aturan hoki',
   mSettingsD:'Bahasa, grafis, suara, getar',
@@ -6182,7 +6177,7 @@ var ADJ={
     layout(); mSnow(); MENU.build(MENU.top()); MENU.refocus();
   },
   fps:function(){ setShowFps(!SHOWFPS); MENU.build(MENU.top()); MENU.refocus(); },
-  mus:function(el, d, ev){ VOL.mus=barVal(ev, el, VOL.mus, d); prefSet('music', String(VOL.mus)); MUSIC.apply(); MENU.build(MENU.top()); MENU.refocus(); },
+  mus:function(el, d, ev){ VOL.mus=barVal(ev, el, VOL.mus, d); prefSet('music', String(VOL.mus)); MUSIC.apply(); MUSIC.unlock(); MENU.build(MENU.top()); MENU.refocus(); },
   sfx:function(el, d, ev){ VOL.sfx=barVal(ev, el, VOL.sfx, d); prefSet('sfx', String(VOL.sfx)); applySfx(); MENU.build(MENU.top()); MENU.refocus(); },
   vib:function(){ VIBRO=!VIBRO; prefSet('vibro', VIBRO?'1':'0'); if(VIBRO) buzz(12,'soft'); MENU.build(MENU.top()); MENU.refocus(); },
   ttab:function(el, d, ev){ var t=mPick(ev,'data-tab'); trainTab(t!==null ? +t : (MENU.trainTab+d+2)%2, true); },
@@ -6314,8 +6309,9 @@ function netJoin(){
 
 /* ---------- музыка меню ----------
    Треки — assets/dist/music-*.m4a (tools/pack-assets.mjs), по одному, вперемешку без повтора подряд. Играет в меню и на
-   экране поворота, в матче затихает за 0.8 с. На iPhone звук включается только касанием: не разрешили — подсказка
-   «коснись для звука», музыка стартует с первого касания. Громкость — через WebAudio (на iPhone <audio>.volume не
+   экране поворота, в матче затихает за 0.8 с. Браузеры и Telegram не дают звуку играть до первого касания: кнопки
+   «включить» нет — музыка стартует с первого касания любого места экрана (трек ещё не выбран — выбираем тут же).
+   Громкость 0 в Настройках — музыки нет совсем (сохраняется). Громкость — через WebAudio (на iPhone <audio>.volume не
    работает), до первого касания — через <audio>.volume. */
 var MUSIC={el:null, list:[], order:[], i:-1, name:'', cur:0, blocked:false, pending:false, routed:false, gain:null, off:true};
 MUSIC.init=function(){
@@ -6327,7 +6323,7 @@ MUSIC.init=function(){
   el.addEventListener('error', function(){ if(MUSIC.list.length>1) setTimeout(function(){ MUSIC.next(); }, 1500); });
   MUSIC.paint();
   /* трек качается после моделей игроков: на медленной сети они нужнее (без них не начать матч) */
-  playersReady(function(){ MUSIC.next(); });
+  playersReady(function(){ if(MUSIC.i<0) MUSIC.next(); });
 };
 MUSIC.next=function(){
   var n=MUSIC.list.length;
@@ -6343,7 +6339,7 @@ MUSIC.next=function(){
   MUSIC.paint(true);
   if(MUSIC.cur>0 || MUSIC.want()) MUSIC.play();
 };
-MUSIC.want=function(){ return !MUSIC.off && state==='menu'; };
+MUSIC.want=function(){ return !MUSIC.off && state==='menu' && VOL.mus>0; };
 MUSIC.play=function(){
   if(!MUSIC.el || MUSIC.pending) return;
   MUSIC.pending=true; MUSIC.apply();
@@ -6361,7 +6357,10 @@ MUSIC.unlock=function(){
   if(!MUSIC.routed && AC){
     try{ var s=AC.createMediaElementSource(MUSIC.el), g=AC.createGain(); s.connect(g); g.connect(AC.destination); MUSIC.gain=g; MUSIC.routed=true; MUSIC.el.volume=1; }catch(e){}
   }
-  if(MUSIC.want() && (MUSIC.el.paused || MUSIC.blocked)){ MUSIC.pending=false; MUSIC.play(); }
+  if(!MUSIC.want()) return;
+  /* касание раньше, чем докачались модели: трек выбираем сейчас — play() должен прозвучать внутри касания */
+  if(MUSIC.i<0) MUSIC.next();
+  else if(MUSIC.el.paused || MUSIC.blocked){ MUSIC.pending=false; MUSIC.play(); }
 };
 MUSIC.apply=function(){
   if(!MUSIC.el) return;
@@ -6378,14 +6377,12 @@ MUSIC.tick=function(dt){
 };
 /* плашка «сейчас играет»: одна строка «BvR — трек», смена трека — плавно */
 MUSIC.paint=function(fade){
-  var np=document.getElementById('mnp'), tx=document.getElementById('mnpTx'), rt=document.getElementById('rotate'), rn=document.getElementById('rotNp');
+  var np=document.getElementById('mnp'), tx=document.getElementById('mnpTx'), rn=document.getElementById('rotNp');
   if(np) np.classList.toggle('off', MUSIC.off || !MUSIC.name);
-  if(rt) rt.classList.toggle('blocked', MUSIC.blocked && !MUSIC.off);
-  setText('rotSnd', T('tapSnd'));
   var line=(MUSIC.off || !MUSIC.name) ? '' : 'BvR — '+MUSIC.name;
   if(rn) rn.textContent=line ? '♪ '+line : '';
   if(!tx) return;
-  var html=mEsc(line)+(MUSIC.blocked?'<small>'+mEsc(T('tapSnd'))+'</small>':'');
+  var html=mEsc(line);
   if(fade && tx.innerHTML){ tx.classList.add('fade'); setTimeout(function(){ tx.innerHTML=html; tx.classList.remove('fade'); }, 450); }
   else tx.innerHTML=html;
 };

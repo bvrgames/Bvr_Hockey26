@@ -1,14 +1,15 @@
 // Menu test (docs/MENU_PLAN.md, stage 2) in a fake full-screen Telegram, landscape phone.
-//   · keyboard only: main → Game mode → Vs computer → setup (team, 5 min, tactics) → Start → the match runs with them;
+//   · keyboard only: main → Vs computer → setup (team, 5 min, tactics; saved at once) → Start → the match runs with them;
 //     Esc → pause → Controls → back → Settings → back → Main menu; Quick match starts with the saved setup;
 //     Settings: language and music volume change and survive a reload
 //   · gamepad only (fake navigator.getGamepads): D-pad + A to a match, Start → pause, B → resume
-//   · touch only (tap): Game mode → Vs computer → length → Start; the pause button → Resume
+//   · touch only (tap): Vs computer → kit swatches (the rival's kit is taken) → length → Start; the pause button → Resume
 //   · Telegram BackButton: shown on sub-screens, hidden on the main menu, its click goes back; in a match — pause
 //   · with a friend (relay-mock, server mode): the host lands on the match setup when the friend joins, the guest sees
 //     the host's teams and length change before the start; the host's keyboard Start begins the match for both
-//   · portrait: the rotate screen with the track line; menu music plays; with autoplay refused — "tap for sound",
-//     the first tap starts it; the music fades out when a match starts
+//   · Settings → Controls; Training → the hockey rules tab; no Rules on the main menu
+//   · portrait: the rotate screen with the track line; menu music plays; with autoplay refused — no "tap for sound"
+//     button or hint, the first tap anywhere starts it; the music fades out when a match starts
 // Fails on any console error, page error or failed request.
 // usage: node tools/smoke-menu.mjs [--browser chromium|webkit]
 import { startServer } from './serve.mjs';
@@ -237,7 +238,7 @@ async function collect(g, tag) {
   } catch (e) { fails.push('touch: runner error: ' + e.message.split('\n')[0]); } finally { await g.browser.close(); }
 }
 
-// ---------- 4. portrait: rotate screen, music; autoplay refused → "tap for sound"
+// ---------- 4. portrait: rotate screen, music; autoplay refused → the first tap starts it (no button)
 {
   const noPortrait = browserName === 'webkit';   // Playwright's WebKit cannot emulate portrait (see smoke-tg.mjs)
   const g = await open(noPortrait ? LAND : PORT, [NO_AUTOPLAY]); const { page } = g;
@@ -249,8 +250,9 @@ async function collect(g, tag) {
     await page.waitForTimeout(400);
     let m = await page.evaluate('__hk.music()');
     ok(!m.off && m.blocked && !m.playing, `autoplay refused: music should wait for a tap ${JSON.stringify(m)}`);
-    const hint = noPortrait ? await page.evaluate("document.getElementById('mnpTx').textContent") : await page.evaluate("getComputedStyle(document.getElementById('rotSnd')).display");
-    ok(noPortrait ? /🔊/.test(hint) : hint !== 'none', `"tap for sound" hint not shown (${hint})`);
+    // no «tap for sound» button or hint: the first tap anywhere starts the music
+    const hint = await page.evaluate("({rot: !!document.getElementById('rotSnd'), np: document.getElementById('mnpTx').textContent})");
+    ok(!hint.rot && !/🔊/.test(hint.np), `a "tap for sound" hint is still shown ${JSON.stringify(hint)}`);
     await page.tap(noPortrait ? '#start .mscr.cur .mbrand' : '#rotate');
     await page.waitForTimeout(700);
     m = await page.evaluate('__hk.music()');
