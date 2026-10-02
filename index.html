@@ -446,8 +446,9 @@
   .mtc svg{width:60%;height:auto;margin-top:3px;filter:drop-shadow(0 6px 10px rgba(0,0,0,.45))}
   .mvs{font:italic 800 26px/1 var(--msport);color:var(--mgold);text-shadow:0 0 18px rgba(255,209,102,.5);padding:0 2px}
   .mopts{display:flex;flex-direction:column;gap:4px}
-  /* низкий экран (Android 360 px): строки настроек плотнее, иначе список уходит под заголовок */
-  @media (max-height:380px){ .mopts{gap:2px} .mopts .mrow{min-height:30px;padding-top:3px;padding-bottom:3px} .mprep .mgo{height:42px} }
+  /* низкий экран (iPhone 390 px, Android 360 px): строки настроек плотнее, иначе 7 строк уходят под заголовок */
+  @media (max-height:430px){ .mopts{gap:2px} .mopts .mrow{min-height:30px;padding-top:3px;padding-bottom:3px} }
+  @media (max-height:380px){ .mopts{gap:1px} .mopts .mrow{min-height:27px;padding-top:2px;padding-bottom:2px} .mprep .mgo{height:42px} }
   .mwait{display:flex;align-items:center;gap:8px;font:700 12px/1.25 system-ui;color:var(--mcyan)}
   .mdot{width:9px;height:9px;border-radius:50%;background:var(--mcyan);flex:none;animation:mpulse 1.4s infinite}
   .mdot.ok{background:#5ad07f;animation:none}
@@ -1251,6 +1252,7 @@ ru:{
   mLangD:'Язык игры. Выбор сохраняется.', mGfxD:'Авто — игра сама держит 60 кадров: на слабом телефоне снижает качество.',
   mFpsD:'Счётчик кадров в углу экрана во время матча.', mMusicD:'Музыка в меню. Когда начинается матч, она затихает.',
   mSfxD:'Звуки матча: клюшки, броски, свисток, трибуны.', mVibD:'Лёгкая отдача: гол, силовой, нажатия в меню.',
+  mShk:'Меньше тряски', mShkD:'Камера почти не трясётся от силовых, штанги и голов. Включено само, если в телефоне выбрано «Уменьшение движения».',
   mCtrl:'Управление', mCtrlD:'Что делают кнопки и жесты — на экране, клавиатуре и геймпаде.', tLessons:'Уроки', mHockey:'Правила хоккея', mTouch:'Экран', mKbd:'Клавиатура', mPad:'Геймпад',
   mStickL:'Левая половина экрана — джойстик', mMove:'движение', mPauseK:'пауза', mSwitch:'смена игрока', mPress:'прессинг (держать)',
   mTacK:'тактика', mDpad:'крестовина',
@@ -1342,6 +1344,7 @@ en:{
   mLangD:'Game language. Your choice is saved.', mGfxD:'Auto keeps 60 fps: the game lowers quality on a slow phone.',
   mFpsD:'Frame counter in the corner during a match.', mMusicD:'Menu music. It fades out when a match starts.',
   mSfxD:'Match sounds: sticks, shots, whistle, crowd.', mVibD:'Light feedback: goals, hits, menu taps.',
+  mShk:'Less shake', mShkD:'The camera barely shakes on hits, posts and goals. On by default if your phone has Reduce Motion turned on.',
   mCtrl:'Controls', mCtrlD:'What each button and gesture does — touch, keyboard and gamepad.', tLessons:'Lessons', mHockey:'Hockey rules', mTouch:'Touch', mKbd:'Keyboard', mPad:'Gamepad',
   mStickL:'Left half of the screen is the stick', mMove:'move', mPauseK:'pause', mSwitch:'switch player', mPress:'press (hold)',
   mTacK:'tactics', mDpad:'D-pad',
@@ -1435,6 +1438,7 @@ id:{
   mLangD:'Bahasa game. Pilihanmu disimpan.', mGfxD:'Otomatis menjaga 60 fps: kualitas turun di ponsel yang lambat.',
   mFpsD:'Penghitung frame di sudut layar saat laga.', mMusicD:'Musik menu. Pelan-pelan hilang saat laga dimulai.',
   mSfxD:'Suara laga: tongkat, tembakan, peluit, penonton.', mVibD:'Getar ringan: gol, benturan, ketukan menu.',
+  mShk:'Kurangi guncangan', mShkD:'Kamera hampir tidak berguncang saat benturan, tiang, dan gol. Otomatis aktif jika ponsel memakai Kurangi Gerakan.',
   mCtrl:'Kontrol', mCtrlD:'Fungsi tiap tombol dan gerakan — layar, keyboard, dan gamepad.', tLessons:'Pelajaran', mHockey:'Aturan hoki', mTouch:'Layar', mKbd:'Keyboard', mPad:'Gamepad',
   mStickL:'Separuh kiri layar adalah stik', mMove:'gerak', mPauseK:'jeda', mSwitch:'ganti pemain', mPress:'menekan (tahan)',
   mTacK:'taktik', mDpad:'D-pad',
@@ -1646,6 +1650,10 @@ try{ HAPTIC=!!(inTelegram() && TG.HapticFeedback && TG.HapticFeedback.impactOccu
 var VIBRO=true;
 try{ var _sv=localStorage.getItem('bvr_vibro'); if(_sv==='0') VIBRO=false; }catch(e){}
 /* вибро и громкость — настройки игрока (CloudStorage, копия в localStorage: bvr_vibro, bvr_music, bvr_sfx) */
+/* «Меньше тряски» (bvr_shake): тряска камеры ×0.25. Пока игрок не выбирал — как в системе («Уменьшение движения») */
+var SHAKE_LESS=false;
+try{ SHAKE_LESS=!!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }catch(e){}
+prefGet('shake', function(v){ if(v==='0'||v==='1'){ SHAKE_LESS=(v==='1'); if(typeof MENU!=='undefined' && MENU.ready) MENU.repaint(); } });
 prefGet('vibro', function(v){ if(v==='0'||v==='1'){ VIBRO=(v==='1'); if(typeof MENU!=='undefined' && MENU.ready) MENU.repaint(); } });
 prefGet('music', function(v){ var x=parseFloat(v); if(x>=0 && x<=1){ VOL.mus=x; if(typeof MUSIC!=='undefined'){ MUSIC.apply(); if(MENU.ready) MENU.repaint(); } } });
 prefGet('sfx', function(v){ var x=parseFloat(v); if(x>=0 && x<=1){ VOL.sfx=x; applySfx(); if(typeof MENU!=='undefined' && MENU.ready) MENU.repaint(); } });
@@ -2477,7 +2485,7 @@ function fxUpdate(dt){
 var _fxs=[0,0];
 function fxShake(){
   if(FX.trauma<=0){ _fxs[0]=_fxs[1]=0; return _fxs; }
-  var k=FX.trauma*FX.trauma*FX_AMP, u=FX.t*30+FX.ph;
+  var k=FX.trauma*FX.trauma*FX_AMP*(SHAKE_LESS?0.25:1), u=FX.t*30+FX.ph;
   _fxs[0]=k*(Math.sin(u*1.7)*0.7+Math.sin(u*3.1)*0.3);
   _fxs[1]=k*(Math.sin(u*2.3+1.3)*0.7+Math.sin(u*3.7)*0.3);
   return _fxs;
@@ -5728,7 +5736,8 @@ var MSCR={
     var rows=(inPause?'':mRow('lang',T('mLang'),mArr(T('langName')),'',' data-info="mLangD"'))+
       '<div class="mrow mf" data-adj="gfx" data-info="mGfxD"><span class="k">'+mEsc(T('mGfx'))+'</span><span class="v mseg" id="qT">'+q+'</span></div>'+
       mRow('fps',T('mFps'),mTog(SHOWFPS),'',' data-info="mFpsD"')+(inPause?'':mRow('mus',T('mMusic'),mBar('mus',VOL.mus),'',' data-info="mMusicD"'))+
-      mRow('sfx',T('mSfx'),mBar('sfx',VOL.sfx),'',' data-info="mSfxD"')+mRow('vib',T('mVib'),mTog(VIBRO),'',' data-info="mVibD"');
+      mRow('sfx',T('mSfx'),mBar('sfx',VOL.sfx),'',' data-info="mSfxD"')+mRow('vib',T('mVib'),mTog(VIBRO),'',' data-info="mVibD"')+
+      mRow('shk',T('mShk'),mTog(SHAKE_LESS),'',' data-info="mShkD"');
     /* «Управление» — отдельный блок справа: открывает схему кнопок (экран, клавиатура, геймпад) */
     return mHead(T('mSettings'))+'<div class="mleft"><div class="mopts">'+rows+'</div></div>'+
       '<div class="mright"><div class="mcard mglass" data-paint="setR"></div>'+
@@ -6252,6 +6261,8 @@ var ADJ={
   mus:function(el, d, ev){ VOL.mus=barVal(ev, el, VOL.mus, d); prefSet('music', String(VOL.mus)); MUSIC.apply(); MUSIC.unlock(); MENU.build(MENU.top()); MENU.refocus(); },
   sfx:function(el, d, ev){ VOL.sfx=barVal(ev, el, VOL.sfx, d); prefSet('sfx', String(VOL.sfx)); applySfx(); MENU.build(MENU.top()); MENU.refocus(); },
   vib:function(){ VIBRO=!VIBRO; prefSet('vibro', VIBRO?'1':'0'); if(VIBRO) buzz(12,'soft'); MENU.build(MENU.top()); MENU.refocus(); },
+  /* в паузе за меню виден матч — толчок показывает новую силу тряски */
+  shk:function(){ SHAKE_LESS=!SHAKE_LESS; prefSet('shake', SHAKE_LESS?'1':'0'); fxKick('m'); MENU.build(MENU.top()); MENU.refocus(); },
   ttab:function(el, d, ev){ var t=mPick(ev,'data-tab'); trainTab(t!==null ? +t : (MENU.trainTab+d+2)%2, true); },
   x:function(el, d, ev){ if(EXT.mod) EXT.mod.adj(el.getAttribute('data-x'), el, d, ev); },
   dev:function(el, d, ev){ var t=mPick(ev,'data-dev'); MENU.dev = t!==null ? +t : (curDev()+d+3)%3; MENU.build('ctrl'); MENU.refocus(); }
@@ -7602,8 +7613,9 @@ window.__hk={hs:function(){return HS;},net:function(){return NET;},setCam:functi
   rskip:function(o){ for(var k in o) RSKIP[k]=!!o[k]; return RSKIP; },
   /* отдача: vibro(true|false) — как переключатель в Настройках (без сохранения); путь: haptic (Telegram) / vibrate */
   vibro:function(v){ if(v!==undefined) VIBRO=!!v; return {on:VIBRO, haptic:HAPTIC, android:ANDROID}; },
-  /* ощущение удара: fx() — травма тряски; fx('m') — удар уровня s|m|l (как от события) */
-  fx:function(t){ if(t) fxKick(t); return {trauma:+FX.trauma.toFixed(3), sx:+fxShake()[0].toFixed(4)}; },
+  /* ощущение удара: fx() — травма тряски; fx('m') — удар уровня s|m|l (как от события); less — «Меньше тряски» */
+  fx:function(t, less){ if(less!==undefined) SHAKE_LESS=!!less; if(t) fxKick(t);
+    return {trauma:+FX.trauma.toFixed(3), sx:+fxShake()[0].toFixed(4), less:SHAKE_LESS}; },
   benchGpu:function(n,skip){ n=n||60; var bx=players.map(function(p){ return p.boxed; });
     if(skip) players.forEach(function(p){ p.boxed=true; });
     RDT=1/60; render(); gl.readPixels(0,0,1,1,gl.RGBA,gl.UNSIGNED_BYTE,_px1);
