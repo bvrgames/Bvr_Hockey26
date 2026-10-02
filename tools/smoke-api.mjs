@@ -259,6 +259,25 @@ function summary(o = {}) {
   calls.length = 0;
   await hook({ update_id: 5, message: { message_id: 3, from: B1, chat: { id: B1.id, type: 'private' }, date: now, text: '/terms' } });
   ok(calls.some((c) => c.method === 'sendMessage' && /Telegram id/.test(c.params.text)), '/terms answers with the terms (Telegram id, name, stats)');
+  // the bot's menu button is the owner's: /tg/setup?do=install never changes it — whatever it is now (the hub, another
+  // game, the default «commands», none), and the Bot API wrapper itself refuses setChatMenuButton; no server file calls it
+  {
+    const { handleBotSetup, botApiFrom } = await import('../server/coins.js');
+    for (const mb of [{ type: 'web_app', text: 'ИГРАТЬ', web_app: { url: 'https://bvr-games-hub.vercel.app/' } }, { type: 'web_app', text: 'X', web_app: { url: 'https://other.example/' } }, { type: 'commands' }, { type: 'default' }, null]) {
+      const mc = [];
+      const bot = async (method, params) => { mc.push(method); return method === 'getChatMenuButton' ? mb : method === 'getMyCommands' ? [] : method === 'getWebhookInfo' ? { url: '' } : true; };
+      const r = await handleBotSetup(new Request('https://w.example/tg/setup?do=install', { method: 'POST', headers: { 'X-Setup-Secret': SECRET } }), { secret: SECRET, bot });
+      const j = await r.json();
+      ok(r.status === 200 && !mc.includes('setChatMenuButton') && j.rev >= 3 && JSON.stringify(j.menuButton) === JSON.stringify(mb),
+        `setup: the menu button ${JSON.stringify(mb)} is not changed by install (${mc.join(',')})`);
+    }
+    let refused = null;
+    try { await botApiFrom('T', 'http://127.0.0.1:9')('setChatMenuButton', {}); } catch (e) { refused = e.message; }
+    ok(/refused/.test(refused || ''), `setup: the Bot API wrapper refuses setChatMenuButton (${refused})`);
+    const { readdirSync, readFileSync } = await import('node:fs');
+    const calls = readdirSync(join(ROOT, 'server')).filter((f) => f.endsWith('.js')).filter((f) => /bot\(\s*['"]setChatMenuButton/.test(readFileSync(join(ROOT, 'server', f), 'utf8')));
+    ok(!calls.length, `setup: no server file calls setChatMenuButton (${calls})`);
+  }
   // the menu button: one that already opens the game is kept; the commands keep the bot's own ones
   {
     const { handleBotSetup } = await import('../server/coins.js');

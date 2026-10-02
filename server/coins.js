@@ -310,6 +310,9 @@ export const STAR_PACKS = [
   { id: 's120', stars: 120, price: 100 },
   { id: 's300', stars: 300, price: 250 },
 ];
+// the revision of /tg/setup: ?do=info reports it — after a deploy, install only once info shows the new rev (an old
+// Worker version keeps serving some requests for a few seconds)
+export const SETUP_REV = 3;
 export const BOT_PATH = '/tg/webhook';     // Telegram posts updates here (setWebhook with secret_token)
 // @bvr_games_bot is the bot of ALL BVR games: its webhook (one per bot), star payments, /paysupport and /terms serve
 // every game, so payments of other games in this bot have to go through this same Worker too.
@@ -320,8 +323,12 @@ export const GAME = { url: 'https://bvr-hockey26.vercel.app/', link: 'https://t.
 
 // The Bot API over plain fetch (the same in Workers and Node.js): (method, params) → result, or throws.
 // base — https://api.telegram.org, or a fake one in tests.
+// Methods this server never calls: the bot's menu button belongs to the owner («ИГРАТЬ» → the BVR games hub) — no
+// code path here may change it (02.10 an old Worker version still serving right after a deploy did).
+export const BOT_NEVER = new Set(['setChatMenuButton']);
 export function botApiFrom(token, base = 'https://api.telegram.org') {
   return async (method, params) => {
+    if (BOT_NEVER.has(method)) throw new Error(`bot ${method}: refused — never called from this server`);
     const r = await fetch(`${base}/bot${token}/${method}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(params || {}) });
     let j = null; try { j = await r.json(); } catch (e) {}
     if (!j || !j.ok) throw new Error(`bot ${method}: ${(j && j.description) || r.status}`);
@@ -548,7 +555,7 @@ async function botSetup(url, d) {
   if (url.searchParams.get('do') !== 'install') {
     // no webhook: peek (no offset — nothing is confirmed) at what waits for getUpdates; old updates = nobody reads them
     if (!info.url) { try { const ups = await d.bot('getUpdates', { limit: 3, timeout: 0 }); pub.queued = ups.map((x) => ({ id: x.update_id, date: (x.message && x.message.date) || null })); } catch (e) { pub.queued = String(e.message); } }
-    return json(200, { target, ...pub });
+    return json(200, { rev: SETUP_REV, target, ...pub });
   }
   if (info.url && info.url !== target) return json(409, { reason: 'webhook exists', ...pub });
   await d.bot('setWebhook', { url: target, secret_token: d.secret, allowed_updates: ['message', 'pre_checkout_query'], max_connections: 20 });
@@ -565,7 +572,7 @@ async function botSetup(url, d) {
     await d.bot('setMyCommands', { language_code: lang, commands: merged(own, lang) });
   }
   // the menu button is the owner's («ИГРАТЬ» → the BVR games hub): never changed from here, only shown
-  return json(200, { installed: target, before: pub, info: await d.bot('getWebhookInfo', {}), commands: await d.bot('getMyCommands', {}),
+  return json(200, { rev: SETUP_REV, installed: target, before: pub, info: await d.bot('getWebhookInfo', {}), commands: await d.bot('getMyCommands', {}),
                      menuButton: await d.bot('getChatMenuButton', {}) });
 }
 
