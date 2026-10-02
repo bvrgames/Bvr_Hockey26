@@ -3,7 +3,8 @@
 // Checks that the scoreboard, the pause button and the FPS label stay out of Telegram's button zones
 // ("Close" top-left, "⌄ •••" top-right: width __hk.tgBtnW, height contentSafeAreaInset.top) and the device
 // safe area, do not overlap each other or the on-screen controls, and that every on-screen button label fits its
-// button in every language. Screenshots with the Telegram zones drawn: shots/ui/tg-<orient>-<lang>-<fps>.png.
+// button in every language. Match notifications sit right of the scoreboard on its row, clear of all that, uncut.
+// Screenshots with the Telegram zones drawn: shots/ui/tg-<orient>-<lang>-<fps|flash>.png.
 // usage: node tools/smoke-tg.mjs [--browser chromium|webkit]
 import { mkdirSync } from 'node:fs';
 import { startServer } from './serve.mjs';
@@ -23,6 +24,9 @@ const SETUPS = [
 // Telegram's buttons as drawn in the test — measured-ish real widths, NOT the game's estimate (the game must keep clear)
 const CLOSE_W = { ru: 100, en: 76, id: 76 }, RIGHT_W = 96;
 const LANGS = ['ru', 'en', 'id'];
+// every match notification: [text, subtext] keys (flash in index.html)
+const FLASHES = [['goal', 'ourGoal'], ['goal', 'theirGoal'], ['penalty', 'penaltySub'], ['hit'], ['save'], ['offside'], ['icing'],
+  ['gamepad', 'connected'], ['peerOut']];
 const PAD_KEYS = { bA: ['padA1', 'padA2'], bB: ['padB1', 'padB2'], bX: ['padX1', 'padX2'], bY: ['padY1', 'padY2'], bRT: ['hRT'] };
 
 const srv = await startServer(port);
@@ -106,6 +110,45 @@ for (const S of SETUPS) {
         for (const p of r.pads) if (hit(r.el.tacbadge, p)) fails.push(`${tag}: tactic badge overlaps an on-screen button`);
         if (fps && !/\d+ fps/.test(r.fpsText)) fails.push(`${tag}: FPS text "${r.fpsText}"`);
         if (browserName === 'chromium') await page.screenshot({ path: `shots/ui/tg-${S.name}${isPort ? '-layout' : ''}-${lang}-${fps ? 'fps' : 'nofps'}.png` });
+      }
+      // match notifications (flash): every text, right of the scoreboard on its row; not under Telegram's buttons, not
+      // outside the safe area, not over the pause / on-screen buttons / FPS (on from the loop above) / scoreboard;
+      // nothing cut; in landscape no word broken in the middle. Portrait (behind «rotate your phone») with no room right
+      // of the scoreboard: below it — still clear of everything.
+      for (const [a, b] of FLASHES) {
+        const m = await page.evaluate(({ a, b, port, sa, band, cw, rw }) => {
+          __hk.freeze();
+          const f = __hk.flash(a, b), W = innerWidth, H = innerHeight, out = [];
+          const box = (id) => { const e = document.getElementById(id); if (!e || getComputedStyle(e).display === 'none') return null; const r = e.getBoundingClientRect(); return r.width && r.height ? r : null; };
+          const hit = (p, q) => p && q && p.left < q.right && q.left < p.right && p.top < q.bottom && q.top < p.bottom;
+          const mb = box('msgbox'), hud = box('hud');
+          if (!mb) return { f, out: ['not visible'] };
+          const zones = [{ n: 'tg-close', left: sa.left || 0, top: sa.top || 0, right: (sa.left || 0) + cw, bottom: (sa.top || 0) + band },
+                         { n: 'tg-right', left: W - (sa.right || 0) - rw, top: sa.top || 0, right: W - (sa.right || 0), bottom: (sa.top || 0) + band }];
+          for (const z of zones) if (hit(mb, z)) out.push(`under ${z.n}`);
+          if (mb.left < (sa.left || 0) - 0.5 || mb.right > W - (sa.right || 0) + 0.5 || mb.top < (sa.top || 0) - 0.5 || mb.bottom > H - (sa.bottom || 0) + 0.5) out.push('outside the safe area');
+          for (const id of ['hud', 'bPause', 'fps', 'bA', 'bB', 'bX', 'bY', 'bRT', 'tacbadge']) if (hit(mb, box(id))) out.push(`overlaps #${id}`);
+          if (hud && !(port && f.below)) {
+            if (mb.left < hud.right) out.push('not right of the scoreboard');
+            const c = hud.top + hud.height / 2;
+            if (!(mb.top <= c && c <= mb.bottom)) out.push('not on the scoreboard row');
+            if (mb.height <= hud.height + 1 && Math.abs(mb.top + mb.height / 2 - c) > 2) out.push('not centred on the scoreboard row');
+          }
+          for (const id of ['msgbox', 'msg', 'sub']) { const e = document.getElementById(id); if (e.scrollWidth > e.clientWidth + 1) out.push(`#${id} text cut (${e.scrollWidth} > ${e.clientWidth})`); }
+          if (f.fm < 8.9) out.push(`font ${f.fm} px`);
+          __hk.flash(); __hk.unfreeze();
+          return { f, out };
+        }, { a, b, port: isPort, sa: S.safe, band: S.content.top, cw: CLOSE_W[S.tgLang], rw: RIGHT_W });
+        const t = `${S.name} ${lang} flash ${a}${b ? '+' + b : ''}`;
+        for (const x of m.out) fails.push(`${t}: ${x} ${JSON.stringify(m.f)}`);
+        if (m.f.brk) fails.push(`${t}: a word is broken in the middle ${JSON.stringify(m.f)}`);
+        if (m.f.below && !isPort) fails.push(`${t}: below the scoreboard in landscape ${JSON.stringify(m.f)}`);
+      }
+      if (browserName === 'chromium') {
+        await page.evaluate("__hk.freeze(); __hk.flash('penalty','penaltySub')");
+        await page.waitForTimeout(300);   // the notification fades in (.18 s)
+        await page.screenshot({ path: `shots/ui/tg-${S.name}${isPort ? '-layout' : ''}-${lang}-flash.png` });
+        await page.evaluate('__hk.flash(); __hk.unfreeze()');
       }
       // on-screen button labels: every text this button can show must fit inside it
       const bad = await page.evaluate((PAD_KEYS) => {

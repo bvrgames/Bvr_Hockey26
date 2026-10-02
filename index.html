@@ -30,13 +30,18 @@
   #hud .clk{color:#ffd166}
   .sw{width:8px;height:15px;border-radius:2px}
 
-  /* Уведомления матча ушли из центра: «Гол», «Офсайд», «Сейв» перекрывали
-     именно ту часть площадки, за которой в этот момент и следишь.
-     Теперь компактной плашкой сверху, как отложенный офсайд. */
-  #msgbox{display:flex;align-items:baseline;gap:8px;
+  /* Уведомления матча («Гол», «Офсайд», «Сейв»…) — правее табло, в его строке по высоте (место и размер —
+     fitMsg). В центре они закрывали площадку, под табло — мешали. Не влезают до кнопок Telegram / паузы —
+     .wrap: надпись и пояснение друг под другом с переносом по словам, шрифт меньше. */
+  #msgbox{position:absolute;left:0;top:0;z-index:7;pointer-events:none;box-sizing:border-box;
+    display:flex;align-items:baseline;gap:8px;
     padding:5px 12px;border-radius:7px;background:rgba(12,18,30,.92);
     border:1px solid rgba(255,255,255,.16);
-    opacity:0;transition:opacity .18s;white-space:nowrap;max-width:92vw}
+    opacity:0;transition:opacity .18s;white-space:nowrap}
+  #msgbox.wrap{white-space:normal;flex-direction:column;align-items:flex-start;gap:1px;padding:4px 7px}
+  #msgbox.wrap #msg,#msgbox.wrap #sub{letter-spacing:.03em}   /* разрядка съедает ширину узкой надписи */
+  #msgbox.tight{padding:4px 5px}#msgbox.tight #msg,#msgbox.tight #sub{letter-spacing:0}
+  #msgbox.wrap.brk #msg,#msgbox.wrap.brk #sub{overflow-wrap:anywhere}
   #msg{font-size:12px;font-weight:800;letter-spacing:.10em;text-transform:uppercase;line-height:1.2}
   #sub{font-size:10px;letter-spacing:.10em;text-transform:uppercase;
     color:rgba(255,255,255,.62);line-height:1.2}
@@ -535,8 +540,8 @@
   <div id="hud2"><span id="ppl"></span></div>
   <div id="topbar">
     <div id="chip"></div>
-    <div id="msgbox"><div id="msg"></div><div id="sub"></div></div>
   </div>
+  <div id="msgbox"><div id="msg"></div><div id="sub"></div></div>
   <div id="toast"></div>
   <div id="netban"></div>
   <div id="tacbadge"></div>
@@ -1018,6 +1023,7 @@ function layout(){
    («Закрыть» слева, «⌄ •••» справа) занимают полосу высотой
    TG.contentSafeAreaInset.top под зоной устройства; середина полосы свободна.
    ============================================================ */
+var MSGZ={r:0, top:0, tbY:12};   /* границы надписи матча (layoutTop → fitMsg) */
 var TG_BTN_W=100;          /* ширина группы «⌄ •••» справа (API её не даёт — с запасом) */
 /* Ширина кнопки «Закрыть» слева зависит от платформы и языка интерфейса Telegram
    (RU «Закрыть» шире EN «Close» / ID «Tutup»; на Android — узкая стрелка). API её
@@ -1089,6 +1095,12 @@ function layoutTop(){
   var tb=document.getElementById('topbar');
   var tbY = (band>0 || PORTRAIT) ? hudB+ (PORTRAIT?26:24) : top0+12;
   tb.style.top=Math.round(tbY)+'px';
+  /* надпись матча — правее табло (fitMsg) */
+  var hudInBand = band>0 && !PORTRAIT && hudY<below;
+  MSGZ.r=Math.min(hudInBand ? W-SA.r-TG_BTN_W-4 : W-SA.r-8, pX-8);   /* TG_BTN_W уже с запасом */
+  MSGZ.top=hudInBand ? top0 : (band>0 ? below : top0);
+  MSGZ.tbY=tbY;
+  fitMsg();
   var toast=document.getElementById('toast');
   if(PORTRAIT){ toast.style.top=Math.round(tbY+34)+'px'; toast.style.bottom='auto'; }
   else { toast.style.top='auto'; toast.style.bottom=Math.round(SA.b+14)+'px'; }
@@ -1412,7 +1424,7 @@ id:{
   peerOut:'lawan keluar', roomFull:'ruangan penuh', netErr:'tidak ada koneksi',
   red:'MERAH', blue:'BIRU', yellow:'KUNING', green:'HIJAU',
   abRed:'MRH', abBlue:'BIR', abYellow:'KNG', abGreen:'HJU',
-  match:'PERTANDINGAN', goal:'GOL!', ourGoal:'kita mencetak gol', theirGoal:'kebobolan',
+  match:'LAGA', goal:'GOL!', ourGoal:'kita mencetak gol', theirGoal:'kebobolan',
   save:'PENYELAMATAN', hit:'BENTURAN KERAS!', penalty:'PENALTI · 2 MNT',
   penaltySub:'menabrak pemain tanpa keping',
   offside:'OFFSIDE', icing:'ICING', delayed:'OFFSIDE TERTUNDA',
@@ -2439,8 +2451,47 @@ var msgEl=document.getElementById('msg'), subEl=document.getElementById('sub'),
 function flash(a,b,dur){
   msgEl.textContent=a; subEl.textContent=b||'';
   subEl.style.display=b?'block':'none';
+  fitMsg();
   msgBox.style.opacity=1;
   msgT=dur||1.6;
+}
+/* Надпись правее табло, по центру его строки. Границы (MSGZ) считает layoutTop: справа — до «⌄ •••», если табло
+   в полосе кнопок Telegram, и всегда до паузы; сверху — не выше зоны устройства (табло ниже полосы — не выше её
+   низа). Не влезает в строку — перенос по словам и шрифт меньше (до 9/8 px, последним шагом без разрядки).
+   Места правее табло нет совсем (меньше 64 px — бывает только в вертикали, под «поверни телефон») или слово всё
+   равно шире — в вертикали под табло и штрафами, в горизонтали слово рвётся (на тестовых экранах не бывает). */
+function fitMsg(){
+  if(!msgBox) return;   /* layoutTop вызывается и раньше, чем дошли до объявления надписи */
+  var hud=document.getElementById('hud'), hw=hud.offsetWidth, hh=hud.offsetHeight, mb=msgBox;
+  mb.classList.remove('wrap','brk'); msgEl.style.fontSize=subEl.style.fontSize='';
+  if(!hw){
+    /* табло скрыто (тренировка) — как раньше: одной строкой по центру сверху */
+    mb.style.maxWidth='92vw'; mb.style.left='50%'; mb.style.transform='translateX(-50%)'; mb.style.top=Math.round(MSGZ.tbY)+'px';
+    return;
+  }
+  var over=function(){ return mb.scrollWidth>mb.clientWidth+0.5 || msgEl.scrollWidth>msgEl.clientWidth+0.5 ||
+                              subEl.scrollWidth>subEl.clientWidth+0.5; };
+  var fit=function(x, maxW){
+    mb.classList.remove('wrap','brk','tight'); msgEl.style.fontSize=subEl.style.fontSize='';
+    mb.style.transform=''; mb.style.left=Math.round(x)+'px'; mb.style.maxWidth=maxW+'px';
+    if(!over()) return true;
+    mb.classList.add('wrap');
+    var fm=12, fs=10;
+    while((over() || mb.offsetHeight>hh*2.4) && fm>9){
+      fm-=0.5; fs=Math.max(8, fs-0.5); msgEl.style.fontSize=fm+'px'; subEl.style.fontSize=fs+'px';
+    }
+    if(over()) mb.classList.add('tight');
+    return !over();
+  };
+  var x=hud.offsetLeft+hw+6, maxW=MSGZ.r-x;
+  if(maxW>=64 && (fit(x, maxW) || !PORTRAIT)){
+    if(over()) mb.classList.add('brk');
+    mb.style.top=Math.round(Math.max(MSGZ.top, hud.offsetTop+hh/2-mb.offsetHeight/2))+'px';
+    return;
+  }
+  /* вертикаль, правее табло тесно: под табло и строкой штрафов, от его левого края до паузы */
+  if(!fit(hud.offsetLeft, MSGZ.r-hud.offsetLeft)) mb.classList.add('brk');
+  mb.style.top=Math.round(hud.offsetTop+hh+24)+'px';
 }
 
 /* ---------- симуляция: shared/sim.js ----------
@@ -7714,6 +7765,11 @@ window.__hk={hs:function(){return HS;},net:function(){return NET;},setCam:functi
   /* раскладка / подписи — для tools/smoke-tg.mjs */
   showFps:function(on){ setShowFps(on); }, fitPad:function(){ fitPadLabels(); }, T:function(k){ return T(k); },
   layoutTop:function(){ layoutTop(); },
+  /* надпись матча: flash('goal','ourGoal') — ключи текстов (на 30 с); flash() — убрать; вернёт её место и размер */
+  flash:function(a,b){ if(a) flash(T(a), b?T(b):'', 30); else { msgT=0; msgBox.style.opacity=0; }
+    var r=msgBox.getBoundingClientRect(); return {x:r.left, y:r.top, w:r.width, h:r.height,
+      fm:parseFloat(getComputedStyle(msgEl).fontSize), wrap:msgBox.classList.contains('wrap'), brk:msgBox.classList.contains('brk'),
+      below:msgBox.getBoundingClientRect().top>document.getElementById('hud').getBoundingClientRect().bottom}; },
   /* замер: средняя цена кадра отрисовки (мс) при уровне пружин lv (0 — выкл) */
   benchSprings:function(lv,n){ var q=QC(), old=q.springs; q.springs=lv; n=n||240; var t0=performance.now(); for(var i=0;i<n;i++){ RDT=1/60; render(); } var dt=(performance.now()-t0)/n; q.springs=old; return +dt.toFixed(3); }, tgBtnW:TG_BTN_W, tgCloseW:function(){ return tgCloseW(); }, safe:function(){ return {sa:safeInsets(), band:tgButtonsBand(), portrait:PORTRAIT}; },
   /* хост: отправить снимок сейчас (с ожидающими событиями) — для тестов после freeze */
