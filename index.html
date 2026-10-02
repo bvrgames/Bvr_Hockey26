@@ -2341,7 +2341,8 @@ var PRED=null, PRED_ERR={x:0,z:0,yaw:0}, PRED_LOG=[];
 var SNAP_HZ=30, INPUT_HZ=30;
 var NETV={q:0, cnt:[0,0,0,0,0], ack:0, sentT:{}, rtt:0,
           inQ:0, lastCnt:[0,0,0,0,0], tapB:false,
-          buf:[], offWin:[], off:null, D:0.08, jit:[]};
+          buf:[], offWin:[], off:null, D:0.08, jit:[],
+          pl:{fr:0, ex:0, hold:0, back:0, rt:null}};   /* воспроизведение: кадры, экстраполяция, сверх предела, время назад */
 var BTN_KEYS=['A','B','X','Y','LB'];
 function predResetTo(p){
   PRED={p:p, x:p.x, z:p.z, vx:p.vx||0, vz:p.vz||0, yaw:p.yaw, spd:p.spd||0, stride:p.stride||0, _back:false};
@@ -5328,7 +5329,9 @@ function netApply(){
   var rt = (NETV.off!==null) ? Date.now()-NETV.off-NETV.D*1000 : Bf[Bf.length-1].t;
   var i1=Bf.length-1;
   while(i1>0 && Bf[i1-1].t>=rt) i1--;
-  var S1=Bf[i1], S0=Bf[Math.max(0,i1-1)], k;
+  var S1=Bf[i1], S0=Bf[Math.max(0,i1-1)], k, PL=NETV.pl;
+  PL.fr++; if(PL.rt!==null && rt<PL.rt) PL.back++; PL.rt=rt;
+  if(rt>Bf[Bf.length-1].t){ PL.ex++; if(rt-Bf[Bf.length-1].t>100) PL.hold++; }
   if(S1.t<=rt){                                         /* новее нет: чуть экстраполируем, не больше 100 мс */
     S0=Bf[Math.max(0,Bf.length-2)]; S1=Bf[Bf.length-1];
     var span=Math.max(1,S1.t-S0.t);
@@ -7761,7 +7764,7 @@ window.__hk={hs:function(){return HS;},net:function(){return NET;},setCam:functi
   rw:function(){ return {st:RWD.st, id:RWD.id, played:RWD.played, fly:document.querySelectorAll('.rw-fx').length,
     text:document.getElementById('oReward').textContent, wal:document.getElementById('oWal').textContent}; },
   /* сеть: источник картинки шайбы у гостя, задержка интерполяции, RTT — для tools/smoke-lag.mjs */
-  netInfo:function(){ return {src:PDS.mode, pmode:PUCKP&&PUCKP.on?PUCKP.mode:null, D:Math.round(NETV.D*1000), rtt:Math.round(NETV.rtt||0), buf:NETV.buf.length}; },
+  netInfo:function(){ return {src:PDS.mode, pmode:PUCKP&&PUCKP.on?PUCKP.mode:null, D:Math.round(NETV.D*1000), rtt:Math.round(NETV.rtt||0), buf:NETV.buf.length, pl:NETV.pl}; },
   /* раскладка / подписи — для tools/smoke-tg.mjs */
   showFps:function(on){ setShowFps(on); }, fitPad:function(){ fitPadLabels(); }, T:function(k){ return T(k); },
   layoutTop:function(){ layoutTop(); },

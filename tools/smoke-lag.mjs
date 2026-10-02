@@ -15,8 +15,10 @@
 //   · server scheme (the default; the host scheme is asked with &net=host): the match runs in relay-mock's MatchRoom (= the Durable Object's code), each player
 //     over their own link. "(host)" values are the host's own — in this scheme they are networked too.
 //   Scenarios A: host 140 ms / jit 55, guest 80 / jit 80 (the RZYT phone test); B: both 140 / jit 80.
+//   ID (Indonesia, mobile internet, both players far from the room): host 200 ms / jit 100, guest 300 / jit 110, 2.5 %
+//   loss bursts on each link — the default run is A,B,ID.
 // --rtt 0,80,150,250 — the old host-scheme sweep (one relay hop, jitter 10 %).
-// usage: node tools/smoke-lag.mjs [--scen A,B] [--rtt …] [--json out.json] [--trials 5]
+// usage: node tools/smoke-lag.mjs [--scen A,B,ID] [--rtt …] [--json out.json] [--trials 5]
 // Exit code 1 only on page errors / a broken run (the numbers themselves are a report, not pass/fail),
 // or with --max-move / --max-lost thresholds when given.
 import { writeFileSync } from 'node:fs';
@@ -31,16 +33,17 @@ const port = +opt('port', 8502), rport = +opt('relay', 8795);
 const NET_FOR = (rtt) => ({ lag: rtt / 2, jitter: rtt ? Math.max(5, rtt * 0.1) : 0, loss: rtt ? 1 : 0 });
 // one-way ±J uniform on both halves of a round trip gives an RTT standard deviation of J·√(2/3)
 const J_FOR_SD = (sd) => Math.round(sd * Math.sqrt(1.5));
-const SCEN = { A: { host: [140, 55], guest: [80, 80] }, B: { host: [140, 80], guest: [140, 80] } };
+const SCEN = { A: { host: [140, 55], guest: [80, 80] }, B: { host: [140, 80], guest: [140, 80] },
+               ID: { host: [200, 100], guest: [300, 110], loss: 2.5 } };
 const RUNS = [];
 if (opt('rtt', null)) for (const rtt of opt('rtt').split(',').map(Number)) RUNS.push({ label: `RTT ${rtt}`, mode: 'host', net: NET_FOR(rtt), rtt });
-else for (const k of opt('scen', 'A,B').split(',')) {
+else for (const k of opt('scen', 'A,B,ID').split(',')) {
   const s = SCEN[k]; if (!s) continue;
-  const link = ([rtt, sd]) => ({ lag: rtt / 2, jitter: J_FOR_SD(sd), loss: 1 });
+  const link = ([rtt, sd]) => ({ lag: rtt / 2, jitter: J_FOR_SD(sd), loss: s.loss || 1 });
   const h = link(s.host), g = link(s.guest);
   // host scheme: one relay hop carries both links — delays add up, jitters add in quadrature
   RUNS.push({ label: `${k} host`, mode: 'host', rtt: s.host[0] + s.guest[0],
-              net: { lag: h.lag + g.lag, jitter: Math.round(Math.hypot(h.jitter, g.jitter)), loss: 2 }, scen: s });
+              net: { lag: h.lag + g.lag, jitter: Math.round(Math.hypot(h.jitter, g.jitter)), loss: 2 * (s.loss || 1) }, scen: s });
   RUNS.push({ label: `${k} server`, mode: 'server', rtt: s.guest[0], net: { per: [h, g] }, scen: s });
 }
 
@@ -186,7 +189,7 @@ for (const run of RUNS) {
 
     // --- jerks + snapshot stream: 10 s of scripted play on both sides
     await H.evaluate(BOT); await G.evaluate(BOT);
-    await G.evaluate('__net.snaps.length=0; __net.inputs=0; __smp.fr.length=0; __smp.on=true');
+    await G.evaluate('__net.snaps.length=0; __net.inputs=0; __smp.fr.length=0; __smp.on=true; var L=__hk.netInfo().pl; L.fr=L.ex=L.hold=L.back=0');
     await H.evaluate('__smp.fr.length=0; __smp.on=true');
     await G.waitForTimeout(10000);
     await G.evaluate('__smp.on=false'); await H.evaluate('__smp.on=false');
@@ -204,6 +207,10 @@ for (const run of RUNS) {
       R.puckJerkBySrc = by;
     }
     const snaps = await G.evaluate('__net.snaps'), inputs = await G.evaluate('__net.inputs');
+    // playout of the snapshot buffer on the guest: frames drawn past the newest snapshot (extrapolated), past the
+    // extrapolation limit (others stand still, then jump), frames where the shown server time went backwards
+    { const L = await G.evaluate('__hk.netInfo().pl'), pc = (v) => +(100 * v / Math.max(1, L.fr)).toFixed(1);
+      R.playout = { ex: pc(L.ex), hold: pc(L.hold), backPerSec: +(L.back / 10).toFixed(1), D: (await G.evaluate('__hk.netInfo().D')) }; }
     await H.evaluate('clearInterval(__bot); __hk.move(0,0)'); await G.evaluate('clearInterval(__bot); __hk.move(0,0)');
     const iv = snaps.slice(1).map((s, i) => s[0] - snaps[i][0]);
     const ivMean = iv.reduce((a, b) => a + b, 0) / iv.length;
@@ -325,6 +332,8 @@ row('  host other players jerks /s', (r) => r.jerkHost && r.jerkHost.others.perS
 row('others p95 frame jump, cm (host)', (r) => r.jerkGuest && `${r.jerkGuest.others.p95Cm} (${r.jerkHost.others.p95Cm})`);
 row('puck jerks /s (mean cm) (host /s)', (r) => r.jerkGuest && `${r.jerkGuest.puck.perSec} (${r.jerkGuest.puck.meanCm}) (${r.jerkHost.puck.perSec})`);
 row('  puck jerks by drawing source (count)', (r) => r.puckJerkBySrc && Object.entries(r.puckJerkBySrc).sort((x, y) => y[1] - x[1]).slice(0, 2).map(([k, v]) => `${k}:${v}`).join(' '));
+row('guest playout: extrapolated % / held % (D ms)', (r) => r.playout && `${r.playout.ex} / ${r.playout.hold} (${r.playout.D})`);
+row('  shown server time goes back /s', (r) => r.playout && r.playout.backPerSec);
 row('snapshots /s, interval mean±sd ms', (r) => r.snap && `${r.snap.perSec} ${r.snap.meanMs}±${r.snap.sdMs}`);
 row('snapshot interval p95 / max ms', (r) => r.snap && `${r.snap.p95Ms}/${r.snap.maxMs}`);
 row('snapshot bytes, guest inputs /s', (r) => r.snap && `${r.snap.bytes} B, ${r.snap.inputsPerSec}`);
