@@ -4190,8 +4190,7 @@ function drawAt(g,x,y,z,yaw,opt,k,ky){
    предсказание, снимки и ввод, pose — скиннинг и пружины (позы костей на CPU), draw — вызовы
    WebGL, marks — следы на льду, ovl — 2D-накладка (виньетка, снег, джойстик), hud — ввод и DOM.
    wait — остаток интервала между кадрами: ожидание GPU/компоновщика или vsync.
-   gpu — время, за которое GPU дорисовывает кадр: раз в 20 кадров readPixels(1 px) после отрисовки
-   ждёт конца работы GPU (это само по себе чуть тормозит — только в ?debug). */
+   gpu — время кадра на GPU по EXT_disjoint_timer_query_webgl2 (pfRender); нет расширения — gpu не показывается. */
 var PERF={on:TEST.debug, acc:{}, n:0, iv:0, ivN:0, roll:false, t0:0, frameMs:0, cpu:0, gpu:0, gpuN:0, gpuAcc:0, draws:0, tris:0, out:null, k:0};
 var PERF_KEYS=['sim','net','pose','draw','marks','ovl','hud'];
 /* отладка цены отрисовки (__hk.rskip): не рисовать часть сцены */
@@ -5763,17 +5762,34 @@ function frame(now){
 }
 var _uiMenu=null, _uiPad=null;
 function pfSum(){ var s=0; for(var i=0;i<PERF_KEYS.length;i++) s+=PERF.acc[PERF_KEYS[i]]||0; return s; }
-var _px1=new Uint8Array(4);
-/* отрисовка с разбивкой: draw — всё, что не pose и не ovl; раз в 20 кадров — сколько GPU ещё дорисовывает */
+var _px1=new Uint8Array(4);   /* __hk.benchGpu: readPixels — только в ручном замере */
+/* время кадра на GPU (04.10): EXT_disjoint_timer_query_webgl2 — запрос TIME_ELAPSED вокруг отрисовки, результат читаем,
+   когда готов (через кадр-другой), ничего не ждём. Нет расширения (iOS, обычно и Chrome на Android) — gpu не меряем.
+   Раньше readPixels каждые 20 кадров ждал, пока GPU дорисует, — сам стопорил конвейер и рвал кадр в ?debug. */
+var GPUT={ext:undefined, q:[]};
+function gpuTimer(){
+  if(GPUT.ext===undefined){ GPUT.ext=null; try{ GPUT.ext=gl.getExtension('EXT_disjoint_timer_query_webgl2')||null; }catch(e){} }
+  return GPUT.ext;
+}
+function gpuPoll(ext){
+  var disjoint=false; try{ disjoint=!!gl.getParameter(ext.GPU_DISJOINT_EXT); }catch(e){}
+  while(GPUT.q.length){
+    var q=GPUT.q[0];
+    if(!gl.getQueryParameter(q, gl.QUERY_RESULT_AVAILABLE)) break;
+    var ns=gl.getQueryParameter(q, gl.QUERY_RESULT); GPUT.q.shift(); gl.deleteQuery(q);
+    if(!disjoint){ PERF.gpuAcc+=ns/1e6; PERF.gpuN++; }     /* разрыв (смена частоты, другой процесс на GPU) — замер не верен */
+  }
+}
+/* отрисовка с разбивкой: draw — всё, что не pose и не ovl; gpu — по таймеру GPU, если он есть */
 function pfRender(){
   if(!PERF.on){ render(); return; }
   var t=performance.now(), a=PERF.acc.pose||0, b=PERF.acc.ovl||0;
+  var ext=GLOK && !TEST.skipRender ? gpuTimer() : null, q=null;
+  if(ext && GPUT.q.length<4){ q=gl.createQuery(); gl.beginQuery(ext.TIME_ELAPSED_EXT, q); }
   render();
+  if(q){ gl.endQuery(ext.TIME_ELAPSED_EXT); GPUT.q.push(q); }
   PERF.acc.draw=(PERF.acc.draw||0)+(performance.now()-t)-((PERF.acc.pose||0)-a)-((PERF.acc.ovl||0)-b);
-  if(GLOK && !TEST.skipRender && (++PERF.k%20)===0){
-    var g=performance.now(); gl.readPixels(0,0,1,1,gl.RGBA,gl.UNSIGNED_BYTE,_px1);
-    PERF.gpuAcc+=performance.now()-g; PERF.gpuN++;
-  }
+  if(ext) gpuPoll(ext);
 }
 function frameStep(dt){
   if(!PERF.on){ frameStepInner(dt); return; }
