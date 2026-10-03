@@ -303,6 +303,24 @@ for (const S of SETUPS.filter((x) => !x.name.startsWith('port'))) {
   }
 }
 
+// ---------- the invite link goes to the bot the game was opened from (?bot=&app= in the Mini App URL, BotFather)
+{
+  const g = await openGame(browserName, { w: 844, h: 390, mobile: true, tg: fakeTelegram({ fullscreen: true, content: { top: 46 } }) });
+  try {
+    for (const [q, want] of [['', 'https://t.me/bvr_games_bot/hockeytg?startapp=ABC'],
+      ['&bot=Bvrtestbot&app=hockey', 'https://t.me/Bvrtestbot/hockey?startapp=ABC'],
+      ['&bot=Bvrtestbot', 'https://t.me/Bvrtestbot?startapp=ABC'],
+      ['&bot=evil.example%2Fx', 'https://t.me/bvr_games_bot/hockeytg?startapp=ABC'],
+      ['&bot=Bvrtestbot&app=a%2F..%2Fb', 'https://t.me/Bvrtestbot?startapp=ABC']]) {
+      await g.page.goto(`http://127.0.0.1:${port}/index.html?seed=4&nomusic${q}`, { waitUntil: 'load', timeout: 120000 });
+      await g.page.waitForFunction('window.__hk && __hk.invite', null, { timeout: 60000 });
+      const got = await g.page.evaluate('__hk.invite("ABC")');
+      if (got !== want) fails.push(`invite ${q || '(no bot)'}: ${got}, want ${want}`);
+    }
+  } catch (e) { fails.push(`invite: runner error: ${e.message.split('\n')[0]}`); }
+  finally { await g.browser.close(); }
+}
+
 srv.close();
 if (fails.length) console.log('FAIL:\n  ' + fails.join('\n  '));
 console.log(fails.length ? `\nTG LAYOUT FAIL (${browserName})` : `TG LAYOUT OK (${browserName}) — screenshots in shots/ui/tg-*.png`);
