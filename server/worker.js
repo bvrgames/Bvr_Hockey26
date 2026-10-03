@@ -55,7 +55,7 @@
 
 import { MatchRoom, SIM_HZ } from './room-sim.js';
 import { handleApi } from './api.js';
-import { verifyInitData, StakeRoom, stakeFinish, stakeDeadline, confFrom } from './coins.js';
+import { authBot, StakeRoom, stakeFinish, stakeDeadline, confFrom } from './coins.js';
 import { d1Store } from './coins-d1.js';
 import { autoHint } from './region.js';
 
@@ -142,7 +142,8 @@ export class Room {
 
   // ---- stakes (server mode). The rules are in coins.js (StakeRoom, stakeFinish); here only the Cloudflare side: who is
   // who (the Telegram id from verified initData sent over the socket), D1, the object's storage and alarm.
-  store() { return this.env.DB ? d1Store(this.env.DB) : null; }
+  // test — the test bot's database (DB_TEST): a stake between its players is locked and paid there, never in DB
+  store(test) { const db = test ? this.env.DB_TEST : this.env.DB; return db ? d1Store(db) : null; }
   stakesOn() { return !!(this.srv && this.env.DB && this.env.BOT_TOKEN); }
   stakeSend(err, slot) {
     const t = JSON.stringify(this.stakes.view(err));
@@ -151,14 +152,16 @@ export class Room {
   matchLive() { return !!(this.match && this.match.running && this.match.sim.state !== 'over'); }
 
   async onStakeMsg(k, m) {
-    const S = this.stakes, store = this.store();
+    const S = this.stakes;
     if (m.t === 'auth') {
-      const u = this.env.BOT_TOKEN && typeof m.d === 'string' ? await verifyInitData(m.d, this.env.BOT_TOKEN, now()) : null;
-      if (u) S.auth(k, u.id);
+      const c = this.env.BOT_TOKEN && typeof m.d === 'string' ? await authBot(m.d, { prod: this.env.BOT_TOKEN, test: this.env.BOT_TOKEN_TEST }, now()) : null;
+      const u = c && c.user && (!c.test || this.env.DB_TEST) ? c.user : null;
+      if (u) S.auth(k, u.id, c.test);
       this.sendSlot(k, JSON.stringify({ t: 'auth', ok: u ? 1 : 0 }));
       this.stakeSend();
       return;
     }
+    const store = this.store(S.test[k]);
     if (!store || !this.stakesOn()) return this.stakeSend('off', k);
     if (this.matchLive()) return this.stakeSend('live', k);
     const err = m.t === 'stake' ? await S.offer(store, k, m.n | 0) : await S.confirm(store, k, m.n | 0);
@@ -171,7 +174,7 @@ export class Room {
     if (this.matchLive() && this.stakes.live) return;          // a match with a stake is not restarted halfway
     const S = this.stakes;
     if (S.n > 0) {
-      const store = this.store();
+      const store = this.store(S.test[0]);
       if (!store || !this.stakesOn()) return this.stakeSend('off', 0);
       this.starting = true;
       try {
@@ -193,7 +196,7 @@ export class Room {
   async stakeEnd(id, result) {
     const live = this.stakes.live || (await this.state.storage.get('stake'));
     if (!live || live.id !== id) return;
-    const store = this.store(); if (!store) return;
+    const store = this.store(!!live.test); if (!store) return;
     const st = await stakeFinish(store, id, result, now());
     console.log('stake settled', JSON.stringify({ room: this.code, id, outcome: st && st.outcome }));
     await this.state.storage.delete('stake');

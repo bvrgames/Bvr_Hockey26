@@ -10,6 +10,7 @@
  *     botToken,               // the bot token (secret)
  *     conf(key) → number,     // overrides of DEF below (Worker vars), or undefined
  *     store,                  // the database, see STORE below (server/coins-d1.js — D1 / SQLite)
+ *     botTokenTest, storeTest, // optional: the test bot's token and its own database (authBot, testFunds)
  *     roomResult(room, id),   // → { len, score } of a server-mode match the room counted itself, or null
  *     bot(method, params),    // the Bot API (botApiFrom below) — star invoices
  *     adminIds,               // ADMIN_IDS: Telegram ids allowed on /v1/admin/* (comma separated), adminUi — its page (text)
@@ -51,6 +52,8 @@
  *                                              zero: 'funds', nothing changes), coins +coins, ledger 'stars_to_coins' and
  *                                              'coins_bought' (ref = idem); 'repeat' — this idem is in already, nothing changes
  *   touch(user, platform, now)                 who the player is on every signed request (creates the row if new)
+ *   grant({ uid, name, delta, reason, ref, now }) → 'ok' | 'repeat'   test coins (test store only): the ledger row and
+ *                                              the balance in one transaction; the same (uid, reason, ref) again — 'repeat'
  *   the developer's page (read only): adminOverview(t) → raw counts (coins.js overviewShape), adminPlayers({ q, id, sort,
  *   page, size }) → { total, rows }, adminPlayer(id) → { user, matches, stakes, ledger, orders }, adminPayments({ status,
  *   page, size }) → { total, rows }
@@ -131,6 +134,33 @@ export async function checkInitData(initData, botToken, nowSec, maxAge = DEF.AUT
   const str = (v, n) => (typeof v === 'string' && v ? v.slice(0, n) : null);
   return { user: { id: u.id, name, username: str(u.username, 64), lang: str(u.language_code, 16), premium: u.is_premium ? 1 : 0 } };
 }
+// The test bot (03.10): the same game opened from a second, test bot gets initData signed with that bot's token. The
+// signature is checked with the production token first and, refused as 'hash', with the test one → { user, test }.
+// Neither token signs for the other bot, so nobody passes for a player of the other bot. A test player gets a separate
+// store (its own database): nothing done with test: true reads or changes a production balance. Stars are off there.
+export async function authBot(initData, tokens, nowSec, maxAge = DEF.AUTH_MAX_AGE) {
+  const c = await checkInitData(initData, tokens.prod, nowSec, maxAge);
+  if (c.user || c.why !== 'hash' || !tokens.test) return { ...c, test: false };
+  const t = await checkInitData(initData, tokens.test, nowSec, maxAge);
+  return t.user ? { ...t, test: true } : { ...c, test: false };
+}
+// test coins: START once on the first visit, and once a UTC day the balance is brought back to TOPUP when it is below
+// FLOOR — so stakes never run out. Only ever in the test store; ledger reasons 'test_grant' / 'test_topup' (ref — the day)
+export const TEST_COINS = { START: 1000, FLOOR: 50, TOPUP: 300 };
+export async function testFunds(store, user, now) {
+  const uid = user.id;
+  if (!(await store.coinsSince(uid, 'test_grant', 0))) {
+    await store.grant({ uid, name: user.name, delta: TEST_COINS.START, reason: 'test_grant', ref: 'start', now });
+    return;
+  }
+  const bal = await store.balance(uid);
+  if (bal < TEST_COINS.FLOOR) {
+    await store.grant({ uid, name: user.name, delta: TEST_COINS.TOPUP - bal, reason: 'test_topup', ref: String(dayStart(now) / 86400), now });
+  }
+}
+// what the test bot may not do: stars are real money (Telegram Stars) and the webhook is the production bot's only
+const TEST_OFF = new Set(['POST /v1/stars/invoice', 'GET /v1/stars/order', 'POST /v1/shop/coins']);
+
 // one line in `wrangler tail` per refused signature: why (no id — it is not proven when the signature is wrong)
 function authLog(path, c) { console.warn('auth refused', JSON.stringify({ path, why: c.why, age: c.age })); }
 
@@ -260,18 +290,21 @@ async function stakeFor(d, uid, s, now) {
 export function stakeDeadline(len, now, conf = confFrom(null)) { return now + 2 * len + conf('STAKE_GRACE'); }
 
 export class StakeRoom {
-  constructor() { this.uid = [null, null]; this.n = 0; this.ok = [false, false]; this.live = null; }
+  constructor() { this.uid = [null, null]; this.test = [false, false]; this.n = 0; this.ok = [false, false]; this.live = null; }
   view(err) { return { t: 'stake', n: this.n, ok: [this.ok[0] ? 1 : 0, this.ok[1] ? 1 : 0], ...(this.live ? { live: this.live } : {}), ...(err ? { err } : {}) }; }
-  auth(slot, uid) { if (this.uid[slot] !== uid) { this.uid[slot] = uid; this.ok[slot] = false; } }
+  // test — the player signed in through the test bot (authBot): a stake only between two players of the same bot, paid
+  // from that bot's store (the room picks it by this.test)
+  auth(slot, uid, test = false) { if (this.uid[slot] !== uid || this.test[slot] !== !!test) { this.uid[slot] = uid; this.test[slot] = !!test; this.ok[slot] = false; } }
   left(slot) { this.ok[slot] = false; }                // the player left the room: a returning one confirms again
   async canPay(store, slot, n) {
     const uid = this.uid[slot];
     if (!uid) return 'auth';
+    if (this.uid[0] && this.uid[1] && this.test[0] !== this.test[1]) return 'env';
     if (this.uid[0] && this.uid[0] === this.uid[1]) return 'same';
     if ((await store.balance(uid)) < n) return 'funds';
     return null;
   }
-  // → null, or the reason it was refused ('amount' | 'auth' | 'funds' | 'same' | 'role')
+  // → null, or the reason it was refused ('amount' | 'auth' | 'funds' | 'same' | 'env' | 'role')
   async offer(store, slot, n) {
     if (slot !== 0) return 'role';
     if (!STAKES.includes(n)) return 'amount';
@@ -290,10 +323,11 @@ export class StakeRoom {
   async start(store, { id, room, len, now, deadline }) {
     if (!(this.n > 0)) { this.live = null; return null; }
     if (!this.ok[0] || !this.ok[1]) return 'confirm';
+    if (this.test[0] !== this.test[1]) return 'env';
     if (typeof id !== 'string' || !/^[0-9a-f]{8,32}$/.test(id)) return 'id';
     const r = await store.stakeLock({ id, room, amount: this.n, uids: [this.uid[0], this.uid[1]], len, now, deadline });
     if (r !== 'ok') { this.ok = [this.n > 0, false]; return r; }   // 'funds' | 'duplicate'
-    this.live = { id, n: this.n };
+    this.live = { id, n: this.n, ...(this.test[0] ? { test: 1 } : {}) };
     this.n = 0; this.ok = [false, false];              // one stake — one match: a rematch is without a stake
     return null;
   }
@@ -708,7 +742,7 @@ async function getProfile(d, user, now) {
               : { m: 0, w: 0, d: 0, l: 0, g: 0, ga: 0, streak: 0, best: 0, online: 0 },
     inventory: u ? u.inventory : [], equipped: null,
     day: { coins: earned, cap: conf('AI_COIN_CAP_DAY'), duo: earnedDuo, duoCap: conf('DUO_COIN_CAP_DAY') },
-    packs: STAR_PACKS, coinPacks: COIN_PACKS,
+    packs: d.test ? [] : STAR_PACKS, coinPacks: d.test ? [] : COIN_PACKS, ...(d.test ? { test: true } : {}),
   });
 }
 
@@ -731,21 +765,26 @@ export async function handleCoins(request, d) {
   const R = {
     'POST /v1/match': (dd, user, now) => postMatch(request, dd, user, now),
     'GET /v1/profile': (dd, user, now) => getProfile(dd, user, now),
-    'GET /v1/stars/packs': () => json(200, { packs: STAR_PACKS, coinPacks: COIN_PACKS }),
+    'GET /v1/stars/packs': (dd) => json(200, dd.test ? { packs: [], coinPacks: [], test: true } : { packs: STAR_PACKS, coinPacks: COIN_PACKS }),
     'POST /v1/shop/coins': (dd, user, now) => postShopCoins(request, dd, user, now),
     'POST /v1/stars/invoice': (dd, user, now) => postInvoice(request, dd, user, now),
     'GET /v1/stars/order': (dd, user) => getOrder(request, dd, user),
   }[route];
   if (!R) return json(404, { reason: 'route' });
   if (!d.store || !d.botToken) return json(503, { reason: 'not configured' });
-  const conf = d.conf || confFrom(null), dd = { ...d, conf };
+  const conf = d.conf || confFrom(null);
   const now = d.now || Math.floor(Date.now() / 1000);
-  const c = await checkInitData(request.headers.get('X-Telegram-Init-Data'), d.botToken, now, conf('AUTH_MAX_AGE')), user = c.user;
+  const c = await authBot(request.headers.get('X-Telegram-Init-Data'), { prod: d.botToken, test: d.botTokenTest }, now, conf('AUTH_MAX_AGE')), user = c.user;
   if (!user) { if (c.why !== 'none') authLog(path, c); return json(401, { reason: 'auth' }); }
+  // the test bot: its own store, never the production one; stars and the shop are off
+  if (c.test && !d.storeTest) return json(503, { reason: 'not configured' });
+  if (c.test && TEST_OFF.has(route)) return json(403, { reason: 'test' });
+  const dd = { ...d, conf, store: c.test ? d.storeTest : d.store, test: c.test };
   try {
     // who the player is, for the developer's page: name, username, language, premium, the Telegram platform, last seen
     const pf = request.headers.get('X-Tg-Platform');
-    if (d.store.touch) await d.store.touch(user, pf && PLATFORM_RE.test(pf) ? pf : null, now);
+    if (dd.store.touch) await dd.store.touch(user, pf && PLATFORM_RE.test(pf) ? pf : null, now);
+    if (c.test) await testFunds(dd.store, user, now);
     return await R(dd, user, now);
   } catch (e) {
     console.error('api', route, e && e.stack || e);

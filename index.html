@@ -348,6 +348,8 @@
     font:italic 800 .62em/1 var(--msport);color:#241703;background:linear-gradient(180deg,var(--mgold),var(--mgold2));
     box-shadow:0 3px 10px rgba(240,169,46,.3);text-transform:none;letter-spacing:0;vertical-align:middle}
   .mtopup .ic{width:1em;height:1em}
+  .mtest{display:inline-flex;align-items:center;padding:2px 7px;border-radius:999px;background:#f5a524;color:#1a1200;
+    font:800 .72em/1.2 system-ui;letter-spacing:.06em}
   .mtopup b{font:800 1.25em/1 system-ui;margin-left:1px}
   .mtopup.on{outline:3px solid #fff;outline-offset:2px}
   .msb{display:flex;flex-direction:column;gap:10px;max-width:660px}
@@ -1266,7 +1268,7 @@ ru:{
   mRoomNote:'Друг откроет игру по ссылке и сразу попадёт в комнату. Пропала связь — вернём в тот же матч.',
   mJoinNote:'Впиши код комнаты из приглашения друга и нажми «Войти».',
   mFriendIn:'Друг в комнате', mHostSees:'Друг видит твой выбор и ждёт старта', mGuestWait:'Команды и длину выбирает друг — матч начнёт он',
-  mWaitHost:'ждём старта', mStake:'Ставка', stNone:'без ставки', stWaitOk:'Друг принимает ставку…', stAccept:'Принять ставку', stAccepted:'Ставка принята', stRule:'Ставка: победитель забирает обе, ничья — каждому своя', stErr:'Ставка не принята', stErr_funds:'Не хватает монет для ставки', stErr_confirm:'Друг ещё не принял ставку', stErr_same:'Ставка — только между разными игроками', stErr_auth:'Ставки — только в Telegram', stErr_off:'Ставки сейчас недоступны', stErr_live:'Матч уже идёт', rwStWin:'Ставка выиграна', rwStLoss:'Ставка проиграна', rwStBack:'Ставка возвращена', rwStWait:'Ставка: итог позже', mSelect:'Выбрать', mBack:'Назад', mChange:'Изменить', mTabs:'Вкладки',
+  mWaitHost:'ждём старта', mStake:'Ставка', stNone:'без ставки', stWaitOk:'Друг принимает ставку…', stAccept:'Принять ставку', stAccepted:'Ставка принята', stRule:'Ставка: победитель забирает обе, ничья — каждому своя', stErr:'Ставка не принята', stErr_funds:'Не хватает монет для ставки', stErr_confirm:'Друг ещё не принял ставку', stErr_same:'Ставка — только между разными игроками', stErr_auth:'Ставки — только в Telegram', stErr_off:'Ставки сейчас недоступны', stErr_live:'Матч уже идёт', stErr_env:'Ставка — только между игроками одного бота (тестовый и обычный не смешиваются)', mTest:'ТЕСТ', rwStWin:'Ставка выиграна', rwStLoss:'Ставка проиграна', rwStBack:'Ставка возвращена', rwStWait:'Ставка: итог позже', mSelect:'Выбрать', mBack:'Назад', mChange:'Изменить', mTabs:'Вкладки',
   mLang:'Язык', mGfx:'Графика', mFps:'Показ FPS', mMusic:'Музыка', mSfx:'Звуки', mVib:'Вибрация', langName:'Русский',
   mLangD:'Язык игры. Выбор сохраняется.', mGfxD:'Авто — игра сама держит 60 кадров: на слабом телефоне снижает качество.',
   mFpsD:'Счётчик кадров в углу экрана во время матча.', mMusicD:'Музыка в меню. Когда начинается матч, она затихает.',
@@ -1358,7 +1360,7 @@ en:{
   mRoomNote:'Your friend opens the game from the link and lands in the room. Lost connection? You return to the same match.',
   mJoinNote:"Type the room code from your friend's invite and press Join.",
   mFriendIn:'Friend joined', mHostSees:'Your friend sees your choice and waits', mGuestWait:'Your friend picks teams and length and starts the match',
-  mWaitHost:'waiting for start', mStake:'Stake', stNone:'no stake', stWaitOk:'Your friend is accepting…', stAccept:'Accept stake', stAccepted:'Stake accepted', stRule:'Stake: the winner takes both, a draw returns each', stErr:'Stake not accepted', stErr_funds:'Not enough coins for this stake', stErr_confirm:'Your friend has not accepted the stake yet', stErr_same:'Stakes are only between two different players', stErr_auth:'Stakes work only in Telegram', stErr_off:'Stakes are unavailable now', stErr_live:'The match is already on', rwStWin:'Stake won', rwStLoss:'Stake lost', rwStBack:'Stake returned', rwStWait:'Stake: result later', mSelect:'Select', mBack:'Back', mChange:'Change', mTabs:'Tabs',
+  mWaitHost:'waiting for start', mStake:'Stake', stNone:'no stake', stWaitOk:'Your friend is accepting…', stAccept:'Accept stake', stAccepted:'Stake accepted', stRule:'Stake: the winner takes both, a draw returns each', stErr:'Stake not accepted', stErr_funds:'Not enough coins for this stake', stErr_confirm:'Your friend has not accepted the stake yet', stErr_same:'Stakes are only between two different players', stErr_auth:'Stakes work only in Telegram', stErr_off:'Stakes are unavailable now', stErr_live:'The match is already on', stErr_env:'Stakes only between players of the same bot (test and regular do not mix)', mTest:'TEST', rwStWin:'Stake won', rwStLoss:'Stake lost', rwStBack:'Stake returned', rwStWait:'Stake: result later', mSelect:'Select', mBack:'Back', mChange:'Change', mTabs:'Tabs',
   mLang:'Language', mGfx:'Graphics', mFps:'Show FPS', mMusic:'Music', mSfx:'Sounds', mVib:'Vibration', langName:'English',
   mLangD:'Game language. Your choice is saved.', mGfxD:'Auto keeps 60 fps: the game lowers quality on a slow phone.',
   mFpsD:'Frame counter in the corner during a match.', mMusicD:'Menu music. It fades out when a match starts.',
@@ -1452,7 +1454,7 @@ id:{
   mRoomNote:'Temanmu membuka game dari tautan dan langsung masuk ruang. Koneksi putus? Kamu kembali ke laga yang sama.',
   mJoinNote:'Ketik kode ruang dari undangan temanmu lalu tekan Masuk.',
   mFriendIn:'Teman sudah masuk', mHostSees:'Temanmu melihat pilihanmu dan menunggu', mGuestWait:'Temanmu memilih tim dan durasi, dia yang memulai laga',
-  mWaitHost:'menunggu mulai', mStake:'Taruhan', stNone:'tanpa taruhan', stWaitOk:'Teman sedang menerima…', stAccept:'Terima taruhan', stAccepted:'Taruhan diterima', stRule:'Taruhan: pemenang ambil keduanya, seri — kembali', stErr:'Taruhan tidak diterima', stErr_funds:'Koin tidak cukup untuk taruhan', stErr_confirm:'Teman belum menerima taruhan', stErr_same:'Taruhan hanya antara dua pemain berbeda', stErr_auth:'Taruhan hanya di Telegram', stErr_off:'Taruhan tidak tersedia sekarang', stErr_live:'Laga sudah berjalan', rwStWin:'Taruhan menang', rwStLoss:'Taruhan kalah', rwStBack:'Taruhan dikembalikan', rwStWait:'Taruhan: hasil nanti', mSelect:'Pilih', mBack:'Kembali', mChange:'Ubah', mTabs:'Tab',
+  mWaitHost:'menunggu mulai', mStake:'Taruhan', stNone:'tanpa taruhan', stWaitOk:'Teman sedang menerima…', stAccept:'Terima taruhan', stAccepted:'Taruhan diterima', stRule:'Taruhan: pemenang ambil keduanya, seri — kembali', stErr:'Taruhan tidak diterima', stErr_funds:'Koin tidak cukup untuk taruhan', stErr_confirm:'Teman belum menerima taruhan', stErr_same:'Taruhan hanya antara dua pemain berbeda', stErr_auth:'Taruhan hanya di Telegram', stErr_off:'Taruhan tidak tersedia sekarang', stErr_live:'Laga sudah berjalan', stErr_env:'Taruhan hanya antara pemain dari bot yang sama (tes dan biasa tidak dicampur)', mTest:'TES', rwStWin:'Taruhan menang', rwStLoss:'Taruhan kalah', rwStBack:'Taruhan dikembalikan', rwStWait:'Taruhan: hasil nanti', mSelect:'Pilih', mBack:'Kembali', mChange:'Ubah', mTabs:'Tab',
   mLang:'Bahasa', mGfx:'Grafis', mFps:'Tampilkan FPS', mMusic:'Musik', mSfx:'Suara', mVib:'Getar', langName:'Indonesia',
   mLangD:'Bahasa game. Pilihanmu disimpan.', mGfxD:'Otomatis menjaga 60 fps: kualitas turun di ponsel yang lambat.',
   mFpsD:'Penghitung frame di sudut layar saat laga.', mMusicD:'Musik menu. Pelan-pelan hilang saat laga dimulai.',
@@ -7409,7 +7411,15 @@ try{ var _s0=localStorage.getItem('bvr_stars'); if(_s0 && isFinite(+_s0)) STARS=
 var PACKS=null;
 try{ var _p0=JSON.parse(localStorage.getItem('bvr_packs')||'null'); if(Array.isArray(_p0) && _p0.length) PACKS=_p0; }catch(e){}
 var SB={st:null, pack:null, order:null, got:0}, SB_WAIT_MS=30000;
+/* тестовый бот (03.10): /v1/profile отвечает test:true — игрок вошёл через тестового бота, монеты в отдельной базе,
+   звёзд и обмена нет (сервер на них отвечает 403). Метка «ТЕСТ» у кошелька. Только в памяти: узнаём при каждом запуске */
+var TESTBOT=false;
+function testBotSet(v){
+  v=!!v; if(v===TESTBOT) return; TESTBOT=v;
+  if(MENU.ready){ MENU.build('main'); MENU.build('profile'); MENU.build('shop'); MENU.build('stars'); }
+}
 function starsBuyOK(){
+  if(TESTBOT) return false;
   try{ return !!(STATS_API && inTelegram() && TG.openInvoice && (!TG.isVersionAtLeast || TG.isVersionAtLeast('6.1'))); }catch(e){ return false; }
 }
 /* заголовки запросов к API: подпись Telegram и платформа (Telegram.WebApp.platform — для статистики, docs/EVENTS.md) */
@@ -7483,7 +7493,7 @@ function sbDone(j){
 var CPACKS=null;
 try{ var _cp0=JSON.parse(localStorage.getItem('bvr_cpacks')||'null'); if(Array.isArray(_cp0) && _cp0.length) CPACKS=_cp0; }catch(e){}
 var SH={st:null, pack:null, idem:''};
-function coinShopOK(){ try{ return !!(STATS_API && inTelegram() && CPACKS); }catch(e){ return false; } }
+function coinShopOK(){ if(TESTBOT) return false; try{ return !!(STATS_API && inTelegram() && CPACKS); }catch(e){ return false; } }
 function cpack(id){ return (CPACKS||[]).filter(function(p){ return p.id===id; })[0]||null; }
 function cpacksSet(p){
   if(!Array.isArray(p) || !p.length) return;
@@ -7564,7 +7574,8 @@ function curHtml(k, v){ return '<span class="cval">'+icHtml(k)+'<span class="cn"
 /* кошелёк: монеты и звёзды; неизвестный баланс (вне Telegram, сервер ни разу не ответил) — «—».
    top — у звёзд кнопка «Пополнить» (главное, профиль; только в Telegram) */
 function walletHtml(top){
-  return '<span data-coins>'+curHtml('coin', COINS===null?'—':COINS)+'</span><span data-stars>'+curHtml('star', STARS===null?'—':STARS)+'</span>'+
+  return (TESTBOT ? '<span class="mtest">'+mEsc(T('mTest'))+'</span>' : '')+
+    '<span data-coins>'+curHtml('coin', COINS===null?'—':COINS)+'</span><span data-stars>'+curHtml('star', STARS===null?'—':STARS)+'</span>'+
     (top && starsBuyOK() ? '<span class="mtopup mf mlast" data-ord="3" data-act="topup" role="button" aria-label="'+mEsc(T('mTopup'))+'">'+icHtml('star')+'<b>+</b></span>' : '');
 }
 function walletPaint(){
@@ -7702,7 +7713,7 @@ function profileFetch(){
   .then(function(r){ return r.ok ? r.json() : null; })
   .then(function(j){
     if(!j) return;
-    coinsSet(j.coins, j.stars); packsSet(j.packs); cpacksSet(j.coinPacks);
+    testBotSet(j.test); coinsSet(j.coins, j.stars); packsSet(j.packs); cpacksSet(j.coinPacks);
     if(j.totals && profApply(JSON.stringify(j.totals))){ prefSet('profile', JSON.stringify(PROF)); if(MENU.ready){ MENU.build('main'); MENU.build('profile'); } }
   })
   .catch(function(){});

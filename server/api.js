@@ -18,7 +18,7 @@
  *
  *   GET  /v1/admin/*  the developer's page, read only: 403 to all but the secret ADMIN_IDS (Telegram ids, comma separated)
  *
- * Here: the secrets BOT_TOKEN, TG_WEBHOOK_SECRET and ADMIN_IDS (TG_API — another Bot API address, tests only), the D1 binding DB, numeric Worker vars overriding the limits (coins.js DEF), and where a
+ * Here: the secrets BOT_TOKEN, TG_WEBHOOK_SECRET and ADMIN_IDS (BOT_TOKEN_TEST + binding DB_TEST — the test bot, coins.js authBot) (TG_API — another Bot API address, tests only), the D1 binding DB, numeric Worker vars overriding the limits (coins.js DEF), and where a
  * server-mode match's own result comes from — the room's Durable Object (worker.js, saveResult): the client's score has
  * to match it (otherwise 422 'mismatch'); such matches pay from their own daily cap (ledger reason 'match_duo'). Matches
  * the server did not count (host mode, an unknown room) are paid like a match against the AI, from the AI cap.
@@ -48,6 +48,9 @@ export async function handleApi(request, env) {
   const tg = { secret: env.TG_WEBHOOK_SECRET, store, bot };
   return (await handleBot(request, tg)) || (await handleBotSetup(request, tg)) || handleCoins(request, {
     botToken: env.BOT_TOKEN,
+    // the test bot (secret BOT_TOKEN_TEST, D1 binding DB_TEST — a database of its own): coins and stakes for testing
+    botTokenTest: env.BOT_TOKEN_TEST,
+    storeTest: env.DB_TEST ? d1Store(env.DB_TEST) : null,
     conf: confFrom(env),
     store,
     roomResult: roomResultFrom(env),

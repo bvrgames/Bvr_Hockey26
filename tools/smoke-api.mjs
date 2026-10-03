@@ -195,6 +195,54 @@ function summary(o = {}) {
   const matchPaid = Lg.filter((l) => l.reason === 'match_duo' || l.reason === 'match_ai').filter((l) => [H, G, Poor].includes(l.uid)).reduce((a, l) => a + l.d, 0);
   ok(bal(H) + bal(G) + bal(Poor) === total0 + extra + matchPaid, `stake: coins add up to the coin (${bal(H) + bal(G) + bal(Poor)} = ${total0} + ${extra} + ${matchPaid})`);
 
+  // ---- the test bot (coins.js authBot / testFunds): its own token and its own store; the production store is untouched
+  {
+    const TT = new Map(), TL = [];
+    const tStore = {
+      async coinsSince(uid, reason, t) { return TL.filter((l) => l.uid === uid && l.reason === reason && l.at >= t).reduce((a, l) => a + l.d, 0); },
+      async balance(uid) { return (TT.get(uid) || { coins: 0 }).coins; },
+      async grant(p) {
+        if (TL.some((l) => l.uid === p.uid && l.reason === p.reason && l.ref === p.ref)) return 'repeat';
+        const u = TT.get(p.uid) || { coins: 0, stars: 0, matches: 0, wins: 0, draws: 0, losses: 0, goals: 0, goals_against: 0, streak: 0, best_streak: 0, online: 0, inventory: [] };
+        u.coins += p.delta; TT.set(p.uid, u); TL.push({ uid: p.uid, d: p.delta, reason: p.reason, ref: p.ref, at: p.now });
+        return 'ok';
+      },
+      async profile(uid) { return TT.get(uid) || null; },
+      async stakesOverdue() { return []; },
+    };
+    const TOKEN_T = 'TEST_BOT_TOKEN_second_bot', T1 = { id: 777000222, first_name: 'Tester' };
+    const tdeps = { ...deps, botTokenTest: TOKEN_T, storeTest: tStore, adminIds: String(T1.id) };
+    const tgo = async (deps2, ...a) => { const r = await handleCoins(req(...a), deps2); return { status: r.status, j: await r.json() }; };
+    const tsig = initData(T1, { token: TOKEN_T });
+    r = await tgo(tdeps, 'GET', '/v1/profile', tsig);
+    ok(r.status === 200 && r.j.test === true && r.j.coins === 1000 && r.j.packs.length === 0 && r.j.coinPacks.length === 0,
+      `test bot: the first profile → 1000 test coins, no packs ${JSON.stringify(r.j)}`);
+    ok(!U.has(T1.id) && (await tgo(tdeps, 'GET', '/v1/profile', tsig)).j.coins === 1000, 'test bot: the start coins once, nothing in the production store');
+    TT.get(T1.id).coins = 20;
+    r = await tgo(tdeps, 'GET', '/v1/profile', tsig);
+    ok(r.j.coins === 300, `test bot: below 50 → back to 300 (${r.j.coins})`);
+    TT.get(T1.id).coins = 20;
+    ok((await tgo(tdeps, 'GET', '/v1/profile', tsig)).j.coins === 20, 'test bot: the top-up once a day');
+    for (const [m, path] of [['POST', '/v1/stars/invoice'], ['POST', '/v1/shop/coins'], ['GET', '/v1/stars/order?id=x']]) {
+      const x = await tgo(tdeps, m, path, tsig, m === 'POST' ? { pack: 's50', idem: 'abcdefgh' } : undefined);
+      ok(x.status === 403 && x.j.reason === 'test', `test bot: ${path} → 403 test (${x.status})`);
+    }
+    r = await tgo(tdeps, 'GET', '/v1/stars/packs', tsig);
+    ok(r.status === 200 && r.j.packs.length === 0, 'test bot: no star packs');
+    r = await tgo(tdeps, 'GET', '/v1/profile', initData(T1));
+    ok(r.status === 200 && !r.j.test && r.j.coins === 0 && r.j.packs.length > 0, `test bot: the same Telegram id signed by the production bot → the production store ${JSON.stringify(r.j)}`);
+    ok((await tgo(tdeps, 'GET', '/v1/admin/me', tsig)).status === 403, 'test bot: the developer page refuses a test signature, even of an admin id');
+    ok((await tgo(tdeps, 'GET', '/v1/admin/me', initData(T1))).status === 200, 'test bot: … and lets the same id in with the production one');
+    ok((await tgo(deps, 'GET', '/v1/profile', tsig)).status === 401, 'test bot: no BOT_TOKEN_TEST → its signature is refused');
+    ok((await tgo({ ...deps, botTokenTest: TOKEN_T }, 'GET', '/v1/profile', tsig)).status === 503, 'test bot: no test database → 503, never the production one');
+    ok((await tgo(tdeps, 'GET', '/v1/profile', initData(T1, { token: 'WRONG' }))).status === 401, 'test bot: a third token → 401');
+    // a stake only between players of the same bot
+    const R = new StakeRoom(); R.auth(0, H, false); R.auth(1, G, true);
+    ok((await R.offer(store, 0, 10)) === 'env', 'test bot: a stake between a production and a test player is refused');
+    const R2 = new StakeRoom(); R2.auth(0, H, true); R2.auth(1, G, true);
+    ok((await R2.offer(store, 0, 10)) === null, 'test bot: two test players may stake');
+  }
+
   // ---- stars for Telegram Stars (coins.js «stars»): a fake Bot API, the same STORE contract as coins-d1.js
   const { handleBot, STAR_PACKS } = await import('../server/coins.js');
   const Or = new Map();
@@ -326,11 +374,14 @@ const botSrv = createServer((rq, rs) => { let b = ''; rq.on('data', (c) => { b +
 }); });
 await new Promise((res) => botSrv.listen(BOT_PORT, '127.0.0.1', res));
 const ADMIN = { id: 777000999, first_name: 'Dev', username: 'dev_admin', language_code: 'ru' };
-const VARS = ['--var', `BOT_TOKEN:${TOKEN}`, '--var', `TG_API:http://127.0.0.1:${BOT_PORT}`, '--var', `TG_WEBHOOK_SECRET:${HOOK_SECRET}`,
+const TOKEN_TEST = 'TEST_BOT_TOKEN_second_bot';
+const VARS = ['--var', `BOT_TOKEN:${TOKEN}`, '--var', `BOT_TOKEN_TEST:${TOKEN_TEST}`, '--var', `TG_API:http://127.0.0.1:${BOT_PORT}`, '--var', `TG_WEBHOOK_SECRET:${HOOK_SECRET}`,
   '--var', `ADMIN_IDS:123, ${ADMIN.id}`, '--var', 'ADMIN_CACHE:0'];
 try {
-  execFileSync(join(ROOT, 'node_modules', '.bin', 'wrangler'), ['d1', 'migrations', 'apply', 'DB', '--local', '--persist-to', persist],
-    { cwd: join(ROOT, 'server'), stdio: VERBOSE ? 'inherit' : 'pipe', env: { ...process.env, WRANGLER_SEND_METRICS: 'false', CI: '1' } });
+  for (const db of ['DB', 'DB_TEST']) {
+    execFileSync(join(ROOT, 'node_modules', '.bin', 'wrangler'), ['d1', 'migrations', 'apply', db, '--local', '--persist-to', persist],
+      { cwd: join(ROOT, 'server'), stdio: VERBOSE ? 'inherit' : 'pipe', env: { ...process.env, WRANGLER_SEND_METRICS: 'false', CI: '1' } });
+  }
   // MATCH_GAP stays on for the 429 check, a second user with a gap of 0 tests the daily cap
   w = await startWrangler(port, { args: ['--persist-to', persist, ...VARS] });
 
@@ -559,11 +610,11 @@ try {
   const next = async (P, f, ms = 4000) => { const t = Date.now(); while (Date.now() - t < ms) { const i = P.q.findIndex(f); if (i >= 0) return P.q.splice(i, 1)[0]; await sleep(50); } return null; };
   const coinsOf = async (u) => (await call('GET', '/v1/profile', initData(u))).j.coins;
   // two signed-in players in a fresh server room with a stake of n both agreed to → { H, G }
-  async function stakeRoom(code, hu, gu, n) {
+  async function stakeRoom(code, hu, gu, n, tok = [TOKEN, TOKEN]) {
     const H = await roomSock(code, '?mode=srv'); await sleep(200); const G = await roomSock(code, '');
     const hh = await next(H, (m) => m.t === 'hello'); await next(G, (m) => m.t === 'hello');
     H.stk = hh && hh.stk;
-    H.send({ t: 'auth', d: initData(hu) }); G.send({ t: 'auth', d: initData(gu) });
+    H.send({ t: 'auth', d: initData(hu, { token: tok[0] }) }); G.send({ t: 'auth', d: initData(gu, { token: tok[1] }) });
     H.auth = await next(H, (m) => m.t === 'auth'); G.auth = await next(G, (m) => m.t === 'auth');
     if (n) { H.send({ t: 'stake', n }); await next(G, (m) => m.t === 'stake' && m.n === n); G.send({ t: 'stakeOk', n }); await next(H, (m) => m.t === 'stake' && m.ok && m.ok[1]); }
     return { H, G };
@@ -650,6 +701,40 @@ try {
       ok(ph.j.day.duo === rh.j.coins, `stake: not in the daily duo cap ${JSON.stringify(ph.j.day)}`);
     }
     H.ws.close(); G.ws.close();
+  }
+
+  // ---------- the test bot (BOT_TOKEN_TEST, D1 DB_TEST): its own balances, stakes only among its players, no stars
+  {
+    const TH = { id: A.id + 90, first_name: 'TestHost' }, TG = { id: A.id + 91, first_name: 'TestGuest' };
+    const tcoins = async (u) => (await call('GET', '/v1/profile', initData(u, { token: TOKEN_TEST }))).j.coins;
+    let tp = await call('GET', '/v1/profile', initData(TH, { token: TOKEN_TEST }));
+    ok(tp.status === 200 && tp.j.test === true && tp.j.coins === 1000 && tp.j.packs.length === 0, `test bot (D1): 1000 test coins ${JSON.stringify(tp.j)}`);
+    ok((await tcoins(TH)) === 1000 && (await tcoins(TG)) === 1000, 'test bot (D1): the start coins once');
+    ok((await coinsOf(TH)) === 0, 'test bot (D1): the production balance of the same id is untouched');
+    const ti = await call('POST', '/v1/stars/invoice', initData(TH, { token: TOKEN_TEST }), { pack: 's50' });
+    ok(ti.status === 403 && ti.j.reason === 'test', `test bot (D1): star invoice → 403 test (${ti.status})`);
+    // a stake between two test players: locked in the test database
+    const code = 'TST' + Math.floor(Math.random() * 1e5), sm = 'cc' + Math.floor(Math.random() * 1e12).toString(16).padStart(14, '0') + 'dd00ee11';
+    let z = await stakeRoom(code, TH, TG, 25, [TOKEN_TEST, TOKEN_TEST]);
+    ok(z.H.auth && z.H.auth.ok === 1 && z.G.auth && z.G.auth.ok === 1, 'test bot (D1): the room accepts a test signature');
+    z.H.send({ t: 'cfg', a: 0, b: 3, min: 0.25, id: sm });
+    const lv = await next(z.G, (x) => x.t === 'stake' && x.live);
+    ok(lv && lv.live.id === sm, `test bot (D1): a stake between test players starts ${JSON.stringify(lv)}`);
+    ok((await tcoins(TH)) === 975 && (await tcoins(TG)) === 975 && (await coinsOf(TH)) === 0, 'test bot (D1): 25 locked from the test balances only');
+    const t1 = Date.now(); while (!(z.H.end && z.G.end) && Date.now() - t1 < 40000) await sleep(200);
+    if (z.H.end) {
+      const sc = z.H.end.score, want = sc[0] > sc[1] ? [1025, 975] : sc[0] < sc[1] ? [975, 1025] : [1000, 1000];
+      let got = []; for (let i = 0; i < 30; i++) { got = [await tcoins(TH), await tcoins(TG)]; if (got[0] === want[0] && got[1] === want[1]) break; await sleep(200); }
+      ok(got[0] === want[0] && got[1] === want[1], `test bot (D1): settled in the test database ${JSON.stringify(got)} (want ${JSON.stringify(want)})`);
+    } else ok(false, 'test bot (D1): the staked match ended');
+    z.H.ws.close(); z.G.ws.close();
+    // a production host and a test guest: no stake
+    z = await stakeRoom('MIX' + Math.floor(Math.random() * 1e5), SH, TG, 0, [TOKEN, TOKEN_TEST]);
+    ok(z.H.auth.ok === 1 && z.G.auth.ok === 1, 'test bot (D1): a mixed room signs both in');
+    z.H.send({ t: 'stake', n: 10 });
+    const em = await next(z.H, (x) => x.t === 'stake' && x.err);
+    ok(em && em.err === 'env', `test bot (D1): a stake between a production and a test player → env ${JSON.stringify(em)}`);
+    z.H.ws.close(); z.G.ws.close();
   }
 
   // ---------- the developer's page: 403 on every /v1/admin/* to all but ADMIN_IDS; the admin gets the data

@@ -21,3 +21,10 @@ new_sqlite_classes = ["Room"]
 binding = "DB"
 database_name = "bvr-hockey"
 database_id = "742ae4e9-ec51-4be1-bb03-00c33f01c7fe"
+
+# the test bot's own database (03.10): coins, stakes and stats of players who open the game from the test bot
+# (secret BOT_TOKEN_TEST, coins.js authBot); the same migrations — `wrangler d1 migrations apply bvr-hockey-test --remote`
+[[d1_databases]]
+binding = "DB_TEST"
+database_name = "bvr-hockey-test"
+database_id = "0a1fdfac-be7a-4ffe-8441-940dc5e01057"

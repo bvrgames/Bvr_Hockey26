@@ -257,6 +257,22 @@ export function d1Store(db) {
       }
       return 'ok';
     },
+    // ---- test coins (coins.js testFunds, the test bot's database only): the ledger row goes first — the same (reason,
+    // ref) again aborts the batch, so two requests at once grant once → 'ok' | 'repeat'
+    async grant(p) {
+      try {
+        await db.batch([
+          db.prepare('INSERT OR IGNORE INTO users (user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?)').bind(p.uid, p.name || null, p.now, p.now),
+          db.prepare(`INSERT INTO ledger (user_id, delta, reason, ref, balance_after, created_at)
+                      VALUES (?, ?, ?, ?, (SELECT coins FROM users WHERE user_id = ?) + ?, ?)`).bind(p.uid, p.delta, p.reason, p.ref, p.uid, p.delta, p.now),
+          db.prepare('UPDATE users SET coins = coins + ?, updated_at = ? WHERE user_id = ?').bind(p.delta, p.now, p.uid),
+        ]);
+      } catch (e) {
+        if (/UNIQUE|constraint/i.test(String(e && e.message))) return 'repeat';
+        throw e;
+      }
+      return 'ok';
+    },
     async starsBalance(uid) { const r = await one('SELECT stars FROM users WHERE user_id = ?', uid); return r ? r.stars : 0; },
     async balance(uid) { const r = await one('SELECT coins FROM users WHERE user_id = ?', uid); return r ? r.coins : 0; },
     async profile(uid) {
