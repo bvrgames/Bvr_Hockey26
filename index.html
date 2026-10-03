@@ -7107,13 +7107,20 @@ srvEl.addEventListener('change',function(){
 /* Бот, из которого открыта игра (netfix, 03.10). Тестовый бот (@Bvrtestbot) открывает превью ветки, и приглашение должно
    вести туда же: раньше ссылка всегда шла в основной бот, гость попадал в прод на main и играл старой сборкой. Бот и
    приложение задаются в URL Mini App в BotFather: ?bot=<username>&app=<короткое имя> — t.me/<бот>/<приложение>?startapp=;
-   только bot — основное приложение бота: t.me/<бот>?startapp=. Без параметров (и при кривых) — основной бот, как раньше. */
-function inviteBase(){
+   только bot — основное приложение бота: t.me/<бот>?startapp=.
+   Без параметров (04.10): прод (bvr-hockey26.vercel.app) и локальный запуск — основной бот, как раньше; любой другой адрес
+   *.vercel.app (превью веток, его открывает тестовый бот) — @Bvrtestbot, его основное приложение (t.me/Bvrtestbot?startapp=). */
+var PROD_HOST='bvr-hockey26.vercel.app', TEST_BOT='Bvrtestbot';
+function inviteBase(host){
   var q=new URLSearchParams(location.search), b=q.get('bot')||'', a=q.get('app')||'';
-  if(!/^[A-Za-z][A-Za-z0-9_]{4,31}$/.test(b)) return 'https://t.me/bvr_games_bot/hockeytg?startapp=';
+  host=String(host===undefined ? location.hostname : host).toLowerCase();
+  if(!/^[A-Za-z][A-Za-z0-9_]{4,31}$/.test(b)){
+    if(host!==PROD_HOST && /\.vercel\.app$/.test(host)) return 'https://t.me/'+TEST_BOT+'?startapp=';
+    return 'https://t.me/bvr_games_bot/hockeytg?startapp=';
+  }
   return 'https://t.me/'+b+(/^[A-Za-z0-9_]{3,64}$/.test(a) ? '/'+a : '')+'?startapp=';
 }
-function inviteLink(code){ return inviteBase()+(TEST.srv?'':'host_')+(TEST.debug?'dbg_':'')+code; }
+function inviteLink(code, host){ return inviteBase(host)+(TEST.srv?'':'host_')+(TEST.debug?'dbg_':'')+code; }
 function shareLink(code){
   /* Внутри Telegram — нативная диплинка на мини-апп (открывается сразу
      в полноэкранном режиме, не как внешний сайт) + системное окно
@@ -7956,7 +7963,7 @@ window.__hk={hs:function(){return HS;},net:function(){return NET;},setCam:functi
   ext:function(){ return {ok:EXT.ok, mod:!!EXT.mod, st:EXT.st, n:EXT.n, item:document.querySelectorAll('#start [data-act="ext"]').length}; },
   sh:function(){ return {st:SH.st, pack:SH.pack, idem:SH.idem, packs:CPACKS, ok:coinShopOK(), cards:document.querySelectorAll('#start section[data-s="shop"] .mshc').length,
     fly:document.querySelectorAll('.rw-fx').length, text:(document.querySelector('#start [data-paint="shQ"]')||{}).textContent||''}; },
-  invite:function(code){ return inviteLink(code); }, build:function(){ return BUILD; }, ndg:function(){ return NDG; },
+  invite:function(code, host){ return inviteLink(code, host); }, build:function(){ return BUILD; }, ndg:function(){ return NDG; },
   sb:function(){ return {st:SB.st, order:SB.order, got:SB.got, packs:PACKS, ok:starsBuyOK(), btn:document.querySelectorAll('#start .mtopup').length,
     fly:document.querySelectorAll('.rw-fx').length, text:(document.querySelector('#start [data-paint="sbSt"]')||{}).textContent||''}; },
   /* экран итога для теста начисления (tools/smoke-api.mjs, wallet-shots.mjs): матч id «отправлен», ответа ещё нет */

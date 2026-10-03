@@ -317,6 +317,16 @@ for (const S of SETUPS.filter((x) => !x.name.startsWith('port'))) {
       const got = await g.page.evaluate('__hk.invite("ABC")');
       if (got !== want) fails.push(`invite ${q || '(no bot)'}: ${got}, want ${want}`);
     }
+    // no ?bot=: the production address → the main bot, a branch preview → the test bot, ?bot= still wins
+    for (const [q, host, want] of [['', 'bvr-hockey26.vercel.app', 'https://t.me/bvr_games_bot/hockeytg?startapp=ABC'],
+      ['', 'bvr-hockey26-git-netfix-bv-r.vercel.app', 'https://t.me/Bvrtestbot?startapp=ABC'],
+      ['', 'example.org', 'https://t.me/bvr_games_bot/hockeytg?startapp=ABC'],
+      ['&bot=OtherBot5&app=hkapp', 'bvr-hockey26-git-netfix-bv-r.vercel.app', 'https://t.me/OtherBot5/hkapp?startapp=ABC']]) {
+      await g.page.goto(`http://127.0.0.1:${port}/index.html?seed=4&nomusic${q}`, { waitUntil: 'load', timeout: 120000 });
+      await g.page.waitForFunction('window.__hk && __hk.invite', null, { timeout: 60000 });
+      const got = await g.page.evaluate(([h]) => __hk.invite('ABC', h), [host]);
+      if (got !== want) fails.push(`invite on ${host}${q}: ${got}, want ${want}`);
+    }
   } catch (e) { fails.push(`invite: runner error: ${e.message.split('\n')[0]}`); }
   finally { await g.browser.close(); }
 }
