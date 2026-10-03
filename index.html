@@ -2271,10 +2271,39 @@ function netFollow(){ return NET.on && (NET.srv || NET.role==='guest'); }
    (pp→pq через релей); раз в 10 с — где живёт DO и откуда подключены игроки (dg→dgr).
    Статистика за последние 30 с: медиана, p90, джиттер (ст. отклонение). */
 var NETDBG={sSent:0,sRecv:0,iSent:0,iRecv:0,tLast:0, sRate:0, iRate:0};
-var NDG={pings:[],opp:[],n:0,diag:null,stOff:null};
+/* Нагрузка на главный поток (netfix, 03.10; только ?debug). Снимки, пинги и подтверждения обрабатываются здесь же,
+   между кадрами: занятый телефон держит их в очереди, и RTT/джиттер растут без всякой сети (Android: RTT в меню 95,
+   в матче 200). За последнюю секунду: кадр p90; длинные задачи >50 мс (PerformanceObserver longtask — Android/Chrome;
+   на iOS его нет — «—»); задержка цикла событий p90 — на сколько позже срока срабатывает таймер на 50 мс. */
+var MAINM={fr:[], lag:[], lt:0, ltN:null, ltOn:false};
+function mainMeterStart(){
+  try{
+    if(window.PerformanceObserver && PerformanceObserver.supportedEntryTypes && PerformanceObserver.supportedEntryTypes.indexOf('longtask')>=0){
+      new PerformanceObserver(function(l){ MAINM.lt+=l.getEntries().length; }).observe({type:'longtask'});
+      MAINM.ltOn=true;
+    }
+  }catch(e){}
+  var due=performance.now()+50;
+  (function tick(){
+    var now=performance.now();
+    MAINM.lag.push(Math.max(0, now-due)); if(MAINM.lag.length>20) MAINM.lag.shift();
+    due=now+50; setTimeout(tick, 50);
+  })();
+  setInterval(function(){ MAINM.ltN=MAINM.ltOn ? MAINM.lt : null; MAINM.lt=0; }, 1000);
+}
+function mainFrame(ms){ if(!TEST.debug) return; MAINM.fr.push(ms); if(MAINM.fr.length>60) MAINM.fr.shift(); }
+function mainText(){
+  var p90=function(a){ if(!a.length) return '—'; var v=a.slice().sort(function(x,y){return x-y;}); return Math.round(v[Math.floor(v.length*0.9)]); };
+  return 'main: frame p90 '+p90(MAINM.fr)+' ms · long>50 '+(MAINM.ltN===null?'—':MAINM.ltN+'/s')+' · loop lag p90 '+p90(MAINM.lag)+' ms';
+}
+if(TEST.debug) mainMeterStart();
+var NDG={pings:[],pingsMenu:[],opp:[],n:0,diag:null,stOff:null};
 function ndgPong(m){
   var now=performance.now(), r=now-m.k;
-  NDG.pings.push([now,r]);
+  /* RTT в меню и в матче отдельно: в меню телефон почти не занят, в матче — если RTT растёт вместе с нагрузкой
+     (строка main), значит, пинг ждёт в очереди главного потока, а не в сети. Меню — последние 30 ответов, без срока */
+  if(state==='menu'){ NDG.pingsMenu.push([now,r]); if(NDG.pingsMenu.length>30) NDG.pingsMenu.shift(); }
+  else NDG.pings.push([now,r]);
   if(m.st) NDG.stOff=Math.round(m.st-(Date.now()-r/2));      /* часы сервера минус наши */
 }
 function ndgOpp(m){ var now=performance.now(); NDG.opp.push([now, now-m.k]); }
@@ -2317,9 +2346,9 @@ function routeDecide(){
   netConnect(NET.url, NET.code, null, 'route');
 }
 function ndgDiag(d){ NDG.diag=d; }
-function ndgStats(a){
+function ndgStats(a, keep){
   var now=performance.now();
-  while(a.length && a[0][0]<now-30000) a.shift();
+  while(!keep && a.length && a[0][0]<now-30000) a.shift();
   if(!a.length) return null;
   var v=a.map(function(x){return x[1];}).sort(function(x,y){return x-y;});
   var mean=v.reduce(function(s,x){return s+x;},0)/v.length;
@@ -2344,7 +2373,7 @@ setInterval(function(){
   var el=document.getElementById('netdbg');
   if(!el) return;
   el.style.display='block';
-  var d=NDG.diag, me=NET.role, pd=ndgStats(NDG.pings), po=ndgStats(NDG.opp);
+  var d=NDG.diag, me=NET.role, pd=ndgStats(NDG.pings), pm=ndgStats(NDG.pingsMenu, true), po=ndgStats(NDG.opp);
   var mine=null, opp=null;
   if(d && d.conns) d.conns.forEach(function(c){ if(c.slot===me) mine=c; else opp=c; });
   var f=function(st){ return st ? 'med '+st.med+'  p90 '+st.p90+'  jit '+st.jit+' ms  (n='+st.n+')' : '—'; };
@@ -2355,10 +2384,12 @@ setInterval(function(){
     (d && d.sim ? ' · sim '+d.sim.steps+' steps, max '+d.sim.maxStepMs+' ms' : '')+'\n'+
     'me: '+(mine?mine.colo+' ('+mine.country+')':'—')+' · opp: '+(opp?opp.colo+' ('+opp.country+')':'—')+'\n'+
     'route '+(ROUTE.list.length?ROUTE.list.map(function(r){ return r[0]+' '+r[1]; }).join(' → '):'—')+(ROUTE.cur?' · probing…':'')+'\n'+
-    'RTT→DO   '+f(pd)+'\n'+
+    'RTT→DO menu  '+f(pm)+'\n'+
+    'RTT→DO match '+f(pd)+'\n'+
     'RTT→opp  '+f(po)+'\n'+
     'snap '+NETDBG.sRate.toFixed(1)+'/s · input '+NETDBG.iRate.toFixed(1)+'/s · interp D '+Math.round(NETV.D*1000)+' ms · rtt(ack) '+Math.round(NETV.rtt||0)+' ms\n'+
-    'server clock Δ '+(NDG.stOff===null?'—':(NDG.stOff>0?'+':'')+NDG.stOff+' ms')+
+    'server clock Δ '+(NDG.stOff===null?'—':(NDG.stOff>0?'+':'')+NDG.stOff+' ms')+'\n'+
+    mainText()+
     (PERF.on && PERF.out ? '\n'+pfText() : '');
 },1000);
 
@@ -5071,7 +5102,7 @@ function netConnect(url, code, cb, re){
     if(m.t==='pp'){ netSend({t:'pq',k:m.k}); return; }
     if(m.t==='pq'){ ndgOpp(m); return; }
     if(m.t==='png'||m.t==='dg') return;              /* старый Worker переслал бы их сопернику */
-    if(m.t==='hello' && m.diag){ NDG={pings:[],opp:[],n:0,diag:null,stOff:null}; ndgDiag(m.diag); }
+    if(m.t==='hello' && m.diag){ NDG={pings:[],pingsMenu:[],opp:[],n:0,diag:null,stOff:null}; ndgDiag(m.diag); }
     if(m.t==='hello'){
       /* после отказа сервера комната должна открыться заново в хост-схеме; она ещё серверная, пока из неё
          не вышел второй — выходим и пробуем ещё раз */
@@ -5271,7 +5302,7 @@ function netSnap(){
     d.push(r2(p.x),r2(p.z),r2(p.yaw),(p.down>0?1:0)+(p.boxed?2:0),r1(p.stride),r1(p.spd||0));
   }
   var c0=HS[0].ctrl, c1=HS[1].ctrl;
-  var o={t:'s',d:d,k:Date.now(), a:NETV.inQ,
+  var o={t:'s',d:d,k:netNow(), a:NETV.inQ,
          v:[r2(c0?c0.vx:0),r2(c0?c0.vz:0),r2(c1?c1.vx:0),r2(c1?c1.vz:0)]};
   var ev=netTakeEvents(); if(ev) o.e=ev;
   netSend(o);
@@ -5373,8 +5404,13 @@ function netRecvSnap(m){
    Теперь: окно 10 с, p95, потолок 400 мс, экстраполяция до NET_EXTRAP мс (после 150 мс — с затуханием), а когда
    снимки догоняют, разница с нарисованным сводится за ~0.1 с (NETS), а не прыжком. */
 var NET_WIN=300, NET_DMAX=400, NET_EXTRAP=350;
+/* время приёма — монотонные часы (performance.now), приведённые к эпохе один раз при загрузке: Android посреди матча
+   подводит настенные часы (Date.now) скачком, а оценка сдвига (минимум за 10 с) догоняет такой скачок до 10 с —
+   соперники замирали бы или прыгали. Сдвиг относительно часов сервера по-прежнему вычитает NETV.off. */
+var NET_T0=Date.now()-performance.now();
+function netNow(){ return NET_T0+performance.now(); }
 function netBufPush(m){
-  var now=Date.now(), k=m.k||now;
+  var now=netNow(), k=m.k||now;
   var B=NETV.buf;
   if(B.length && k<=B[B.length-1].t) return;           /* повтор / старьё */
   B.push({t:k, d:m.d});
@@ -5416,7 +5452,7 @@ function netApply(){
   var Bf=NETV.buf; if(!Bf.length) return;
   var nowP=performance.now(), sdt=NETS.t ? clamp((nowP-NETS.t)/1000, 0, 0.1) : 0; NETS.t=nowP;
   /* момент на часах хоста, который показываем */
-  var rt = (NETV.off!==null) ? Date.now()-NETV.off-NETV.D*1000 : Bf[Bf.length-1].t;
+  var rt = (NETV.off!==null) ? netNow()-NETV.off-NETV.D*1000 : Bf[Bf.length-1].t;
   var i1=Bf.length-1;
   while(i1>0 && Bf[i1-1].t>=rt) i1--;
   var S1=Bf[i1], S0=Bf[Math.max(0,i1-1)], k, PL=NETV.pl;
@@ -5698,6 +5734,7 @@ function frame(now){
   var raw=now-last;
   if(raw>0 && raw<250) RT.ms = RT.ms>0 ? RT.ms*0.9+raw*0.1 : raw;    /* реальное время кадра (вкладка в фоне — пропуск) */
   if(PERF.on && raw>0 && raw<250){ PERF.iv+=raw; PERF.ivN++; }
+  if(raw>0 && raw<1000) mainFrame(raw);
   var dt=Math.min(0.042,(now-last)/1000); last=now;
   if(!TEST.frozen) frameStep(dt);
   requestAnimationFrame(frame);
