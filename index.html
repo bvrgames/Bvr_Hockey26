@@ -793,6 +793,19 @@ function deviceInfo(){
 /* Стартовый уровень по устройству (чистая функция — её же гоняет отчёт по типичным устройствам).
    Начинаем скромно: подняться автоподстройка успеет за пару секунд, а тормоза в первые
    секунды на слабом телефоне заметны сразу. */
+/* user agent Telegram для Android → {model, android, sdk, perf: 'LOW'|'AVERAGE'|'HIGH'|''} */
+function tgAndroidClass(ua){
+  var m=/Telegram-Android(?:\/[^\s(]*)?\s*\(([^)]*)\)/.exec(ua||''), o={model:'', android:'', sdk:'', perf:''};
+  if(!m) return o;
+  m[1].split(';').forEach(function(x){
+    x=x.trim(); var u=x.toUpperCase();
+    if(u==='LOW'||u==='AVERAGE'||u==='HIGH') o.perf=u;
+    else if(/^Android\s/i.test(x)) o.android=x.slice(8).trim();
+    else if(/^SDK\s/i.test(x)) o.sdk=x.slice(4).trim();
+    else if(!o.model) o.model=x;
+  });
+  return o;
+}
 function qualityGuess(d){
   var gpu=(d.gpu||'').toLowerCase(), ua=d.ua||'', plat=d.platform||'';
   var L=Math.max(d.sw,d.sh), S=Math.min(d.sw,d.sh);
@@ -806,8 +819,15 @@ function qualityGuess(d){
     return {level:1, reason:'iPhone X и новее (A11+): старт со среднего, дальше автоподстройка'};
   }
   if(android){
+    /* класс устройства от самого Telegram (04.10): Telegram для Android пишет его в user agent —
+       «Telegram-Android/11.4.2 (Google Pixel 7; Android 14; SDK 34; HIGH)», как разбирает @tma.js/sdk
+       retrieveAndroidDeviceData. LOW — низкое при любом GPU; HIGH — среднее (если GPU не из слабых); AVERAGE и без
+       класса — прежние признаки. На iPhone класса нет — как раньше. */
+    var tgc=tgAndroidClass(ua);
     var weakGpu=/mali-4|mali-t|mali-g(31|51|52|57)\b|adreno \(tm\) ([2-4]\d\d|50\d|51\d)|powervr (sgx|rogue ge)/.test(gpu);
     var strongGpu=/adreno \(tm\) (6[4-9]\d|7\d\d|8\d\d)|mali-g(6[89]|7[1-9]|[89]\d|6[1-9]\d|7[1-9]\d)|xclipse|immortalis/.test(gpu);
+    if(tgc.perf==='LOW') return {level:0, reason:'Telegram: класс LOW ('+(tgc.model||'Android')+')'};
+    if(tgc.perf==='HIGH' && !weakGpu) return {level:1, reason:'Telegram: класс HIGH ('+(tgc.model||'Android')+'): старт со среднего'};
     if(weakGpu || (d.cores && d.cores<=4) || (d.mem && d.mem<=3)) return {level:0, reason:'слабый Android ('+(d.gpu||'GPU ?')+', ядер '+(d.cores||'?')+', ОЗУ '+(d.mem||'?')+' ГБ)'};
     if(strongGpu && d.cores>=8) return {level:1, reason:'сильный Android ('+d.gpu+'): старт со среднего'};
     return {level:0, reason:'Android без явных признаков силы: старт с низкого'};

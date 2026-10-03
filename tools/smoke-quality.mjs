@@ -97,12 +97,21 @@ try {
     ['Pixel 7 (Mali-G710)', { platform: 'android', ua: 'Android', touch: true, dpr: 2.625, sw: 412, sh: 915, cores: 8, mem: 8, gpu: 'Mali-G710' }],
     ['Galaxy S23 (Adreno 740)', { platform: 'android', ua: 'Android', touch: true, dpr: 3, sw: 360, sh: 780, cores: 8, mem: 8, gpu: 'Adreno (TM) 740' }],
     ['old Android 4 cores (Adreno 308)', { platform: 'android', ua: 'Android', touch: true, dpr: 1.5, sw: 360, sh: 640, cores: 4, mem: 2, gpu: 'Adreno (TM) 308' }],
+    ['Telegram LOW (strong GPU regardless)', { platform: 'android', ua: 'Mozilla/5.0 (Linux; Android 13) Telegram-Android/11.4.2 (Samsung SM-A546E; Android 13; SDK 33; LOW)', touch: true, dpr: 2.625, sw: 412, sh: 915, cores: 8, mem: 8, gpu: 'Mali-G68' }],
+    ['Telegram HIGH, unknown GPU', { platform: 'android', ua: 'Mozilla/5.0 (Linux; Android 14) Telegram-Android/11.4.2 (Google Pixel 8; Android 14; SDK 34; HIGH)', touch: true, dpr: 2.625, sw: 412, sh: 915, cores: 8, mem: 8, gpu: 'Mali-G715' }],
+    ['Telegram HIGH, weak GPU', { platform: 'android', ua: 'Telegram-Android/11.4.2 (Xiaomi Redmi 9; Android 11; SDK 30; HIGH)', touch: true, dpr: 2.75, sw: 393, sh: 851, cores: 8, mem: 4, gpu: 'Mali-G52 MC2' }],
+    ['Telegram AVERAGE (as before)', { platform: 'android', ua: 'Telegram-Android/11.4.2 (Galaxy S23; Android 14; SDK 34; AVERAGE)', touch: true, dpr: 3, sw: 360, sh: 780, cores: 8, mem: 8, gpu: 'Adreno (TM) 740' }],
     ['Telegram Desktop, Windows (RTX)', { platform: 'tdesktop', ua: 'Windows', touch: false, dpr: 1, sw: 1920, sh: 1080, cores: 12, gpu: 'ANGLE (NVIDIA GeForce RTX 3060)' }],
     ['MacBook Air M1, browser', { platform: '', ua: 'Macintosh', touch: false, dpr: 2, sw: 1440, sh: 900, cores: 8, gpu: 'ANGLE (Apple, ANGLE Metal Renderer: Apple M1)' }],
     ['old laptop (Intel HD Graphics 520)', { platform: '', ua: 'Windows', touch: false, dpr: 1, sw: 1366, sh: 768, cores: 4, gpu: 'ANGLE (Intel, Intel(R) HD Graphics 520 Direct3D11)' }],
     ['VM / no GPU (SwiftShader)', { platform: '', ua: 'Linux', touch: false, dpr: 1, sw: 1280, sh: 720, cores: 2, gpu: 'Google SwiftShader' }],
   ];
   const names = ['LOW', 'MEDIUM', 'HIGH'];
+  // Telegram's own Android class (user agent): LOW → low whatever the GPU, HIGH → medium unless the GPU is weak
+  for (const [n, want] of [['Telegram LOW (strong GPU regardless)', 0], ['Telegram HIGH, unknown GPU', 1], ['Telegram HIGH, weak GPU', 0], ['Telegram AVERAGE (as before)', 1]]) {
+    const gq = await page.evaluate((d) => __hk.qGuessFor(d), devices.find((x) => x[0] === n)[1]);
+    ok(gq.level === want, `${n}: level ${gq.level}, want ${want} (${gq.reason})`);
+  }
   console.log('\nautochoice on typical devices (start level; auto-adjust refines it within seconds):');
   for (const [n, d] of devices) {
     const gq = await page.evaluate((d) => __hk.qGuessFor(d), d);
