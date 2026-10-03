@@ -1027,13 +1027,14 @@ function layout(){
 var MSGZ={r:0, top:0, tbY:12};   /* границы надписи матча (layoutTop → fitMsg) */
 var TG_BTN_W=100;          /* ширина группы «⌄ •••» справа (API её не даёт — с запасом) */
 /* Ширина кнопки «Закрыть» слева зависит от платформы и языка интерфейса Telegram
-   (RU «Закрыть» шире EN «Close» / ID «Tutup»; на Android — узкая стрелка). API её
-   не даёт — эвристика с запасом. */
+   (RU «Закрыть» шире EN «Close» / ID «Tutup»). API её не даёт — эвристика с запасом.
+   Android (03.10): в полноэкранном режиме новых версий там не стрелка, а «✕ Закрыть» — шире, чем на iOS (шрифт
+   Roboto, крестик); прежние 64 px уводили табло на кнопку. */
 function tgCloseW(){
   var plat=(TG && TG.platform)||'', lc='';
   try{ lc=((TG.initDataUnsafe && TG.initDataUnsafe.user && TG.initDataUnsafe.user.language_code)||'').slice(0,2).toLowerCase(); }catch(e){}
-  if(plat==='android' || plat==='android_x') return 64;
   var wide={ru:1, uk:1, be:1, kk:1, uz:1, de:1, fr:1, es:1, it:1, pt:1};
+  if(plat==='android' || plat==='android_x') return wide[lc] ? 124 : 100;
   return wide[lc] ? 112 : 96;
 }
 var PAD_R=40;

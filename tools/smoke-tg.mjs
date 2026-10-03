@@ -19,6 +19,8 @@ const SETUPS = [
   { name: 'land', tgLang: 'ru', w: 844, h: 390, safe: { left: 47, right: 47, bottom: 21 }, content: { top: 46 } },
   { name: 'land-tgen', tgLang: 'en', w: 844, h: 390, safe: { left: 47, right: 47, bottom: 21 }, content: { top: 46 } },
   { name: 'land-se', tgLang: 'ru', w: 667, h: 375, safe: {}, content: { top: 46 } },          // iPhone SE-size landscape, no notch
+  // Android landscape (≈2400×1080 at DPR 2.75, a cutout on the left): Telegram draws «✕ Закрыть» — wider than on iOS
+  { name: 'land-android', tgLang: 'ru', platform: 'android', closeW: 116, w: 873, h: 393, safe: { left: 32 }, content: { top: 56 } },
   { name: 'port', tgLang: 'ru', w: 390, h: 844, safe: { top: 47, bottom: 34 }, content: { top: 90 } },
 ];
 // Telegram's buttons as drawn in the test — measured-ish real widths, NOT the game's estimate (the game must keep clear)
@@ -34,7 +36,7 @@ mkdirSync('shots/ui', { recursive: true });
 const fails = [];
 
 for (const S of SETUPS) {
-  const g = await openGame(browserName, { w: S.w, h: S.h, mobile: true, tg: fakeTelegram({ fullscreen: true, safe: S.safe, content: S.content, lang: S.tgLang }) });
+  const g = await openGame(browserName, { w: S.w, h: S.h, mobile: true, tg: fakeTelegram({ fullscreen: true, safe: S.safe, content: S.content, lang: S.tgLang, platform: S.platform || 'ios' }) });
   const isPort = S.name.startsWith('port');
   const { page } = g;
   try {
@@ -93,7 +95,8 @@ for (const S of SETUPS) {
           if (hud.x + hud.w / 2 >= r.W / 2) fails.push(`${tag}: scoreboard not left of centre (x ${Math.round(hud.x)}, w ${Math.round(hud.w)})`);
           const inRow = hud.y < rowBot;
           if (inRow) {
-            const closeR = (sa.left || 0) + CLOSE_W[S.tgLang];
+            const closeR = (sa.left || 0) + (S.closeW || CLOSE_W[S.tgLang]);
+            if (hud.x < closeR - 0.5) fails.push(`${tag}: scoreboard over Telegram's "Close" (x ${Math.round(hud.x)} < ${closeR})`);
             if (hud.y < rowTop - 0.5 || hud.y + hud.h > rowBot + 0.5) fails.push(`${tag}: scoreboard sticks out of the Telegram button row`);
             if (Math.abs((hud.y + hud.h / 2) - (rowTop + rowBot) / 2) > 2) fails.push(`${tag}: scoreboard not vertically aligned with the "Close" row`);
             if (hud.x - closeR > 40) fails.push(`${tag}: scoreboard ${Math.round(hud.x - closeR)} px away from "Close" (should sit right after it)`);
@@ -187,7 +190,7 @@ for (const S of SETUPS) {
 // above the footer (now playing + button hints) and the two columns do not overlap.
 const MENU_SCREENS = [['main'], ['welcome'], ['prep'], ['friend'], ['settings'], ['profile'], ['shop'], ['train', 0], ['train', 1], ['ctrl'], ['pause'], ['result'], ['lesson', 4], ['lesson', 8]];
 for (const S of SETUPS.filter((x) => !x.name.startsWith('port'))) {
-  const g = await openGame(browserName, { w: S.w, h: S.h, mobile: true, tg: fakeTelegram({ fullscreen: true, safe: S.safe, content: S.content, lang: S.tgLang }) });
+  const g = await openGame(browserName, { w: S.w, h: S.h, mobile: true, tg: fakeTelegram({ fullscreen: true, safe: S.safe, content: S.content, lang: S.tgLang, platform: S.platform || 'ios' }) });
   const { page } = g;
   try {
     await page.goto(`http://127.0.0.1:${port}/index.html?seed=4&nomusic`, { waitUntil: 'load', timeout: 120000 });
