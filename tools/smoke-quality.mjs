@@ -26,17 +26,18 @@ try {
   console.log(`this machine: level ${q.level} — ${q.guess && q.guess.reason} (GPU "${q.info && q.info.gpu}")`);
 
   // 2. dynamic resolution first, preset second (simulated fps; 0.5 s per tick). Target: steady 60 fps.
+  // 2a. pixel-bound (qTickSim px: fps ∝ 1 / pixels): every step down gains fps, so the resolution goes down to 0.75 first
   await page.evaluate('__hk.q(2,true); __hk.qReset()');
   const cw0 = (await page.evaluate('__hk.wh()')).cvw;
-  let r = await page.evaluate('__hk.qTickSim(52, 2)');
+  let r = await page.evaluate('__hk.qTickSim(30, 2, true)');
   const cw1 = (await page.evaluate('__hk.wh()')).cvw;
   ok(cw1 < cw0, `dynamic resolution must shrink the canvas: ${cw0} → ${cw1}`);
-  ok(r.level === 2 && r.dyn < 1, `52 fps: resolution should drop first (level 2 kept), got ${JSON.stringify(r)}`);
-  r = await page.evaluate('__hk.qTickSim(52, 6)');
-  ok(r.level === 2 && Math.abs(r.dyn - 0.75) < 1e-6, `52 fps: resolution should bottom out at 0.75 before the preset drops, got ${JSON.stringify(r)}`);
-  r = await page.evaluate('__hk.qTickSim(52, 5)');
-  ok(r.level === 2, `under 55 fps at min resolution for 2.5 s: preset must hold, got ${JSON.stringify(r)}`);
-  r = await page.evaluate('__hk.qTickSim(52, 1)');
+  ok(r.level === 2 && r.dyn < 1, `pixel-bound 30 fps: resolution should drop first (level 2 kept), got ${JSON.stringify(r)}`);
+  r = await page.evaluate('__hk.qTickSim(30, 6, true)');
+  ok(r.level === 2 && Math.abs(r.dyn - 0.75) < 1e-6, `pixel-bound: every step helps, resolution should bottom out at 0.75 before the preset drops, got ${JSON.stringify(r)}`);
+  r = await page.evaluate('__hk.qTickSim(30, 5, true)');
+  ok(r.level === 2, `under 55 fps at min resolution for 1.5 s: preset must hold, got ${JSON.stringify(r)}`);
+  r = await page.evaluate('__hk.qTickSim(30, 3, true)');
   ok(r.level === 1, `under 55 fps at min resolution for 3 s: preset should drop to 1, got ${JSON.stringify(r)}`);
   r = await page.evaluate('__hk.qTickSim(60, 60)');
   ok(r.dyn === 1 && r.level === 1, `60 fps after the drop: resolution back to 1, level 2 stays banned, got ${JSON.stringify(r)}`);
@@ -47,7 +48,18 @@ try {
   r = await page.evaluate('__hk.qTickSim(30, 60)');
   ok(r.level === 0, `very slow: down to 0, got ${JSON.stringify(r)}`);
   r = await page.evaluate('__hk.qTickSim(30, 30)');
-  ok(r.level === 0 && Math.abs(r.dyn - 0.75) < 1e-6, `level 0 is the floor, got ${JSON.stringify(r)}`);
+  ok(r.level === 0 && r.dyn === 1, `level 0 is the floor; fps that does not follow the resolution keeps it at 1, got ${JSON.stringify(r)}`);
+  // 2b. not pixel-bound (CPU, compositor, vsync — the Android of 03.10: 600×288 at the same 40 fps): one step down, no
+  // gain → back to full resolution, never lower in this preset; the preset drops after 3 s on that floor
+  await page.evaluate('__hk.q(2,true); __hk.qReset()');
+  r = await page.evaluate('__hk.qTickSim(52, 2)');
+  ok(r.level === 2 && r.dyn < 1, `52 fps: one trial step down first, got ${JSON.stringify(r)}`);
+  r = await page.evaluate('__hk.qTickSim(52, 2)');
+  ok(r.level === 2 && r.dyn === 1 && r.floor === 1, `52 fps did not grow: resolution back to 1 and 1 is the floor, got ${JSON.stringify(r)}`);
+  r = await page.evaluate('__hk.qTickSim(52, 4)');
+  ok(r.level === 2 && r.dyn === 1, `no further resolution steps, preset holds under 3 s, got ${JSON.stringify(r)}`);
+  r = await page.evaluate('__hk.qTickSim(52, 3)');
+  ok(r.level === 1 && r.dyn === 1, `3 s under 55 at the floor: preset down, full resolution, got ${JSON.stringify(r)}`);
   await page.evaluate('__hk.qReset()');
 
   // 3. manual choice: saved, survives reload, not touched by auto-adjust
@@ -117,7 +129,8 @@ try {
   console.log(`\nreal time, HIGH at ~${fpsHigh} fps with AUTO: ${line.join(' → ')}`);
   ok(fpsHigh > 0 && fpsHigh < 55, `the slow-HIGH model did not slow the game down (fps ${fpsHigh})`);
   ok(tDown > 0, 'AUTO never left HIGH in 26 s at under 55 fps');
-  ok(!tDown || (tDown > 5 && tDown < 13), `HIGH → MEDIUM took ${tDown.toFixed(1)} s (expected about 9–10: 2 s warm-up, 4 resolution steps, 3 s under 55 fps)`);
+  ok(!tDown || (tDown > 5 && tDown < 13), `HIGH → MEDIUM took ${tDown.toFixed(1)} s (expected about 7–8: 2 s warm-up, one resolution step that brings nothing and is undone, 3 s under 55 fps)`);
+  ok(!line.some((x) => /×0\.(8|7)/.test(x)), `the resolution went on down although it brought no fps (CPU-bound model): ${line.join(' → ')}`);
   ok(q.level === 1 && q.fps > 55, `after the drop: expected MEDIUM at full speed, got level ${q.level}, ${q.fps} fps`);
   console.log(`  HIGH → MEDIUM after ${tDown.toFixed(1)} s; then ${q.fps} fps on MEDIUM, resolution ×${q.dyn}`);
 
