@@ -8,6 +8,7 @@
 import WebSocket from 'ws';
 import { startRelay } from './relay-mock.mjs';
 import { startWrangler } from './wrangler-dev.mjs';
+import { autoHint } from '../server/region.js';
 
 const args = process.argv.slice(2);
 const opt = (k, d) => { const i = args.indexOf('--' + k); return i >= 0 ? args[i + 1] : d; };
@@ -28,6 +29,12 @@ function player(q) {
   });
   return new Promise((res, rej) => { ws.on('open', () => res(P)); ws.on('error', rej); });
 }
+
+// hint=auto: the room's region by the creator's country (server/region.js)
+for (const [cf, want] of [[{ country: 'RU' }, 'eeur'], [{ country: 'KZ' }, 'eeur'], [{ country: 'ID' }, 'apac-se'],
+  [{ country: 'JP' }, 'apac-ne'], [{ country: 'DE', continent: 'EU' }, 'weur'], [{ country: 'US', longitude: '-122.4' }, 'wnam'],
+  [{ country: 'US', longitude: '-74' }, 'enam'], [{ country: 'BR', continent: 'SA' }, null], [{}, null]])
+  ok(autoHint(cf) === want, `autoHint(${JSON.stringify(cf)}) = ${autoHint(cf)}, want ${want}`);
 
 let backend = null;
 const t0 = Date.now();

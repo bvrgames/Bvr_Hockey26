@@ -9,7 +9,8 @@
  * Protocol (all messages are JSON):
  *   client connects to  wss://<worker>/room/<CODE>   (CODE: 2-16 chars, [A-Za-z0-9_-])
  *                        optional ?hint=apac|apac-se|none|… — Durable Object location hint, only used when the room's
- *                        object is created for the first time (default: apac-se; the game sends apac-se itself)
+ *                        object is created for the first time (default: apac-se — what old clients send);
+ *                        hint=auto (the game since 03.10) — by the creator's country, see autoHint
  *
  *   server -> client:
  *     {t:'hello', role:'host'|'guest', n:<peerCount 1|2>, diag, srv, tok, run}   sent once, right after connect
@@ -56,6 +57,7 @@ import { MatchRoom, SIM_HZ } from './room-sim.js';
 import { handleApi } from './api.js';
 import { verifyInitData, StakeRoom, stakeFinish, stakeDeadline, confFrom } from './coins.js';
 import { d1Store } from './coins-d1.js';
+import { autoHint } from './region.js';
 
 const ROOM_CODE_RE = /^\/room\/([A-Za-z0-9_-]{2,16})(\/diag)?$/;
 const HINTS = new Set(['wnam', 'enam', 'sam', 'weur', 'eeur', 'apac', 'apac-ne', 'apac-se', 'oc', 'afr', 'me']);
@@ -351,13 +353,13 @@ export default {
     }
     const code = m[1].toUpperCase();
     const q = (url.searchParams.get('hint') || DEFAULT_HINT).toLowerCase();
-    const hint = HINTS.has(q) ? q : null;          // 'none' (or anything unknown) → no hint
+    const hint = q === 'auto' ? autoHint(cf) : HINTS.has(q) ? q : null;   // 'none' (or anything unknown) → no hint
     const id = env.ROOMS.idFromName(code);
     // the hint is respected only by the first get() that creates this room's object
     const stub = hint ? env.ROOMS.get(id, { locationHint: hint }) : env.ROOMS.get(id);
     const fwd = new Request(request);
     fwd.headers.delete('X-Internal');               // only the stats API asks the room for results
-    fwd.headers.set('X-Loc-Hint', hint || 'none');
+    fwd.headers.set('X-Loc-Hint', (q === 'auto' ? 'auto:' : '') + (hint || 'none'));
     fwd.headers.set('X-Room-Code', code);
     fwd.headers.set('X-Edge-Colo', cf.colo || '?');
     fwd.headers.set('X-Edge-Country', cf.country || '?');
