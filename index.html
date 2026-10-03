@@ -2398,13 +2398,15 @@ function netPredictGuest(dt){
     var mi=humanMoveIntent(myP, HS[HUMAN], IN);
     humanMoveIntegrate(PRED, mi[0], mi[1], mi[2], mi[3], dt);
   }
-  /* визуальная ошибка после последней коррекции гасится за ~120мс —
-     это и есть требование "плавно, без рывка" */
-  var decay=Math.min(1, dt/0.15);
+  /* визуальная ошибка после последней коррекции гасится плавно: обычная (толчок, неровный пинг) — за ~0.15 с,
+     большая (только что переключились на игрока, нарисованного по снимкам на «пинг + D» позади) — дольше, до 0.35 с,
+     чтобы он не прыгал вперёд */
+  var decay=Math.min(1, dt/(PRED_ERR.tau||0.15));
   PRED_ERR.x-=PRED_ERR.x*decay; PRED_ERR.z-=PRED_ERR.z*decay; PRED_ERR.yaw-=PRED_ERR.yaw*decay;
   myP.x=PRED.x+PRED_ERR.x; myP.z=PRED.z+PRED_ERR.z;
   myP.yaw=PRED.yaw+PRED_ERR.yaw; myP.vx=PRED.vx; myP.vz=PRED.vz; myP.spd=PRED.spd; myP.stride=PRED.stride;
   myP._back=PRED._back;
+  NETS.pred={p:myP, x:myP.x, z:myP.z, yaw:myP.yaw};   /* где нарисован предсказанный — для перехода обратно (netApply) */
 }
 var NEDGE={A:false,B:false,X:false,Y:false,LB:false};
 var _npv={A:false,B:false,X:false,Y:false,LB:false};
@@ -5354,7 +5356,12 @@ function netRecvSnap(m){
       /* и поворот: иначе конец клюшки (и шайба на нём) дёргается на каждом снимке */
       var dyw=visYaw-PRED.yaw; while(dyw>Math.PI) dyw-=Math.PI*2; while(dyw<-Math.PI) dyw+=Math.PI*2;
       PRED_ERR.yaw=dyw;
-      if(Math.hypot(PRED_ERR.x,PRED_ERR.z)>3){ PRED_ERR.x=0; PRED_ERR.z=0; PRED_ERR.yaw=0; }
+      var em=Math.hypot(PRED_ERR.x,PRED_ERR.z);
+      PRED_ERR.tau=clamp(0.12+em*0.07, 0.15, 0.35);
+      /* мгновенно — только настоящая перестановка на сервере (вбрасывание, штраф): игрок в снимке прыгнул > 3 м.
+         Раньше мгновенно ставили при любой разнице > 3 м — так при смене игрока на плохой связи он телепортировался */
+      var pa=NET.a, authTele=pa && mo+1<pa.length && Math.hypot(d[mo]-pa[mo], d[mo+1]-pa[mo+1])>3;
+      if(authTele || em>12){ PRED_ERR.x=0; PRED_ERR.z=0; PRED_ERR.yaw=0; }
     }
   }
 }
@@ -5391,14 +5398,16 @@ function netExtrapMs(e){ e=Math.min(e, NET_EXTRAP); return e<=150 ? e : 150+(e-1
 /* сглаживание у гостя: offset нарисованного от цели (интерполяция/экстраполяция). Каждый кадр цель должна сдвинуться
    на скорость × dt; всё, что сверх (снимки догнали экстраполяцию, пачка после паузы), уходит в offset и гасится за
    ~NETS_TAU. Настоящий телепорт (вбрасывание, штраф) — больше 3 м — без сводки. */
-var NETS={t:0, p:[], pk:null}, NETS_TAU=0.1;
+var NETS={t:0, p:[], pk:null, pred:null}, NETS_TAU=0.1;
 function netSmooth(st, tx, tz, vx, vz, dt, tele){
-  if(!st.on || tele){ st.on=true; st.ox=0; st.oz=0; }
+  if(!st.on || tele){ st.on=true; st.ox=0; st.oz=0; st.oy=0; st.lim=0; }
   else {
     var jx=st.tx+vx*dt-tx, jz=st.tz+vz*dt-tz;
-    if(Math.hypot(st.ox+jx, st.oz+jz)>3){ st.ox=0; st.oz=0; }
+    if(Math.hypot(st.ox+jx, st.oz+jz)>Math.max(3, st.lim||0)){ st.ox=0; st.oz=0; st.oy=0; st.lim=0; }
     else { st.ox+=jx; st.oz+=jz; }
-    var f=Math.exp(-dt/NETS_TAU); st.ox*=f; st.oz*=f;
+    /* разница после перехода с предсказания (st.lim) гасится дольше — игрок не отъезжает назад рывком */
+    var f=Math.exp(-dt/(st.lim ? 0.3 : NETS_TAU)); st.ox*=f; st.oz*=f; st.oy=(st.oy||0)*f;
+    if(st.lim && Math.hypot(st.ox,st.oz)<0.05) st.lim=0;
   }
   st.tx=tx; st.tz=tz;
   return st;
@@ -5423,12 +5432,16 @@ function netApply(){
   var A=S0.d, B=S1.d, base=20, spS=Math.max(1,S1.t-S0.t)/1000;
   /* скорость цели: по паре снимков; на экстраполяции после 150 мс — вдвое меньше (как netExtrapMs) */
   var vk=(k>1 && rt-S1.t>150) ? 0.5 : 1;
+  /* «телепорт» (вбрасывание, штраф) — разница между соседними снимками больше, чем можно проехать за их промежуток.
+     После потери пакетов промежуток бывает 0.3–0.7 с: шайба за него пролетает и 10 м — это не телепорт, её не ставят
+     мгновенно, а ведут по снимкам */
+  var teleP=3+11*spS, teleK=4+40*spS;
   for(var i=0;i<players.length;i++){
     var o=base+i*6;
     if(o+5>=B.length) break;
     var p=players[i];
     var ax=A[o]!==undefined?A[o]:B[o], az=A[o+1]!==undefined?A[o+1]:B[o+1];
-    var tele=Math.hypot(B[o]-ax,B[o+1]-az)>3, tx, tz;
+    var tele=Math.hypot(B[o]-ax,B[o+1]-az)>teleP, tx, tz;
     if(tele){ tx=B[o]; tz=B[o+1]; }                                   /* телепорт — без «проезда» через поле */
     else {
       tx=ax+(B[o]-ax)*k; tz=az+(B[o+1]-az)*k;
@@ -5436,14 +5449,24 @@ function netApply(){
     }
     var ps=NETS.p[i]||(NETS.p[i]={});
     netSmooth(ps, tx, tz, tele?0:(B[o]-ax)/spS*vk, tele?0:(B[o+1]-az)/spS*vk, sdt, tele);
+    var yw=_lerpAng(A[o+2]!==undefined?A[o+2]:B[o+2], B[o+2], Math.min(k,1));
+    /* игрока до этого кадра рисовало предсказание (он был своим): он впереди снимков на «пинг + D». Если его
+       больше не предсказывают (переключились на другого, сбили с ног), без этого он отпрыгнул бы назад — разница
+       уходит в сглаживание. Пока предсказание идёт, netPredictGuest всё равно перерисует его поверх */
+    var pp=NETS.pred;
+    if(pp && pp.p===p && !tele){
+      var sx=pp.x-tx, sz=pp.z-tz, sm=Math.hypot(sx,sz);
+      if(sm<12){ ps.ox=sx; ps.oz=sz; ps.lim=sm+0.5; var dy=pp.yaw-yw; while(dy>Math.PI) dy-=Math.PI*2; while(dy<-Math.PI) dy+=Math.PI*2; ps.oy=dy; }
+    }
     p.x=tx+ps.ox; p.z=tz+ps.oz;
-    p.yaw=_lerpAng(A[o+2]!==undefined?A[o+2]:B[o+2], B[o+2], Math.min(k,1));
+    p.yaw=yw+(ps.oy||0);
     var fl=B[o+3];
     p.down=(fl&1)?1:0; p.boxed=(fl&2)?1:0;
     p.stride=B[o+4];
     p.spd=B[o+5];
   }
-  var ptele=Math.hypot(B[0]-A[0],B[2]-A[2])>4, px, pz;
+  NETS.pred=null;                     /* netPredictGuest ставит заново, если предсказание продолжается */
+  var ptele=Math.hypot(B[0]-A[0],B[2]-A[2])>teleK, px, pz;
   if(ptele){ px=B[0]; pz=B[2]; }
   else {
     px=A[0]+(B[0]-A[0])*k; pz=A[2]+(B[2]-A[2])*k;
@@ -5571,16 +5594,18 @@ function netGuestActions(dt){
   }
   /* шайба своего игрока — на его (предсказанной) клюшке, а не позади на длину пинга */
   if(!(PUCKP && PUCKP.on) && auth===me){ var s3=stickEnd(me); puck.x=s3[0]; puck.z=s3[1]; puck.y=0.05; }
-  puckSourceBlend(dt, (PUCKP && PUCKP.on) ? 'pred' : (auth===me ? 'stick' : 'auth'));
+  /* подбор (held) — тоже смена источника: шайба с её места по снимкам на свою клюшку (до 0.85 м) — сводится */
+  puckSourceBlend(dt, (PUCKP && PUCKP.on) ? (PUCKP.mode==='held' ? 'held' : 'pred') : (auth===me ? 'stick' : 'auth'));
 }
 /* Шайба у гостя рисуется из разных источников: своя (предсказанная) клюшка, снимки хоста,
    предсказание. Переход «моя клюшка ↔ снимки хоста» (у меня отобрали / мне отдали пас)
    давал скачок на длину пинга — сводим его за ~140 мс. Вылет при своём пасе/броске
-   (предсказание) не трогаем: он должен быть мгновенным. */
+   (предсказание) не трогаем: он должен быть мгновенным. Подбор (held) сводится так же, held ↔ stick — одна клюшка. */
 var PDS={mode:null, bl:0, fx:0, fz:0, lx:0, lz:0};
 function puckSourceBlend(dt, mode){
   var tx=puck.x, tz=puck.z;
-  if(PDS.mode && mode!==PDS.mode && mode!=='pred' && PDS.mode!=='pred'){
+  var same=(mode==='held'&&PDS.mode==='stick')||(mode==='stick'&&PDS.mode==='held');
+  if(PDS.mode && mode!==PDS.mode && mode!=='pred' && PDS.mode!=='pred' && !same){
     var j=Math.hypot(tx-PDS.lx, tz-PDS.lz);
     if(j>0.2 && j<4){ PDS.bl=1; PDS.fx=PDS.lx; PDS.fz=PDS.lz; }
   }

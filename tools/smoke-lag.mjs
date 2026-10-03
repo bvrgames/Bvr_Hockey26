@@ -17,8 +17,9 @@
 //   Scenarios A: host 140 ms / jit 55, guest 80 / jit 80 (the RZYT phone test); B: both 140 / jit 80.
 //   ID (Indonesia, mobile internet, both players far from the room): host 200 ms / jit 100, guest 300 / jit 110, 2.5 %
 //   loss bursts on each link — the default run is A,B,ID.
+//   HOME: both players at home on a good route (Jakarta/Singapore edge): 70/75 ms, jit 15, 0.5 % loss bursts.
 // --rtt 0,80,150,250 — the old host-scheme sweep (one relay hop, jitter 10 %).
-// usage: node tools/smoke-lag.mjs [--scen A,B,ID] [--rtt …] [--json out.json] [--trials 5]
+// usage: node tools/smoke-lag.mjs [--scen A,B,ID] [--rtt …] [--json out.json] [--trials 5] [--play 10]
 // Exit code 1 only on page errors / a broken run (the numbers themselves are a report, not pass/fail),
 // or with --max-move / --max-lost thresholds when given.
 import { writeFileSync } from 'node:fs';
@@ -29,11 +30,13 @@ import { openGame, isError } from './browser.mjs';
 const args = process.argv.slice(2);
 const opt = (k, d) => { const i = args.indexOf('--' + k); return i >= 0 ? args[i + 1] : d; };
 const TRIALS = +opt('trials', 5);
+const PLAY = +opt('play', 10);          // seconds of scripted play for jerks / teleports / playout
 const port = +opt('port', 8502), rport = +opt('relay', 8795);
 const NET_FOR = (rtt) => ({ lag: rtt / 2, jitter: rtt ? Math.max(5, rtt * 0.1) : 0, loss: rtt ? 1 : 0 });
 // one-way ±J uniform on both halves of a round trip gives an RTT standard deviation of J·√(2/3)
 const J_FOR_SD = (sd) => Math.round(sd * Math.sqrt(1.5));
-const SCEN = { A: { host: [140, 55], guest: [80, 80] }, B: { host: [140, 80], guest: [140, 80] },
+const SCEN = { HOME: { host: [70, 15], guest: [75, 15], loss: 0.5 },
+               A: { host: [140, 55], guest: [80, 80] }, B: { host: [140, 80], guest: [140, 80] },
                ID: { host: [200, 100], guest: [300, 110], loss: 2.5 } };
 const RUNS = [];
 if (opt('rtt', null)) for (const rtt of opt('rtt').split(',').map(Number)) RUNS.push({ label: `RTT ${rtt}`, mode: 'host', net: NET_FOR(rtt), rtt });
@@ -121,7 +124,29 @@ window.__goalShot = function () {              // shot at the goal → [drawn pu
   }, 2500).then(function () { return [+past.toFixed(2), back]; });
 };`;
 
-const BOT = `window.__bot = setInterval(function(){ var a = Math.random() * 6.283; __hk.move(Math.cos(a) * 0.9, Math.sin(a) * 0.9); }, 650);`;
+// like a person: skates around, every few seconds taps A (pass with the puck, switch player without it)
+const BOT = `window.__bot = setInterval(function(){ var a = Math.random() * 6.283; __hk.move(Math.cos(a) * 0.9, Math.sin(a) * 0.9);
+  if (Math.random() < 0.35) __hk.press('A'); }, 650);`;
+
+// teleports: a skater drawn more than 0.4 m away from where it was the frame before (10 m/s at 60 fps is 0.17 m),
+// in play on both frames, not boxed — including the frame the controlled player switches. Puck: more than 0.6 m off
+// its constant-velocity path. Per minute: own (controlled on either frame) / others / puck
+function teleports(frames) {
+  let own = 0, sw = 0, oth = 0, pk = 0, maxM = 0;
+  const np = (frames[0].length - 6) / 3;
+  for (let i = 1; i < frames.length; i++) {
+    const a = frames[i - 1], b = frames[i]; if (a[5] !== 'play' || b[5] !== 'play') continue;
+    for (let j = 0; j < np; j++) {
+      const o = 6 + j * 3; if (a[o + 2] || b[o + 2]) continue;
+      const d = Math.hypot(b[o] - a[o], b[o + 1] - a[o + 1]);
+      if (d > 0.4) { if (a[1] === j || b[1] === j) { own++; if (a[1] !== b[1]) sw++; } else oth++; maxM = Math.max(maxM, d); }
+    }
+    if (i >= 2) { const z = frames[i - 2]; if (z[5] === 'play') { const k = (b[0] - a[0]) / (a[0] - z[0] || 1);
+      if (Math.hypot((b[2] - a[2]) - (a[2] - z[2]) * k, (b[3] - a[3]) - (a[3] - z[3]) * k) > 0.6) pk++; } }
+  }
+  const min = frames.length > 1 ? (frames[frames.length - 1][0] - frames[0][0]) / 60000 : 1;
+  return { own: +(own / min).toFixed(1), sw: +(sw / min).toFixed(1), others: +(oth / min).toFixed(1), puck: +(pk / min).toFixed(1), maxM: +maxM.toFixed(2) };
+}
 
 function jerks(frames, pick) {
   // jump = deviation of this frame's step from the previous step, scaled to the frame time (m)
@@ -191,34 +216,36 @@ for (const run of RUNS) {
     await H.evaluate(BOT); await G.evaluate(BOT);
     await G.evaluate('__net.snaps.length=0; __net.inputs=0; __smp.fr.length=0; __smp.on=true; var L=__hk.netInfo().pl; L.fr=L.ex=L.hold=L.back=0');
     await H.evaluate('__smp.fr.length=0; __smp.on=true');
-    await G.waitForTimeout(10000);
+    await G.waitForTimeout(PLAY * 1000);
     await G.evaluate('__smp.on=false'); await H.evaluate('__smp.on=false');
     const gFrames = await G.evaluate('__smp.fr'), hFrames = await H.evaluate('__smp.fr'), gAuth = await G.evaluate('__smp.au||[]');
     const gSrc = await G.evaluate('__smp.src||[]');
     { // where do the guest's puck jerks happen: by drawing source (and source changes)
-      const off = gSrc.length - gFrames.length, by = {};
+      const off = gSrc.length - gFrames.length, by = {}, tb = {};
       for (let i = 2; i < gFrames.length; i++) {
         const a = gFrames[i - 2], b = gFrames[i - 1], c = gFrames[i]; if (c[5] !== 'play' || a[5] !== 'play') continue;
         const k = (c[0] - b[0]) / (b[0] - a[0] || 1), j = Math.hypot((c[2] - b[2]) - (b[2] - a[2]) * k, (c[3] - b[3]) - (b[3] - a[3]) * k);
-        if (j <= 0.03 || Math.hypot(c[2] - b[2], c[3] - b[3]) > 2) continue;
         const s0 = gSrc[i - 1 + off], s1 = gSrc[i + off], key = s0 === s1 ? String(s1) : `${s0}→${s1}`;
+        if (j > 0.6) tb[key] = (tb[key] || 0) + 1;
+        if (j <= 0.03 || Math.hypot(c[2] - b[2], c[3] - b[3]) > 2) continue;
         by[key] = (by[key] || 0) + 1;
       }
-      R.puckJerkBySrc = by;
+      R.puckJerkBySrc = by; R.puckTeleBySrc = tb;
     }
     const snaps = await G.evaluate('__net.snaps'), inputs = await G.evaluate('__net.inputs');
     // playout of the snapshot buffer on the guest: frames drawn past the newest snapshot (extrapolated), past the
     // extrapolation limit (others stand still, then jump), frames where the shown server time went backwards
     { const L = await G.evaluate('__hk.netInfo().pl'), pc = (v) => +(100 * v / Math.max(1, L.fr)).toFixed(1);
-      R.playout = { ex: pc(L.ex), hold: pc(L.hold), backPerSec: +(L.back / 10).toFixed(1), D: (await G.evaluate('__hk.netInfo().D')) }; }
+      R.playout = { ex: pc(L.ex), hold: pc(L.hold), backPerSec: +(L.back / PLAY).toFixed(1), D: (await G.evaluate('__hk.netInfo().D')) }; }
     await H.evaluate('clearInterval(__bot); __hk.move(0,0)'); await G.evaluate('clearInterval(__bot); __hk.move(0,0)');
     const iv = snaps.slice(1).map((s, i) => s[0] - snaps[i][0]);
     const ivMean = iv.reduce((a, b) => a + b, 0) / iv.length;
     const ivSd = Math.sqrt(iv.reduce((a, b) => a + (b - ivMean) ** 2, 0) / iv.length);
     const ivS = [...iv].sort((a, b) => a - b);
-    R.snap = { perSec: +(snaps.length / 10).toFixed(1), meanMs: Math.round(ivMean), sdMs: Math.round(ivSd), p95Ms: Math.round(ivS[Math.floor(ivS.length * 0.95)]),
-               maxMs: Math.round(ivS[ivS.length - 1]), bytes: Math.round(snaps.reduce((a, s) => a + s[1], 0) / snaps.length), inputsPerSec: +(inputs / 10).toFixed(1) };
+    R.snap = { perSec: +(snaps.length / PLAY).toFixed(1), meanMs: Math.round(ivMean), sdMs: Math.round(ivSd), p95Ms: Math.round(ivS[Math.floor(ivS.length * 0.95)]),
+               maxMs: Math.round(ivS[ivS.length - 1]), bytes: Math.round(snaps.reduce((a, s) => a + s[1], 0) / snaps.length), inputsPerSec: +(inputs / PLAY).toFixed(1) };
     R.jerkGuest = frameJerks(gFrames); R.jerkHost = frameJerks(hFrames);
+    R.tele = { guest: teleports(gFrames), host: teleports(hFrames) };
     // how far the guest's drawn own player is ahead of its position in the host's snapshot, along the motion.
     // Correct prediction: ≈ speed × (input delay + snapshot age) — grows with RTT. Near 0 = the own player lags.
     { const off = gAuth.length - gFrames.length; let sum = 0, n = 0, spd = 0;
@@ -325,6 +352,8 @@ row('pickup: touch → puck drawn on stick, ms', (r) => r.pickup && r.pickup.vis
 row('pickup: touch → host owns it, ms (never/n)', (r) => r.pickup && `${r.pickup.waitMs} (${r.pickup.lost}/${r.pickup.trials})`);
 row('shot at goal: drawn puck past goal line m / back', (r) => r.goalShot && `${r.goalShot.pastM} / ${r.goalShot.back}`);
 row('own player ahead of its snapshot: cm / ms', (r) => r.lead && `${r.lead.cm} / ${r.lead.ms}`);
+row('teleports /min: own (on switch) / others / puck', (r) => r.tele && `${r.tele.guest.own}(${r.tele.guest.sw})/${r.tele.guest.others}/${r.tele.guest.puck}`);
+row('  … same on the host / largest jump m (g, h)', (r) => r.tele && `${r.tele.host.own}(${r.tele.host.sw})/${r.tele.host.others}/${r.tele.host.puck} ${r.tele.guest.maxM},${r.tele.host.maxM}`);
 row('own player jerks >3 cm /s (mean cm)', (r) => r.jerkGuest && `${r.jerkGuest.own.perSec} (${r.jerkGuest.own.meanCm})`);
 row('  host own player jerks /s', (r) => r.jerkHost && r.jerkHost.own.perSec);
 row('other players jerks /s (mean cm)', (r) => r.jerkGuest && `${r.jerkGuest.others.perSec} (${r.jerkGuest.others.meanCm})`);
@@ -332,6 +361,7 @@ row('  host other players jerks /s', (r) => r.jerkHost && r.jerkHost.others.perS
 row('others p95 frame jump, cm (host)', (r) => r.jerkGuest && `${r.jerkGuest.others.p95Cm} (${r.jerkHost.others.p95Cm})`);
 row('puck jerks /s (mean cm) (host /s)', (r) => r.jerkGuest && `${r.jerkGuest.puck.perSec} (${r.jerkGuest.puck.meanCm}) (${r.jerkHost.puck.perSec})`);
 row('  puck jerks by drawing source (count)', (r) => r.puckJerkBySrc && Object.entries(r.puckJerkBySrc).sort((x, y) => y[1] - x[1]).slice(0, 2).map(([k, v]) => `${k}:${v}`).join(' '));
+row('  puck teleports by drawing source (count)', (r) => r.puckTeleBySrc && Object.entries(r.puckTeleBySrc).sort((x, y) => y[1] - x[1]).slice(0, 3).map(([k, v]) => `${k}:${v}`).join(' '));
 row('guest playout: extrapolated % / held % (D ms)', (r) => r.playout && `${r.playout.ex} / ${r.playout.hold} (${r.playout.D})`);
 row('  shown server time goes back /s', (r) => r.playout && r.playout.backPerSec);
 row('snapshots /s, interval mean±sd ms', (r) => r.snap && `${r.snap.perSec} ${r.snap.meanMs}±${r.snap.sdMs}`);
