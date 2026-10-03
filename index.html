@@ -75,10 +75,13 @@
 
   #pad{position:absolute;inset:0;z-index:5;pointer-events:none}
   /* вспышка по краям экрана (силовой по вам, гол): под кнопками и табло, цвет — --fxc */
-  #fxedge{position:absolute;inset:0;z-index:4;pointer-events:none;opacity:0;box-shadow:inset 0 0 14vmin 3vmin var(--fxc,rgba(255,50,50,.65))}
+  /* will-change: свой слой — пульс гола меняет только прозрачность, большая размытая тень не перерисовывается каждый кадр */
+  #fxedge{position:absolute;inset:0;z-index:4;pointer-events:none;opacity:0;will-change:opacity;box-shadow:inset 0 0 14vmin 3vmin var(--fxc,rgba(255,50,50,.65))}
   .btn{position:absolute;pointer-events:auto;border-radius:50%;display:flex;flex-direction:column;
     align-items:center;justify-content:center;border:1.5px solid rgba(255,255,255,.30);
-    background:rgba(14,18,28,.42);backdrop-filter:blur(6px);transition:transform .07s, background .07s}
+    background:rgba(14,18,28,.48);transition:transform .07s, background .07s}
+  /* без backdrop-filter (04.10): размытие под шестью кнопками пересчитывалось каждый кадр поверх WebGL — на слабых
+     Android это заметная доля кадра. Фон чуть плотнее (.42 → .48), чтобы лёд под кнопкой читался так же спокойно */
   .btn b{font-size:15px;font-weight:800;line-height:1}
   /* подпись переносится и ужимается под размер круга (fitPadLabels) */
   .btn i{font-style:normal;font-size:8.5px;letter-spacing:.04em;opacity:.9;margin-top:2px;text-transform:uppercase;
@@ -86,10 +89,10 @@
   #bRT i{max-width:92%}
   .btn.press{transform:scale(.88);background:rgba(255,255,255,.34)}
   #bPause.press{background:rgba(255,255,255,.34)}
-  #bA{background:rgba(28,120,60,.42);border-color:rgba(110,225,150,.6)}
-  #bB{background:rgba(140,36,44,.42);border-color:rgba(240,130,130,.6)}
-  #bX{background:rgba(28,72,150,.42);border-color:rgba(130,175,255,.6)}
-  #bY{background:rgba(150,120,20,.42);border-color:rgba(255,215,110,.6)}
+  #bA{background:rgba(28,120,60,.48);border-color:rgba(110,225,150,.6)}
+  #bB{background:rgba(140,36,44,.48);border-color:rgba(240,130,130,.6)}
+  #bX{background:rgba(28,72,150,.48);border-color:rgba(130,175,255,.6)}
+  #bY{background:rgba(150,120,20,.48);border-color:rgba(255,215,110,.6)}
   #bRT{border-radius:14px;background:rgba(40,48,64,.5)}
   #stick{position:absolute;pointer-events:none;z-index:5}
   /* Автоскрытие сенсорного управления: с геймпадом или на ПК кнопки только
