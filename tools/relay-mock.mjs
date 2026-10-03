@@ -63,10 +63,11 @@ export function startRelay(port = 8787, net = {}) {
     }
     const old = r[slot];
     r[slot] = ws;
+    (r.b || (r.b = {}))[slot] = /^[0-9a-f]{1,12}$/.test(q.get('b') || '') ? q.get('b') : null;
     if (old) old.close(1000, 'replaced');
     if (!back) r.tok[slot] = Math.random().toString(36).slice(2) + Date.now().toString(36);
     const diag = () => ({ doColo: 'LOCAL', doLoc: 'XX', hint: 'mock', created: r.created || (r.created = Date.now()), st: Date.now(),
-      mode: r.srv ? 'server' : 'relay', conns: ['host', 'guest'].filter((k) => r[k]).map((k) => ({ slot: k, colo: 'LOCAL', country: 'XX' })) });
+      mode: r.srv ? 'server' : 'relay', conns: ['host', 'guest'].filter((k) => r[k]).map((k) => ({ slot: k, colo: 'LOCAL', country: 'XX', ...(r.b && r.b[k] ? { b: r.b[k] } : {}) })) });
     ws.send(JSON.stringify({ t: 'hello', role: slot, n: count(r), diag: diag(), srv: r.srv ? 1 : 0, tok: r.tok[slot], run: r.match && r.match.running ? 1 : 0 }));
     peers(r);
     if (r.match) { r.match.join(si, !back || q.get('fresh') === '1'); if (r.match.running) tick(); }

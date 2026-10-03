@@ -61,6 +61,10 @@ try {
   await guest.page.goto(url, { waitUntil: 'load', timeout: 120000 });
   await guest.page.waitForFunction('window.__hk && __hk.net().role==="guest"', null, { timeout: 30000 });
   await host.page.waitForFunction('__hk.net().peer', null, { timeout: 10000 });
+  // the build fingerprint goes to the room: the guest's hello lists the host with the same build as its own
+  const bInfo = await guest.page.evaluate('({me:__hk.build(), conns:(__hk.ndg().diag && __hk.ndg().diag.conns)||[]})');
+  const hostConn = bInfo.conns.find((c) => c.slot === 'host');
+  if (!/^[0-9a-f]{6}$/.test(bInfo.me) || !hostConn || hostConn.b !== bInfo.me) fails.push(`build fingerprint not in the room diag ${JSON.stringify(bInfo)}`);
 
   await host.page.evaluate('__hk.start()');
   // both humans "play": wander the stick toward the enemy goal and pass / shoot now and then (also exercises the

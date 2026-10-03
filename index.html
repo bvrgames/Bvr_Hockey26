@@ -653,6 +653,15 @@ var BOOT={script:Math.round(performance.now())};
      ?side=1           в одиночной игре играть за команду 1 (проверка симметрии)
      ?debug            показать отладочные индикаторы: скорость, FPS, сетевые счётчики
    Идея и формат прогонов взяты из INKWAVE (Jayden Davis, MIT) — см. THIRD_PARTY.md. */
+/* отпечаток сборки (netfix, 03.10): FNV-1a текста этого скрипта и версии shared/sim.js — одинаковый у одинаковых сборок.
+   Уходит в комнату (?b=), панель отладки сравнивает его с соперником: тест 03.10 пропал — гость по приглашению открыл
+   основной бот со старой сборкой, а по панели этого не было видно. */
+var BUILD=(function(){
+  var t='';
+  try{ t=(document.currentScript && document.currentScript.textContent)||''; var sv=document.querySelector('script[src*="shared/sim.js"]'); if(sv) t+=sv.getAttribute('src'); }catch(e){}
+  var h=0x811c9dc5; for(var i=0;i<t.length;i++){ h^=t.charCodeAt(i); h=Math.imul(h,16777619)>>>0; }
+  return ('0000000'+h.toString(16)).slice(-8).slice(0,6);
+})();
 var TEST=(function(){
   var q=new URLSearchParams(location.search);
   var t={autostart:q.has('autostart'), autoLen:+q.get('autostart')||0,
@@ -2380,9 +2389,13 @@ setInterval(function(){
   var mine=null, opp=null;
   if(d && d.conns) d.conns.forEach(function(c){ if(c.slot===me) mine=c; else opp=c; });
   var f=function(st){ return st ? 'med '+st.med+'  p90 '+st.p90+'  jit '+st.jit+' ms  (n='+st.n+')' : '—'; };
+  /* сборка соперника: другая — ⚠ и красная рамка (такой тест не про эту сборку); нет поля — у соперника старый клиент */
+  var ob=opp ? (opp.b || '?') : null, bad=ob!==null && ob!==BUILD;
+  el.style.outline=bad ? '3px solid #ff4d4d' : '';
   var since=d && d.created ? new Date(d.created+(NDG.stOff?-NDG.stOff:0)).toTimeString().slice(0,8) : '—';
   el.textContent=
-    'NET '+me+' · '+(NET.srv?'SERVER sim':'host sim')+' · peer '+(NET.peer?'yes':'no')+' · room '+NET.code+'\n'+
+    'NET '+me+' · '+(NET.srv?'SERVER sim':'host sim')+' · peer '+(NET.peer?'yes':'no')+' · room '+NET.code+' · build '+BUILD+'\n'+
+    (bad ? '⚠ OPP BUILD '+ob+' ≠ '+BUILD+(ob==='?'?' (old client)':'')+'\n' : '')+
     'DO: '+(d?(d.doColo||'?')+' ('+(d.doLoc||'?')+') · hint '+(d.hint||'?')+' · up since '+since:'— (old Worker?)')+
     (d && d.sim ? ' · sim '+d.sim.steps+' steps, max '+d.sim.maxStepMs+' ms' : '')+'\n'+
     'me: '+(mine?mine.colo+' ('+mine.country+')':'—')+' · opp: '+(opp?opp.colo+' ('+opp.country+')':'—')+'\n'+
@@ -5070,6 +5083,7 @@ function netConnect(url, code, cb, re){
   var sk=re ? {role:NET.role, tok:NET.tok} : slotKeyLoad(code);
   if(sk) qs.push('re='+sk.role, 'tok='+encodeURIComponent(sk.tok));
   if(sk && !re) qs.push('fresh=1');
+  qs.push('b='+BUILD);
   try{ ws=new WebSocket(base+'/room/'+code+(qs.length?'?'+qs.join('&'):'')); }
   catch(e){ netStatus(T('badAddr')); return; }
   NET.ws=ws;
@@ -7942,7 +7956,7 @@ window.__hk={hs:function(){return HS;},net:function(){return NET;},setCam:functi
   ext:function(){ return {ok:EXT.ok, mod:!!EXT.mod, st:EXT.st, n:EXT.n, item:document.querySelectorAll('#start [data-act="ext"]').length}; },
   sh:function(){ return {st:SH.st, pack:SH.pack, idem:SH.idem, packs:CPACKS, ok:coinShopOK(), cards:document.querySelectorAll('#start section[data-s="shop"] .mshc').length,
     fly:document.querySelectorAll('.rw-fx').length, text:(document.querySelector('#start [data-paint="shQ"]')||{}).textContent||''}; },
-  invite:function(code){ return inviteLink(code); },
+  invite:function(code){ return inviteLink(code); }, build:function(){ return BUILD; }, ndg:function(){ return NDG; },
   sb:function(){ return {st:SB.st, order:SB.order, got:SB.got, packs:PACKS, ok:starsBuyOK(), btn:document.querySelectorAll('#start .mtopup').length,
     fly:document.querySelectorAll('.rw-fx').length, text:(document.querySelector('#start [data-paint="sbSt"]')||{}).textContent||''}; },
   /* экран итога для теста начисления (tools/smoke-api.mjs, wallet-shots.mjs): матч id «отправлен», ответа ещё нет */

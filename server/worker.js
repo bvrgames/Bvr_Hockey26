@@ -28,7 +28,7 @@
  *   answered by the Durable Object itself (never relayed; phase 3.0 diagnostics):
  *     {t:'png', n, k}  ->  {t:'pog', n, k, st}      ping to the Durable Object, st = server time (ms)
  *     {t:'dg'}         ->  {t:'dgr', ...diag}       where the room lives and where each player connects from
- *   diag = { doColo, doLoc, hint, created, st, conns: [{ slot, colo, country }] }
+ *   diag = { doColo, doLoc, hint, created, st, conns: [{ slot, colo, country, b }] }   b — the client's build (?b=, since 03.10)
  *
  *   HTTP: GET /diag             → the edge colo this request hit (no Durable Object involved)
  *         GET /room/<CODE>/diag → the room's diag (creates the object if it does not exist yet)
@@ -123,7 +123,7 @@ export class Room {
   }
 
   diag() {
-    const c = (slot, s) => (s ? { slot, colo: s.colo, country: s.country } : null);
+    const c = (slot, s) => (s ? { slot, colo: s.colo, country: s.country, ...(s.b ? { b: s.b } : {}) } : null);
     const m = this.match;
     return { doColo: this.doColo, doLoc: this.doLoc, hint: this.hint, created: this.created, st: Date.now(),
              mode: this.srv ? 'server' : 'relay',
@@ -249,7 +249,9 @@ export class Room {
         this.match.onStop = (id) => { this.stakeEnd(id, null).catch((e) => console.error('stakeEnd', e)); };
       }
     }
-    this.handleSocket(server, { colo: request.headers.get('X-Edge-Colo') || '?', country: request.headers.get('X-Edge-Country') || '?' }, this.claim(q), q.get('fresh') === '1');
+    // b — the client's build fingerprint (index.html BUILD): the debug panel compares it with the other player's
+    const b = /^[0-9a-f]{1,12}$/.test(q.get('b') || '') ? q.get('b') : null;
+    this.handleSocket(server, { colo: request.headers.get('X-Edge-Colo') || '?', country: request.headers.get('X-Edge-Country') || '?', b }, this.claim(q), q.get('fresh') === '1');
 
     return new Response(null, { status: 101, webSocket: client });
   }
