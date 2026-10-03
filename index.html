@@ -4020,11 +4020,11 @@ function glRebuildTextures(){
    fps<55; вверх — только при полном разрешении и fps>58 2.5 с. Уровень, который не выдержал, до конца
    сессии не возвращается: повторная проба — это ~12 с тормозов посреди матча (иначе качели: на «среднем»
    60 → вверх → снова тормоза). Ручной выбор — не трогаем.
-   Разрешение — только если помогает (04.10): после шага вниз через секунду сравниваем fps; прироста нет (меньше
+   Разрешение — только если помогает (04.10): после шага вниз сравниваем fps (средние, см. «проба»); прироста нет (меньше
    Q_GAIN) — шаг назад, и ниже этого разрешения в этом пресете не опускаемся (QA.floor): тормозит не заливка пикселей
    (CPU, композитор, vsync), а картинка без пользы мылится (Android 03.10: 600×288 при тех же 40 fps). Пресет вниз — после
    3 с ниже цели на этом «полу», а не только на DYN_MIN. */
-var RT={ms:0, last:0}, QA={t:0, pt:0, hold:0, up:0, warm:3, low:0, hi:0, fail:[0,0,0], ban:[0,0,0], clock:0, floor:0.75, trial:null};
+var RT={ms:0, last:0}, QA={t:0, pt:0, hold:0, up:0, warm:3, low:0, hi:0, fail:[0,0,0], ban:[0,0,0], clock:0, floor:0.75, trial:null, prev:[]};
 var Q_GAIN=3;
 var Q_LOW=55, Q_HIGH=58;
 function qualityTick(fps){
@@ -4032,6 +4032,7 @@ function qualityTick(fps){
   QA.clock+=0.5;
   QA.hold=Math.max(0,QA.hold-0.5);
   if(QA.warm>0){ QA.warm-=0.5; return; }          /* компиляция шейдеров и прочие рывки старта */
+  QA.prev.push(fps); if(QA.prev.length>2) QA.prev.shift();
   /* пресет вниз: разрешение уже минимальное, а fps всё ещё ниже цели 3 с подряд */
   if(fps<Q_LOW && DYN<=QA.floor+1e-3 && !QA.trial) QA.low+=0.5; else QA.low=0;
   if(QA.low>=3 && QLEVEL>0 && QA.hold<=0){
@@ -4040,17 +4041,26 @@ function qualityTick(fps){
     QA.low=0; QA.hi=0; setQuality(QLEVEL-1,true); QA.hold=4;
     return;
   }
+  /* проба шага вниз — 2 с: первая секунда пропускается (перестройка канваса — рывок), вторая сравнивается со
+     средним за секунду до шага. Прироста нет — разрешение назад, и ниже этого в пресете не идём */
+  if(QA.trial){
+    var tr=QA.trial; tr.n++;
+    if(tr.n>=3) tr.sum+=fps;
+    if(tr.n>=4){
+      QA.trial=null; QA.t=0;
+      if(tr.sum/2-tr.base<Q_GAIN){ DYN=tr.from; QA.floor=tr.from; layout(); }
+    }
+    return;
+  }
   QA.t+=0.5;
   if(QA.t>=1){
     QA.t=0;
-    /* проба прошлого шага вниз: fps не вырос — вернуть разрешение и больше ниже не идти */
-    if(QA.trial){
-      var tr=QA.trial; QA.trial=null;
-      if(fps-tr.fps<Q_GAIN){ DYN=tr.from; QA.floor=tr.from; layout(); return; }
-    }
     if(fps<Q_LOW){
       QA.up=0;
-      if(DYN>QA.floor+1e-3){ QA.trial={from:DYN, fps:fps}; DYN=Math.max(QA.floor, DYN-DYN_STEP); layout(); return; }
+      if(DYN>QA.floor+1e-3){
+        var base=QA.prev.reduce(function(a,b){ return a+b; },0)/QA.prev.length;
+        QA.trial={from:DYN, base:base, n:0, sum:0}; DYN=Math.max(QA.floor, DYN-DYN_STEP); layout(); return;
+      }
     } else if(fps>Q_HIGH && DYN<1){
       if(++QA.up>=3){ QA.up=0; DYN=Math.min(1, DYN+DYN_STEP); layout(); }
       return;
@@ -4065,7 +4075,7 @@ function qualityTick(fps){
 function setQuality(q,auto){
   if(q===QLEVEL && auto===QAUTO) return;
   QA.warm=2;                                       /* пересборка текстур — рывок, его не считаем */
-  QA.trial=null; QA.floor=DYN_MIN;                 /* у другого пресета другое узкое место — разрешение пробуем заново */
+  QA.trial=null; QA.floor=DYN_MIN; QA.prev=[];     /* у другого пресета другое узкое место — разрешение пробуем заново */
   var texChange=(q!==QLEVEL);
   QLEVEL=q; if(auto!==undefined) QAUTO=auto;
   if(texChange){
@@ -7896,7 +7906,7 @@ window.__hk={hs:function(){return HS;},net:function(){return NET;},setCam:functi
   qGuessFor:function(d){ return qualityGuess(d); },
   /* прогнать автоподстройку n раз по 0.5 с при заданном fps (тест логики без настоящих тормозов) */
   qTickSim:function(fps,n,px){ QA.warm=0; for(var i=0;i<(n||1);i++) qualityTick(px ? fps/(DYN*DYN) : fps); return {level:QLEVEL, dyn:DYN, floor:QA.floor}; },   /* px — fps растёт обратно числу пикселей */
-  qReset:function(){ QA.low=0; QA.hi=0; QA.up=0; QA.t=0; QA.hold=0; QA.fail=[0,0,0]; QA.ban=[0,0,0]; QA.clock=0; QA.trial=null; QA.floor=DYN_MIN; }, cams:function(){return CAM_PRESETS;}, ql:function(){return [QLEVEL,QAUTO];}, gl:function(){return gl;}, dpr:function(){return DPR;},
+  qReset:function(){ QA.low=0; QA.hi=0; QA.up=0; QA.t=0; QA.hold=0; QA.fail=[0,0,0]; QA.ban=[0,0,0]; QA.clock=0; QA.trial=null; QA.floor=DYN_MIN; QA.prev=[]; }, cams:function(){return CAM_PRESETS;}, ql:function(){return [QLEVEL,QAUTO];}, gl:function(){return gl;}, dpr:function(){return DPR;},
   lt:function(p){lastTouch=p;}, pz:function(){return prevZone;},
   lang:function(c){ setLang(c); },
   /* меню: menu('prep') — открыть экран; menuState() — слой, стек, фокус; music() — состояние музыки */

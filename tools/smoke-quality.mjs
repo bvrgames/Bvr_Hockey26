@@ -33,11 +33,11 @@ try {
   const cw1 = (await page.evaluate('__hk.wh()')).cvw;
   ok(cw1 < cw0, `dynamic resolution must shrink the canvas: ${cw0} → ${cw1}`);
   ok(r.level === 2 && r.dyn < 1, `pixel-bound 30 fps: resolution should drop first (level 2 kept), got ${JSON.stringify(r)}`);
-  r = await page.evaluate('__hk.qTickSim(30, 6, true)');
+  r = await page.evaluate('__hk.qTickSim(30, 18, true)');
   ok(r.level === 2 && Math.abs(r.dyn - 0.75) < 1e-6, `pixel-bound: every step helps, resolution should bottom out at 0.75 before the preset drops, got ${JSON.stringify(r)}`);
-  r = await page.evaluate('__hk.qTickSim(30, 5, true)');
-  ok(r.level === 2, `under 55 fps at min resolution for 1.5 s: preset must hold, got ${JSON.stringify(r)}`);
-  r = await page.evaluate('__hk.qTickSim(30, 3, true)');
+  r = await page.evaluate('__hk.qTickSim(30, 8, true)');
+  ok(r.level === 2, `last trial (2 s) + 2 s under 55 fps at min resolution: preset must hold, got ${JSON.stringify(r)}`);
+  r = await page.evaluate('__hk.qTickSim(30, 2, true)');
   ok(r.level === 1, `under 55 fps at min resolution for 3 s: preset should drop to 1, got ${JSON.stringify(r)}`);
   r = await page.evaluate('__hk.qTickSim(60, 60)');
   ok(r.dyn === 1 && r.level === 1, `60 fps after the drop: resolution back to 1, level 2 stays banned, got ${JSON.stringify(r)}`);
@@ -54,11 +54,11 @@ try {
   await page.evaluate('__hk.q(2,true); __hk.qReset()');
   r = await page.evaluate('__hk.qTickSim(52, 2)');
   ok(r.level === 2 && r.dyn < 1, `52 fps: one trial step down first, got ${JSON.stringify(r)}`);
-  r = await page.evaluate('__hk.qTickSim(52, 2)');
+  r = await page.evaluate('__hk.qTickSim(52, 4)');
   ok(r.level === 2 && r.dyn === 1 && r.floor === 1, `52 fps did not grow: resolution back to 1 and 1 is the floor, got ${JSON.stringify(r)}`);
   r = await page.evaluate('__hk.qTickSim(52, 4)');
   ok(r.level === 2 && r.dyn === 1, `no further resolution steps, preset holds under 3 s, got ${JSON.stringify(r)}`);
-  r = await page.evaluate('__hk.qTickSim(52, 3)');
+  r = await page.evaluate('__hk.qTickSim(52, 2)');
   ok(r.level === 1 && r.dyn === 1, `3 s under 55 at the floor: preset down, full resolution, got ${JSON.stringify(r)}`);
   await page.evaluate('__hk.qReset()');
 
@@ -129,7 +129,7 @@ try {
   console.log(`\nreal time, HIGH at ~${fpsHigh} fps with AUTO: ${line.join(' → ')}`);
   ok(fpsHigh > 0 && fpsHigh < 55, `the slow-HIGH model did not slow the game down (fps ${fpsHigh})`);
   ok(tDown > 0, 'AUTO never left HIGH in 26 s at under 55 fps');
-  ok(!tDown || (tDown > 5 && tDown < 13), `HIGH → MEDIUM took ${tDown.toFixed(1)} s (expected about 7–8: 2 s warm-up, one resolution step that brings nothing and is undone, 3 s under 55 fps)`);
+  ok(!tDown || (tDown > 5 && tDown < 13), `HIGH → MEDIUM took ${tDown.toFixed(1)} s (expected about 8–9: 2 s warm-up, one resolution step tried for 2 s and undone, 3 s under 55 fps)`);
   ok(!line.some((x) => /×0\.(8|7)/.test(x)), `the resolution went on down although it brought no fps (CPU-bound model): ${line.join(' → ')}`);
   ok(q.level === 1 && q.fps > 55, `after the drop: expected MEDIUM at full speed, got level ${q.level}, ${q.fps} fps`);
   console.log(`  HIGH → MEDIUM after ${tDown.toFixed(1)} s; then ${q.fps} fps on MEDIUM, resolution ×${q.dyn}`);
