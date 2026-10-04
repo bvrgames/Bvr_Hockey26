@@ -7269,13 +7269,16 @@ srvEl.addEventListener('change',function(){
    приложение задаются в URL Mini App в BotFather: ?bot=<username>&app=<короткое имя> — t.me/<бот>/<приложение>?startapp=;
    только bot — основное приложение бота: t.me/<бот>?startapp=.
    Без параметров (04.10): прод (bvr-hockey26.vercel.app) и локальный запуск — основной бот, как раньше; любой другой адрес
-   *.vercel.app (превью веток, его открывает тестовый бот) — @Bvrtestbot, его основное приложение (t.me/Bvrtestbot?startapp=). */
+   *.vercel.app (превью веток, его открывает тестовый бот) — @Bvrtestbot, его основное приложение (t.me/Bvrtestbot?startapp=).
+   Прод (04.10, мёрж netfix в main): всегда основной бот, ?bot=&app= не действуют — приглашение боевой игры как было в main. */
+var MAIN_INVITE='https://t.me/bvr_games_bot/hockeytg?startapp=';
 function inviteBase(host){
   var q=new URLSearchParams(location.search), b=q.get('bot')||'', a=q.get('app')||'';
   host=String(host===undefined ? location.hostname : host).toLowerCase();
+  if(host===PROD_HOST) return MAIN_INVITE;
   if(!/^[A-Za-z][A-Za-z0-9_]{4,31}$/.test(b)){
     if(host!==PROD_HOST && /\.vercel\.app$/.test(host)) return 'https://t.me/'+TEST_BOT+'?startapp=';
-    return 'https://t.me/bvr_games_bot/hockeytg?startapp=';
+    return MAIN_INVITE;
   }
   return 'https://t.me/'+b+(/^[A-Za-z0-9_]{3,64}$/.test(a) ? '/'+a : '')+'?startapp=';
 }
