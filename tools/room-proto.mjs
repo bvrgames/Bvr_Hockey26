@@ -48,7 +48,7 @@ try {
   H.send({ t: 'cfg', a: 0, b: 3, min: 3, id: '0123456789abcdef01234567' });
   await wait(1500);
   for (const [who, P] of [['host', H], ['guest', G]]) {
-    ok(P.cfg.length === 1 && P.cfg[0].id === '0123456789abcdef01234567' && P.cfg[0].b === 3, `${who} cfg ${JSON.stringify(P.cfg)}`);
+    ok(P.cfg.length === 1 && P.cfg[0].id === '0123456789abcdef01234567' && P.cfg[0].b === 3 && P.cfg[0].hz === 30, `${who} cfg ${JSON.stringify(P.cfg)}`);
     const n = P.snaps.length, span = n > 1 ? (P.snaps[n - 1].at - P.snaps[0].at) / 1000 : 0;
     ok(n > 20 && n / span > 24 && n / span < 36, `${who}: ${n} snapshots in ${span.toFixed(2)} s`);
     const last = P.snaps[n - 1].m;
@@ -135,6 +135,14 @@ try {
   ok(H2.cfg.length === 1 && H2.cfg[0].id === 'aaaabbbbccccddddeeeeffff' && H2.snaps.length > 5, `host returns: cfg ${H2.cfg.length}, snapshots ${H2.snaps.length}`);
   if (H2.snaps.length) ok(wOf(H2) === 3 && H2.snaps[H2.snaps.length - 1].m.d[5] < clkA, `empty room: w=${wOf(H2)}, clock ${clkA} → ${H2.snaps[H2.snaps.length - 1].m.d[5]}`);
   console.log(`[${TARGET}] lost players: wrong key / silent / closed / stranger / return / empty room checked`);
+  // snapshot rate asked in cfg.hz (index.html NETCFG): 20 → the cfg says 20 and ~20 snapshots a second; unknown → 30
+  for (const [ask, want] of [[20, 20], [45, 30]]) {
+    H2.cfg.length = 0;
+    H2.send({ t: 'cfg', a: 0, b: 1, min: 2, id: 'abab' + ask + 'cdcdcdcdcdcdcdcdcdcdcd'.slice(0, 18), hz: ask });
+    await wait(400); const n0 = H2.snaps.length, ts = Date.now(); await wait(1500);
+    const rate = (H2.snaps.length - n0) / ((Date.now() - ts) / 1000);
+    ok(H2.cfg.length === 1 && H2.cfg[0].hz === want && rate > want * 0.8 && rate < want * 1.2, `cfg hz ${ask}: cfg ${JSON.stringify(H2.cfg)}, ${rate.toFixed(1)} snapshots/s (want ${want})`);
+  }
   H2.ws.close();
 } catch (e) {
   fails.push('runner error: ' + e.message.split('\n').slice(0, 8).join('\n'));

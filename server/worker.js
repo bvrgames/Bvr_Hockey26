@@ -44,7 +44,7 @@
  *
  *   Server mode (phase 3.2, ?mode=srv from the player who opens an empty room; hello then carries srv:1 and the
  *   second player follows it): the Durable Object itself runs the match — shared/sim.js through server/room-sim.js,
- *   60 Hz steps, 30 Hz snapshots to both. 'cfg' (from the host) and 'i' (from both) are consumed here; the rest
+ *   60 Hz steps, snapshots to both (30 Hz unless cfg.hz asks for 15/20/60). 'cfg' (from the host) and 'i' (from both) are consumed here; the rest
  *   (opponent ping pp/pq) is still relayed. See room-sim.js for the message formats. A player who drops is played
  *   by the AI until they come back (same slot through ?re=&tok=); the match keeps running with nobody connected
  *   for up to 30 s, so both can return.

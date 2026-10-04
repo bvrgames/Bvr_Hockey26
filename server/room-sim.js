@@ -10,12 +10,13 @@
  * guest of the host-authoritative mode (same message formats, so the client's guest pipeline is reused as is).
  *
  *   client → server
- *     {t:'cfg', a, b, min, id}          start / restart the match (slot 0 only): team picks, minutes, match id
+ *     {t:'cfg', a, b, min, id, hz?}     start / restart the match (slot 0 only): team picks, minutes, match id,
+ *                                       hz = snapshots a second the room sends (SNAP_HZ_OK, default 30; index.html NETCFG)
  *     {t:'i', m:[x,z], b, q, c, tc}     input: stick in WORLD coordinates (the client applies its own camera), buttons
  *                                       held b (A1 B2 X4 Y8 RT16 LB32), packet number q, press counters c[A,B,X,Y,LB],
  *                                       tactic tc
  *   server → both
- *     {t:'cfg', a, b, min, id}          the match (re)starts
+ *     {t:'cfg', a, b, min, id, hz}      the match (re)starts; hz = snapshot rate of this match
  *     {t:'s', d, k, a, v, e?, w?}       snapshot, same layout as the host's (index.html netSnap); a = the last input
  *                                       packet of THIS recipient the simulation has used, k = server time (ms),
  *                                       w = who is away (bits: 1 slot 0, 2 slot 1; 4 / 8 — away for over 30 s)
@@ -29,6 +30,7 @@
 import BVRSim from '../shared/sim.mjs';
 
 export const SIM_HZ = 60, SNAP_EVERY = 2;          // 60 Hz simulation, snapshot every 2nd step = 30 Hz
+export const SNAP_HZ_OK = [15, 20, 30, 60];          // snapshot rates a match may ask for (cfg.hz): whole steps apart
 export const AWAY_MS = 2000, GONE_MS = 30000;
 const NETWORKED = { faceoff: 1, pass: 1, 'pass:recv': 1, shot: 1, save: 1, post: 1, goal: 1,
                     hit: 1, penalty: 1, stoppage: 1, poke: 1, pickup: 1, 'match:end': 1 };
@@ -50,6 +52,7 @@ export class MatchRoom {
     this.seq = 0; this.evq = [];
     this.port = [mkPort(), mkPort()];
     this.running = false; this.acc = 0; this.last = 0; this.steps = 0; this.overT = 0;
+    this.snapEvery = SNAP_EVERY;
     this.cfg = null;
     this.ended = false;
     this.onEnd = null;    // (result) once per match when the clock runs out: { id, len, score, left }; the stats API trusts it
@@ -133,7 +136,9 @@ export class MatchRoom {
     let b = Math.max(0, Math.min(CLUBS_N - 1, m.b | 0)); if (b === a) b = (a + 1) % CLUBS_N;
     const min = Math.max(0.25, Math.min(10, +m.min || 3));
     const id = typeof m.id === 'string' && /^[0-9a-f]{8,32}$/.test(m.id) ? m.id : '';
-    this.cfg = { t: 'cfg', a, b, min, id };
+    const hz = SNAP_HZ_OK.includes(m.hz | 0) ? m.hz | 0 : SIM_HZ / SNAP_EVERY;
+    this.snapEvery = SIM_HZ / hz;
+    this.cfg = { t: 'cfg', a, b, min, id, hz };
     S.score[0] = 0; S.score[1] = 0; S.period = 1; S.clock = min * 60; S.pen.length = 0;
     S.reset(true);
     S.TACTIC[0] = 0; S.TACTIC[1] = 0; S.gkRush[0] = false; S.gkRush[1] = false;
@@ -180,7 +185,7 @@ export class MatchRoom {
       this.steps++; this.stat.steps++;
       const dt = Date.now() - t0; if (dt > this.stat.maxStepMs) this.stat.maxStepMs = dt;
       // after the end: 6 snapshots a second for 5 s, so both see the final state and match:end, then stop
-      const every = S.state === 'over' ? 10 : SNAP_EVERY;
+      const every = S.state === 'over' ? 10 : this.snapEvery;
       // stamped with the moment of this step, not the send time: the timer fires unevenly (0…6 steps a tick), and a
       // send-time stamp shifts states in time and hides server stalls from the client's jitter estimate
       if (this.steps % every === 0) this.snapshot(Math.round(now - (this.acc + (n - 1 - i) / SIM_HZ) * 1000));

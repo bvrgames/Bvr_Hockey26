@@ -677,10 +677,13 @@ var TEST=(function(){
   /* startapp: префиксы dbg_ (отладка) и host_ (матч считает телефон хоста — запасная схема) в любом порядке,
      дальше — код комнаты: dbg, host, dbg_КОД, host_КОД, host_dbg_КОД. Старый префикс srv_ принимается и ничего
      не меняет: серверная схема и так по умолчанию (фаза 3.5). */
+  /* snap20_ / int100_ — настройка сети для теста (NETCFG): снимков в секунду и задержка интерполяции, мс */
   t.startParam=function(sp){
-    var o={dbg:false, srv:false, host:false, room:''}, m;
+    var o={dbg:false, srv:false, host:false, snap:0, int:0, room:''}, m;
     sp=String(sp||'');
-    while((m=/^(dbg|srv|host)(?:_|$)/i.exec(sp))){ o[m[1].toLowerCase()]=true; sp=sp.slice(m[0].length); }
+    while((m=/^(dbg|srv|host|snap(\d{1,3})|int(\d{1,3}))(?:_|$)/i.exec(sp))){
+      if(m[2]) o.snap=+m[2]; else if(m[3]) o.int=+m[3]; else o[m[1].toLowerCase()]=true;
+      sp=sp.slice(m[0].length); }
     o.room=sp; return o;
   };
   var sp0=null;
@@ -2442,41 +2445,84 @@ setInterval(function(){
    Действия (пас/бросок/чек/поук) НЕ предсказываются — только движение:
    спекулятивно выполнять их локально означало бы дублировать игровые
    эффекты (шайба и т.п.), которые авторитетны только на хосте. */
-var PRED=null, PRED_ERR={x:0,z:0,yaw:0}, PRED_LOG=[];
+var PRED_STEP=1/60;   /* шаг предсказания = шаг сервера (room-sim SIM_HZ) */
+var PRED=null, PRED_ERR={x:0,z:0,yaw:0,vx:0,vz:0,vy:0,w:8}, PRED_LOG=[];
 /* Сеть v2 (замеры: tools/smoke-lag.mjs).
    Ввод гостя: номер пакета q и счётчики нажатий c[A,B,X,Y,LB] — нажатие не теряется при
    склейке пакетов и не срабатывает дважды. Снимок хоста: подтверждение a (последний
    полученный q) и точные скорости управляемых игроков v — предсказание гостя доигрывает
    ровно те вводы, которых хост ещё не видел. Чужие игроки и шайба у гостя — из буфера
    снимков по времени хоста с задержкой D (интерполяция вместо «лесенки»). */
-var SNAP_HZ=30, INPUT_HZ=30;
+/* NETCFG — настройки сетевого матча в одном месте (netfix, PHASE 2). Подстройка без новой сборки:
+   ?snap=20 или startapp=snap20_… — снимков в секунду (15/20/30/60): просит тот, кто начинает матч, сервер отвечает
+   обоим в cfg (hz), и snapHz берётся оттуда; старый Worker поля не знает — 30.
+   ?interp=100 или startapp=int100_… — задержка интерполяции зафиксирована, мс (иначе адаптивная, dMin…dMax). */
+var NETCFG={
+  snapHz:30,            /* снимков в секунду в идущем матче (cfg сервера; хост-схема — своя отправка) */
+  askHz:30,             /* сколько просим у сервера */
+  inputHz:30,           /* пакетов ввода в секунду */
+  dMin:45, dMax:400,    /* задержка интерполяции, мс: интервал снимков ×1.2 + p95 джиттера, в этих пределах */
+  dFix:0,               /* >0 — задержка фиксирована, мс */
+  winSec:10,            /* окно оценки часов и джиттера, с */
+  extrap:350,           /* буфер пуст: экстраполяция до стольких мс, затем стоим */
+  extrapFull:150,       /* … первые столько мс — с полной скоростью, дальше — вдвое медленнее */
+  smoothW:16,           /* сводка нарисованных игроков и шайбы к снимкам (догнали экстраполяцию): пружина, 1/с */
+  smoothPredW:5,        /* … бывший свой игрок с предсказания на снимки (он впереди на «пинг + D») — мягче */
+  predAcc:60,           /* свой игрок: поправка по снимку гасится пружиной, разгон не больше ≈ стольких м/с² */
+  predW:[4.5, 11],      /* … жёсткость пружины, 1/с (≈ 4.7/w с до 5 % разницы) */
+  predKeepV:4,          /* … сколько скорости (м/с) нарисованный сохраняет на поправке — без рывка */
+  puckAcc:150,          /* шайба: смена источника (снимки / клюшка / предсказание) — то же, м/с² (подбор ≈ 0.25 с) */
+  puckW:[6, 18],
+  puckKeepV:5,
+  puckSnap:8            /* вне игры разница больше, м — ставим сразу (вбрасывание) */
+};
+(function(){
+  var q=new URLSearchParams(location.search), sh=+q.get('snap')||TEST.sp.snap, di=+q.get('interp')||TEST.sp.int;
+  if([15,20,30,60].indexOf(sh)>=0){ NETCFG.askHz=sh; NETCFG.snapHz=sh; }
+  if(di>=20 && di<=1000) NETCFG.dFix=di;
+})();
 var NETV={q:0, cnt:[0,0,0,0,0], ack:0, sentT:{}, rtt:0,
           inQ:0, lastCnt:[0,0,0,0,0], tapB:false,
           buf:[], offWin:[], off:null, D:0.08, jit:[],
           pl:{fr:0, ex:0, hold:0, back:0, rt:null}};   /* воспроизведение: кадры, экстраполяция, сверх предела, время назад */
 var BTN_KEYS=['A','B','X','Y','LB'];
 function predResetTo(p){
-  PRED={p:p, x:p.x, z:p.z, vx:p.vx||0, vz:p.vz||0, yaw:p.yaw, spd:p.spd||0, stride:p.stride||0, _back:false};
-  PRED_ERR.x=0; PRED_ERR.z=0; PRED_ERR.yaw=0;
+  PRED={p:p, x:p.x, z:p.z, vx:p.vx||0, vz:p.vz||0, yaw:p.yaw, spd:p.spd||0, stride:p.stride||0, _back:false, acc:0};
+  PRED_ERR.x=0; PRED_ERR.z=0; PRED_ERR.yaw=0; PRED_ERR.vx=0; PRED_ERR.vz=0; PRED_ERR.vy=0;
+}
+/* критически задемпфированная пружина: смещение s[k] и его скорость s[kv] гаснут к нулю (≈ 4.7/w с до 5 %) без
+   перелёта. В отличие от экспоненты скорость нарисованного не скачет в момент поправки: разница добавляется к
+   смещению, а его скорость остаётся — рывок кадра ≈ w²·смещение·dt² вместо смещение·w·dt */
+function spring1(s, k, kv, dt, w){
+  var e=Math.exp(-w*dt), t=(s[kv]+w*s[k])*dt;
+  s[k]=(s[k]+t)*e; s[kv]=(s[kv]-w*t)*e;
 }
 function netPredictGuest(dt){
   if(!NET.b) return;
   var myP=HS[HUMAN].ctrl;
   if(!myP || myP.boxed || myP.down>0 || myP.goalie){ PRED=null; return; }
   if(!PRED || PRED.p!==myP) predResetTo(myP);
+  /* шагами 1/60 с, как сервер: humanMoveIntegrate тормозит (damping) за каждый вызов, а не по времени, и при шаге в
+     кадр на экране 90/120 Гц (WebView Android рисует с частотой экрана) предсказание расходилось с сервером — поправка
+     на каждом снимке. Остаток меньше шага (PRED.acc) — досчитывается по скорости только для картинки */
   if(state==='play'){
-    var mi=humanMoveIntent(myP, HS[HUMAN], IN);
-    humanMoveIntegrate(PRED, mi[0], mi[1], mi[2], mi[3], dt);
-  }
-  /* визуальная ошибка после последней коррекции гасится плавно: обычная (толчок, неровный пинг) — за ~0.15 с,
-     большая (только что переключились на игрока, нарисованного по снимкам на «пинг + D» позади) — дольше, до 0.35 с,
-     чтобы он не прыгал вперёд */
-  var decay=Math.min(1, dt/(PRED_ERR.tau||0.15));
-  PRED_ERR.x-=PRED_ERR.x*decay; PRED_ERR.z-=PRED_ERR.z*decay; PRED_ERR.yaw-=PRED_ERR.yaw*decay;
-  myP.x=PRED.x+PRED_ERR.x; myP.z=PRED.z+PRED_ERR.z;
+    PRED.acc+=dt; var ns=0;
+    while(PRED.acc>=PRED_STEP-1e-6 && ns<8){
+      PRED.acc-=PRED_STEP; ns++;
+      var mi=humanMoveIntent(myP, HS[HUMAN], IN);
+      humanMoveIntegrate(PRED, mi[0], mi[1], mi[2], mi[3], PRED_STEP);
+    }
+    if(ns>=8) PRED.acc=0;
+  } else PRED.acc=0;
+  /* визуальная ошибка после последней коррекции гасится пружиной (жёсткость PRED_ERR.w — по величине, netRecvSnap):
+     обычная (толчок, неровный пинг) — за ~0.4 с, большая (только что переключились на игрока, нарисованного по
+     снимкам на «пинг + D» позади) — дольше, чтобы он не прыгал вперёд */
+  var w=PRED_ERR.w||8;
+  spring1(PRED_ERR,'x','vx',dt,w); spring1(PRED_ERR,'z','vz',dt,w); spring1(PRED_ERR,'yaw','vy',dt,w);
+  myP.x=PRED.x+PRED.vx*PRED.acc+PRED_ERR.x; myP.z=PRED.z+PRED.vz*PRED.acc+PRED_ERR.z;
   myP.yaw=PRED.yaw+PRED_ERR.yaw; myP.vx=PRED.vx; myP.vz=PRED.vz; myP.spd=PRED.spd; myP.stride=PRED.stride;
   myP._back=PRED._back;
-  NETS.pred={p:myP, x:myP.x, z:myP.z, yaw:myP.yaw};   /* где нарисован предсказанный — для перехода обратно (netApply) */
+  NETS.pred={p:myP, x:myP.x, z:myP.z, yaw:myP.yaw, vx:PRED.vx+PRED_ERR.vx, vz:PRED.vz+PRED_ERR.vz};   /* где нарисован предсказанный — для перехода обратно (netApply) */
 }
 var NEDGE={A:false,B:false,X:false,Y:false,LB:false};
 var _npv={A:false,B:false,X:false,Y:false,LB:false};
@@ -5216,6 +5262,7 @@ function netConnect(url, code, cb, re){
     }
     else if(m.t==='cfg' && netFollow()){
       clearTimeout(NET.srvT); ROUTE.done=true;
+      NETCFG.snapHz=[15,20,30,60].indexOf(m.hz)>=0 ? m.hz : 30;   /* частота снимков матча (старый Worker — 30) */
       /* после возврата сервер напоминает cfg идущего матча — он у нас уже идёт, продолжаем по снимкам */
       if(m.id && m.id===MATCH.id && netInMatch()) return;
       /* матч начал другой, а модели ещё качаются: играем, экран загрузки — пока их нет */
@@ -5426,46 +5473,55 @@ function netRecvSnap(m){
       var myP=players[myIdx];
       if(!PRED || PRED.p!==myP) predResetTo(myP);
       /* что сейчас видно на экране — от этого считаем ошибку ПОСЛЕ доигрывания */
-      var visX=PRED.x+PRED_ERR.x, visZ=PRED.z+PRED_ERR.z, visYaw=PRED.yaw+PRED_ERR.yaw;
+      var visX=PRED.x+PRED.vx*PRED.acc+PRED_ERR.x, visZ=PRED.z+PRED.vz*PRED.acc+PRED_ERR.z, visYaw=PRED.yaw+PRED_ERR.yaw;
+      var visVx=PRED.vx+PRED_ERR.vx, visVz=PRED.vz+PRED_ERR.vz;
       PRED.x=d[mo]; PRED.z=d[mo+1]; PRED.yaw=d[mo+2]; PRED.spd=d[mo+5];
       var vv=m.v, vi=(HUMAN===0)?0:2;
       if(vv){ PRED.vx=vv[vi]; PRED.vz=vv[vi+1]; }
       else { PRED.vx=Math.cos(PRED.yaw)*PRED.spd; PRED.vz=Math.sin(PRED.yaw)*PRED.spd; }
-      /* доигрываем все вводы, которых хост ещё не видел (q > a), шагами как у хоста */
+      /* доигрываем все вводы, которых сервер ещё не видел (q > a), целыми шагами 1/60 с, как у него: каждый шаг —
+         с вводом, действовавшим в его момент; остаток меньше шага — в PRED.acc (netPredictGuest продолжит с него).
+         Раньше — кусками по времени между пакетами, с неполными шагами: лишнее торможение на каждом пакете */
       var nowT=performance.now();
       while(PRED_LOG.length && PRED_LOG[0].q<=m.a) PRED_LOG.shift();
-      for(var ri=0; ri<PRED_LOG.length; ri++){
-        var e=PRED_LOG[ri], tEnd=(ri+1<PRED_LOG.length)?PRED_LOG[ri+1].t:nowT;
-        var rem=Math.min(0.25,(tEnd-e.t)/1000);
-        while(rem>1e-4){
-          var h=Math.min(1/60,rem); rem-=h;
-          var mi2=humanMoveIntent(myP, HS[HUMAN], e);
-          humanMoveIntegrate(PRED, mi2[0], mi2[1], mi2[2], mi2[3], h);
+      PRED.acc=0;
+      if(PRED_LOG.length){
+        var t0r=Math.max(PRED_LOG[0].t, nowT-1000), span=(nowT-t0r)/1000, nst=Math.floor(span/PRED_STEP+1e-6), ri=0;
+        for(var si=0; si<nst; si++){
+          var ts=t0r+si*PRED_STEP*1000;
+          while(ri+1<PRED_LOG.length && PRED_LOG[ri+1].t<=ts) ri++;
+          var mi2=humanMoveIntent(myP, HS[HUMAN], PRED_LOG[ri]);
+          humanMoveIntegrate(PRED, mi2[0], mi2[1], mi2[2], mi2[3], PRED_STEP);
         }
+        PRED.acc=Math.max(0, span-nst*PRED_STEP);
       }
       /* экран остаётся на месте, разница гасится плавно в netPredictGuest;
          большая разница — это телепорт (вбрасывание, штраф): принимаем сразу */
-      PRED_ERR.x=visX-PRED.x; PRED_ERR.z=visZ-PRED.z;
+      PRED_ERR.x=visX-(PRED.x+PRED.vx*PRED.acc); PRED_ERR.z=visZ-(PRED.z+PRED.vz*PRED.acc);
       /* и поворот: иначе конец клюшки (и шайба на нём) дёргается на каждом снимке */
       var dyw=visYaw-PRED.yaw; while(dyw>Math.PI) dyw-=Math.PI*2; while(dyw<-Math.PI) dyw+=Math.PI*2;
       PRED_ERR.yaw=dyw;
       var em=Math.hypot(PRED_ERR.x,PRED_ERR.z);
-      PRED_ERR.tau=clamp(0.12+em*0.07, 0.15, 0.35);
+      /* и скорость: нарисованный едет дальше как ехал, разница скоростей (до predKeepV) — тоже в пружину. Раньше
+         экран сразу брал скорость доигрывания, а разница гасла экспонентой — на каждой поправке > ~25 см был рывок */
+      PRED_ERR.vx=visVx-PRED.vx; PRED_ERR.vz=visVz-PRED.vz;
+      var ev=Math.hypot(PRED_ERR.vx,PRED_ERR.vz), kv=NETCFG.predKeepV;
+      if(ev>kv){ PRED_ERR.vx*=kv/ev; PRED_ERR.vz*=kv/ev; }
+      PRED_ERR.w=clamp(Math.sqrt(NETCFG.predAcc/Math.max(em,0.01)), NETCFG.predW[0], NETCFG.predW[1]);
       /* мгновенно — только настоящая перестановка на сервере (вбрасывание, штраф): игрок в снимке прыгнул > 3 м.
          Раньше мгновенно ставили при любой разнице > 3 м — так при смене игрока на плохой связи он телепортировался */
       var pa=NET.a, authTele=pa && mo+1<pa.length && Math.hypot(d[mo]-pa[mo], d[mo+1]-pa[mo+1])>3;
-      if(authTele || em>12){ PRED_ERR.x=0; PRED_ERR.z=0; PRED_ERR.yaw=0; }
+      if(authTele || em>12){ PRED_ERR.x=0; PRED_ERR.z=0; PRED_ERR.yaw=0; PRED_ERR.vx=0; PRED_ERR.vz=0; PRED_ERR.vy=0; }
     }
   }
 }
 /* буфер снимков у гостя: время хоста k, оценка сдвига часов (минимальная задержка за 10 с),
-   адаптивная задержка отрисовки D = интервал снимков + p95 джиттера, не больше NET_DMAX.
+   адаптивная задержка отрисовки D = интервал снимков + p95 джиттера, в пределах NETCFG.dMin…dMax.
    netfix (02.10): мобильный интернет из Индонезии — RTT 200–300, джиттер 100+, потери 2–3 %. Потеря в WebSocket — это
    повторная отправка TCP: следующие снимки ждут ~RTT и приходят пачкой. Раньше: окно 3 с, p90, потолок 250 мс и
    экстраполяция 100 мс — буфер пустел на каждой пачке, игроки замирали и прыгали (smoke:lag ID: 6 % кадров).
-   Теперь: окно 10 с, p95, потолок 400 мс, экстраполяция до NET_EXTRAP мс (после 150 мс — с затуханием), а когда
+   Теперь: окно 10 с, p95, потолок 400 мс, экстраполяция до NETCFG.extrap мс (после extrapFull — с затуханием), а когда
    снимки догоняют, разница с нарисованным сводится за ~0.1 с (NETS), а не прыжком. */
-var NET_WIN=300, NET_DMAX=400, NET_EXTRAP=350;
 /* время приёма — монотонные часы (performance.now), приведённые к эпохе один раз при загрузке: Android посреди матча
    подводит настенные часы (Date.now) скачком, а оценка сдвига (минимум за 10 с) догоняет такой скачок до 10 с —
    соперники замирали бы или прыгали. Сдвиг относительно часов сервера по-прежнему вычитает NETV.off. */
@@ -5478,33 +5534,37 @@ function netBufPush(m){
   B.push({t:k, d:m.d});
   while(B.length>2 && B[1].t < k-1500) B.shift();
   var o=now-k;                                          /* задержка + разница часов */
-  NETV.offWin.push(o); if(NETV.offWin.length>NET_WIN) NETV.offWin.shift();
+  var win=Math.round(NETCFG.winSec*NETCFG.snapHz);
+  NETV.offWin.push(o); while(NETV.offWin.length>win) NETV.offWin.shift();
   var mn=Infinity; for(var i=0;i<NETV.offWin.length;i++) if(NETV.offWin[i]<mn) mn=NETV.offWin[i];
   NETV.off=mn;
-  NETV.jit.push(o-mn); if(NETV.jit.length>NET_WIN) NETV.jit.shift();
+  NETV.jit.push(o-mn); while(NETV.jit.length>win) NETV.jit.shift();
   var js=NETV.jit.slice().sort(function(a,b){return a-b;});
   var p95=js[Math.floor(js.length*0.95)]||0;
-  var target=clamp(1000/SNAP_HZ*1.2 + p95, 45, NET_DMAX)/1000;
+  var target=clamp(1000/NETCFG.snapHz*1.2 + p95, NETCFG.dMin, NETCFG.dMax)/1000;
   NETV.D += (target-NETV.D)*(target>NETV.D?0.3:0.05);  /* растёт быстро, уменьшается плавно */
+  if(NETCFG.dFix) NETV.D=NETCFG.dFix/1000;
   if(m.a!==undefined){ NETV.ack=m.a; var st=NETV.sentT[m.a];
     if(st){ var r=performance.now()-st; NETV.rtt = NETV.rtt ? NETV.rtt*0.9+r*0.1 : r; }
     for(var q in NETV.sentT) if(+q<=m.a) delete NETV.sentT[q]; }
 }
 function _lerpAng(a,b,k){ var d=b-a; while(d>Math.PI) d-=Math.PI*2; while(d<-Math.PI) d+=Math.PI*2; return a+d*k; }
-/* экстраполяция: первые 150 мс — по скорости как есть, дальше вдвое медленнее (игрок поворачивает), до NET_EXTRAP */
-function netExtrapMs(e){ e=Math.min(e, NET_EXTRAP); return e<=150 ? e : 150+(e-150)*0.5; }
+/* экстраполяция: первые extrapFull мс — по скорости как есть, дальше вдвое медленнее (игрок поворачивает), до extrap */
+function netExtrapMs(e){ var f=NETCFG.extrapFull; e=Math.min(e, NETCFG.extrap); return e<=f ? e : f+(e-f)*0.5; }
 /* сглаживание у гостя: offset нарисованного от цели (интерполяция/экстраполяция). Каждый кадр цель должна сдвинуться
    на скорость × dt; всё, что сверх (снимки догнали экстраполяцию, пачка после паузы), уходит в offset и гасится за
-   ~NETS_TAU. Настоящий телепорт (вбрасывание, штраф) — больше 3 м — без сводки. */
-var NETS={t:0, p:[], pk:null, pred:null}, NETS_TAU=0.1;
+   ~0.3 с пружиной (spring1, NETCFG.smoothW; раньше — экспонентой за 0.1 с, и на каждой пачке снимков скорость
+   нарисованного скакала). Настоящий телепорт (вбрасывание, штраф) — больше 3 м — без сводки. */
+var NETS={t:0, p:[], pk:null, pred:null};
 function netSmooth(st, tx, tz, vx, vz, dt, tele){
-  if(!st.on || tele){ st.on=true; st.ox=0; st.oz=0; st.oy=0; st.lim=0; }
+  if(!st.on || tele){ st.on=true; st.ox=0; st.oz=0; st.oy=0; st.vx=0; st.vz=0; st.lim=0; }
   else {
     var jx=st.tx+vx*dt-tx, jz=st.tz+vz*dt-tz;
-    if(Math.hypot(st.ox+jx, st.oz+jz)>Math.max(3, st.lim||0)){ st.ox=0; st.oz=0; st.oy=0; st.lim=0; }
+    if(Math.hypot(st.ox+jx, st.oz+jz)>Math.max(3, st.lim||0)){ st.ox=0; st.oz=0; st.oy=0; st.vx=0; st.vz=0; st.lim=0; }
     else { st.ox+=jx; st.oz+=jz; }
     /* разница после перехода с предсказания (st.lim) гасится дольше — игрок не отъезжает назад рывком */
-    var f=Math.exp(-dt/(st.lim ? 0.3 : NETS_TAU)); st.ox*=f; st.oz*=f; st.oy=(st.oy||0)*f;
+    var w=st.lim ? NETCFG.smoothPredW : NETCFG.smoothW;
+    spring1(st,'ox','vx',dt,w); spring1(st,'oz','vz',dt,w); st.oy=(st.oy||0)*Math.exp(-dt*w*0.6);
     if(st.lim && Math.hypot(st.ox,st.oz)<0.05) st.lim=0;
   }
   st.tx=tx; st.tz=tz;
@@ -5519,7 +5579,7 @@ function netApply(){
   while(i1>0 && Bf[i1-1].t>=rt) i1--;
   var S1=Bf[i1], S0=Bf[Math.max(0,i1-1)], k, PL=NETV.pl;
   PL.fr++; if(PL.rt!==null && rt<PL.rt) PL.back++; PL.rt=rt;
-  if(rt>Bf[Bf.length-1].t){ PL.ex++; if(rt-Bf[Bf.length-1].t>NET_EXTRAP) PL.hold++; }
+  if(rt>Bf[Bf.length-1].t){ PL.ex++; if(rt-Bf[Bf.length-1].t>NETCFG.extrap) PL.hold++; }
   if(S1.t<=rt){                                         /* новее нет: экстраполируем (netExtrapMs) */
     S0=Bf[Math.max(0,Bf.length-2)]; S1=Bf[Bf.length-1];
     var span=Math.max(1,S1.t-S0.t);
@@ -5529,7 +5589,7 @@ function netApply(){
   }
   var A=S0.d, B=S1.d, base=20, spS=Math.max(1,S1.t-S0.t)/1000;
   /* скорость цели: по паре снимков; на экстраполяции после 150 мс — вдвое меньше (как netExtrapMs) */
-  var vk=(k>1 && rt-S1.t>150) ? 0.5 : 1;
+  var vk=(k>1 && rt-S1.t>NETCFG.extrapFull) ? 0.5 : 1;
   /* «телепорт» (вбрасывание, штраф) — разница между соседними снимками больше, чем можно проехать за их промежуток.
      После потери пакетов промежуток бывает 0.3–0.7 с: шайба за него пролетает и 10 м — это не телепорт, её не ставят
      мгновенно, а ведут по снимкам */
@@ -5554,7 +5614,11 @@ function netApply(){
     var pp=NETS.pred;
     if(pp && pp.p===p && !tele){
       var sx=pp.x-tx, sz=pp.z-tz, sm=Math.hypot(sx,sz);
-      if(sm<12){ ps.ox=sx; ps.oz=sz; ps.lim=sm+0.5; var dy=pp.yaw-yw; while(dy>Math.PI) dy-=Math.PI*2; while(dy<-Math.PI) dy+=Math.PI*2; ps.oy=dy; }
+      if(sm<12){ ps.ox=sx; ps.oz=sz; ps.lim=sm+0.5;
+        /* и скорость: отпущенный игрок не тормозит рывком до скорости снимков (до 4 м/с разницы) */
+        ps.vx=(pp.vx||0)-(B[o]-ax)/spS; ps.vz=(pp.vz||0)-(B[o+1]-az)/spS;
+        var pvm=Math.hypot(ps.vx,ps.vz); if(pvm>4){ ps.vx*=4/pvm; ps.vz*=4/pvm; }
+        var dy=pp.yaw-yw; while(dy>Math.PI) dy-=Math.PI*2; while(dy<-Math.PI) dy+=Math.PI*2; ps.oy=dy; }
     }
     p.x=tx+ps.ox; p.z=tz+ps.oz;
     p.yaw=yw+(ps.oy||0);
@@ -5575,9 +5639,11 @@ function netApply(){
   netSmooth(pks, px, pz, ptele?0:AUTHPK.vx*vk, ptele?0:AUTHPK.vz*vk, sdt, ptele);
   AUTHPK.x=px+pks.ox; AUTHPK.z=pz+pks.oz;
   AUTHPK.y=A[1]+(B[1]-A[1])*Math.min(k,1);
-  if(!(PUCKP && PUCKP.on)){ puck.x=AUTHPK.x; puck.z=AUTHPK.z; puck.y=AUTHPK.y; }
+  AUTHPK.tele=ptele;
+  AUTHPK.ow=(A[18]===B[18]) ? B[18] : -1;             /* кто ведёт шайбу в показываемый момент (оба снимка согласны) */
+  /* на экран шайбу ставит puckDraw (netGuestActions) */
 }
-var AUTHPK={x:0,y:0.05,z:0,vx:0,vz:0};   /* шайба по снимкам хоста (интерполированная) */
+var AUTHPK={x:0,y:0.05,z:0,vx:0,vz:0,tele:false,ow:-1};   /* шайба по снимкам (интерполированная) */
 
 /* ============================================================
    ГОСТЬ: ПРЕДСКАЗАНИЕ ДЕЙСТВИЙ И ШАЙБЫ
@@ -5613,9 +5679,12 @@ function launchPred(kind, arg, me){
   PUCKP={on:true, mode:'fly', t0:now, x:from[0], y:0.05, z:from[1], vx:vx, vy:vy, vz:vz, w:0};
   GACT.pred={kind:kind, t:now};
 }
-/* сводка к снимкам: дольше при большом расхождении (0.15…0.3 с), чтобы не было рывка */
-function puckBlend(){ if(PUCKP){ PUCKP.mode='blend'; PUCKP.w=0;
-  PUCKP.bt=clamp(Math.hypot((PUCKP.x||0)-AUTHPK.x,(PUCKP.z||0)-AUTHPK.z)/20, 0.15, 0.3); } }
+/* предсказание отдаёт шайбу снимкам (подтверждение, отскок, свисток): сама шайба в этот момент ничего не сделала —
+   puckDraw сохранит её нарисованную скорость и сведёт к снимкам пружиной */
+/* Из 'wait' (у ворот / чужого игрока) — стоп: нарисованная шайба впереди снимков на «пинг + D», а снимки в
+   показываемый момент ещё летят к воротам; со скоростью снимков она проехала бы сквозь вратаря за линию ворот
+   (smoke:lag «shot at goal»). Стоит, пока снимки не догонят, дальше — с ними */
+function puckRelease(){ if(PUCKP && PUCKP.on){ PS.keepV=PUCKP.mode==='wait' ? 'stop' : 'keep'; PUCKP.on=false; } }
 /* предсказанный полёт не знает вратаря, ворот и клюшек: у ворот соперника и рядом с чужим игроком
    исход решает сервер — там шайба не пролетает насквозь, а тормозит и ждёт снимков */
 function puckContested(P, me){
@@ -5625,23 +5694,15 @@ function puckContested(P, me){
     if(o!==me && !o.boxed && Math.hypot(o.x-P.x, o.z-P.z) < 1.4) return true; }
   return false;
 }
-function puckBlendStep(dt, auth, me){
-  PUCKP.w=Math.min(1, PUCKP.w+dt/(PUCKP.bt||0.15));
-  var w=PUCKP.w*PUCKP.w*(3-2*PUCKP.w);
-  var tx=AUTHPK.x, tz=AUTHPK.z;
-  if(auth===me && me){ var s2=stickEnd(me); tx=s2[0]; tz=s2[1]; }
-  puck.x=PUCKP.x+(tx-PUCKP.x)*w; puck.z=PUCKP.z+(tz-PUCKP.z)*w; puck.y=PUCKP.y+(AUTHPK.y-PUCKP.y)*w;
-  if(PUCKP.w>=1) PUCKP.on=false;
-}
 function netGuestActions(dt){
   var me=HS[HUMAN].ctrl, now=performance.now();
+  var auth=puck.owner;                                   /* владелец по последнему снимку */
   if(!me || state!=='play'){ GACT.chg=0; chargeT=0;
     /* гол / свисток, пока шайба летела по предсказанию: к снимкам — плавно, а не скачком */
-    if(PUCKP && PUCKP.on && PUCKP.mode!=='held'){ if(PUCKP.mode!=='blend') puckBlend(); puckBlendStep(dt, null, null); }
-    else if(PUCKP) PUCKP.on=false;
+    puckRelease();
+    puckDraw(dt, me, auth);
     return; }
   var lagMs=(NETV.rtt||120)+NETV.D*1000+300;
-  var auth=puck.owner;                                   /* владелец по последнему снимку */
   if(auth) GACT.looseT=0; else if(!GACT.looseT) GACT.looseT=now;
   var held = auth===me || (PUCKP && PUCKP.on && PUCKP.mode==='held');
   /* подбор: клюшка своего (предсказанного) игрока дотянулась до ничьей шайбы */
@@ -5665,9 +5726,8 @@ function netGuestActions(dt){
   if(PUCKP && PUCKP.on){
     var age=now-PUCKP.t0;
     if(PUCKP.mode==='held'){
-      if(auth===me) PUCKP.on=false;                                  /* хост подтвердил */
-      else if((auth && auth!==me) || age>lagMs){ var s0=stickEnd(me); PUCKP.x=s0[0]; PUCKP.z=s0[1]; PUCKP.y=0.05; PUCKP.vx=PUCKP.vz=PUCKP.vy=0; puckBlend(); }
-      else { var s1=stickEnd(me); puck.x=s1[0]; puck.z=s1[1]; puck.y=0.05; }
+      if(auth===me) PUCKP.on=false;                                  /* сервер подтвердил */
+      else if((auth && auth!==me) || age>lagMs) puckRelease();       /* не подтвердил — к снимкам */
     }
     if(PUCKP.on && PUCKP.mode==='fly'){
       puckStep(PUCKP, dt);
@@ -5675,44 +5735,66 @@ function netGuestActions(dt){
       var pv=Math.hypot(PUCKP.vx,PUCKP.vz), av=Math.hypot(AUTHPK.vx,AUTHPK.vz);
       var diverged = hostReleased && !auth && av>3 && pv>3 &&
                      (PUCKP.vx*AUTHPK.vx+PUCKP.vz*AUTHPK.vz)/(pv*av) < 0.8;       /* отскок, сейв */
-      if((!hostReleased && age>lagMs) || (auth && auth!==me && age>(NETV.rtt||120)*0.5) || diverged || age>1400) puckBlend();
+      if((!hostReleased && age>lagMs) || (auth && auth!==me && age>(NETV.rtt||120)*0.5) || diverged || age>1400) puckRelease();
       /* дальше предсказанию не верим: у ворот / чужого игрока, или сервер уже должен был подтвердить бросок */
       else if(puckContested(PUCKP, me) || (!hostReleased && age>(NETV.rtt||120)+NETV.D*1000+100)) PUCKP.mode='wait';
-      else { puck.x=PUCKP.x; puck.z=PUCKP.z; puck.y=PUCKP.y; }
     }
     if(PUCKP.on && PUCKP.mode==='wait'){
       /* тормозит (≈0.1 с до остановки), пока снимки сервера не догонят: тогда сводка к ним */
       var fr=Math.exp(-dt/0.1); PUCKP.vx*=fr; PUCKP.vz*=fr; PUCKP.vy*=fr;
       puckStep(PUCKP, dt);
       var hr=auth!==me, caught=hr && (Math.hypot(PUCKP.x-AUTHPK.x, PUCKP.z-AUTHPK.z)<1.2 || age>(NETV.rtt||120)+NETV.D*1000+150);
-      if(caught || (auth && auth!==me) || (!hr && age>lagMs) || age>1400) puckBlend();
-      else { puck.x=PUCKP.x; puck.z=PUCKP.z; puck.y=PUCKP.y; }
+      if(caught || (auth && auth!==me) || (!hr && age>lagMs) || age>1400) puckRelease();
     }
-    if(PUCKP.on && PUCKP.mode==='blend') puckBlendStep(dt, auth, me);
   }
-  /* шайба своего игрока — на его (предсказанной) клюшке, а не позади на длину пинга */
-  if(!(PUCKP && PUCKP.on) && auth===me){ var s3=stickEnd(me); puck.x=s3[0]; puck.z=s3[1]; puck.y=0.05; }
-  /* подбор (held) — тоже смена источника: шайба с её места по снимкам на свою клюшку (до 0.85 м) — сводится */
-  puckSourceBlend(dt, (PUCKP && PUCKP.on) ? (PUCKP.mode==='held' ? 'held' : 'pred') : (auth===me ? 'stick' : 'auth'));
+  puckDraw(dt, me, auth);
 }
-/* Шайба у гостя рисуется из разных источников: своя (предсказанная) клюшка, снимки хоста,
-   предсказание. Переход «моя клюшка ↔ снимки хоста» (у меня отобрали / мне отдали пас)
-   давал скачок на длину пинга — сводим его за ~140 мс. Вылет при своём пасе/броске
-   (предсказание) не трогаем: он должен быть мгновенным. Подбор (held) сводится так же, held ↔ stick — одна клюшка. */
-var PDS={mode:null, bl:0, fx:0, fz:0, lx:0, lz:0};
-function puckSourceBlend(dt, mode){
-  var tx=puck.x, tz=puck.z;
-  var same=(mode==='held'&&PDS.mode==='stick')||(mode==='stick'&&PDS.mode==='held');
-  if(PDS.mode && mode!==PDS.mode && mode!=='pred' && PDS.mode!=='pred' && !same){
-    var j=Math.hypot(tx-PDS.lx, tz-PDS.lz);
-    if(j>0.2 && j<4){ PDS.bl=1; PDS.fx=PDS.lx; PDS.fz=PDS.lz; }
+/* Шайба у гостя рисуется из разных источников (PS.kind): 'pred' — своё предсказание (вылет при пасе/броске, полёт),
+   'held' — предсказанный подбор и 'stick' — шайба моя по снимку (обе — на своей предсказанной клюшке), 'carry' — её
+   ведёт другой игрок в показываемый момент (на конце его нарисованной клюшки, как на сервере), 'auth' — снимки.
+   Раньше смена источника (подбор, отбор, приём паса, сводка предсказания к снимкам) сводилась по времени от
+   замершей точки: скорость нарисованной шайбы скакала, smoke:lag — 5–13 рывков в секунду. Теперь на смене
+   источника нарисованная точка остаётся, разница уходит в смещение, которое гасит пружина (spring1, разгон не больше
+   NETCFG.puckAcc). Если сама шайба в этот момент ничего не сделала (puckRelease) — остаётся и её скорость, иначе
+   (подбор, приём, вылет) скорость сразу новая — как у сервера. */
+var PS={key:null, kind:null, ox:0, oz:0, vx:0, vz:0, oy:0, w:12, lx:0, lz:0, ly:0.05, dvx:0, dvz:0, keepV:false};
+function puckDraw(dt, me, auth){
+  var C=NETCFG, kind, key, tx, tz, ty=0.05, tvx=0, tvz=0, src=null;
+  if(PUCKP && PUCKP.on && PUCKP.mode!=='held'){ kind='pred'; key='pred'; tx=PUCKP.x; tz=PUCKP.z; ty=PUCKP.y; tvx=PUCKP.vx; tvz=PUCKP.vz; }
+  else {
+    if(me && ((PUCKP && PUCKP.on) || auth===me)){ kind=(PUCKP && PUCKP.on) ? 'held' : 'stick'; src=me; tvx=me.vx||0; tvz=me.vz||0; }
+    else {
+      var ow=AUTHPK.ow>=0 ? players[AUTHPK.ow] : null;
+      if(ow && ow!==me && !ow.boxed){ kind='carry'; src=ow; tvx=Math.cos(ow.yaw)*(ow.spd||0); tvz=Math.sin(ow.yaw)*(ow.spd||0); }
+    }
+    if(src){ var se=stickEnd(src); tx=se[0]; tz=se[1]; key='stick'+players.indexOf(src); }
+    else { kind='auth'; key='auth'; tx=AUTHPK.x; tz=AUTHPK.z; ty=AUTHPK.y; tvx=AUTHPK.vx; tvz=AUTHPK.vz; }
   }
-  if(PDS.bl>0){
-    PDS.bl=Math.max(0, PDS.bl-dt/0.14);
-    var w=PDS.bl*PDS.bl*(3-2*PDS.bl);             /* вес старой точки */
-    puck.x=tx+(PDS.fx-tx)*w; puck.z=tz+(PDS.fz-tz)*w;
+  var reset = PS.key===null || (kind==='auth' && PS.key==='auth' && AUTHPK.tele);   /* вбрасывание, штраф — сразу */
+  if(!reset && key!==PS.key){
+    var ox=PS.lx-tx, oz=PS.lz-tz, om=Math.hypot(ox,oz);
+    /* в игре — любая разница пружиной (непринятый сервером бросок возвращается на клюшку и с 10 м); вне игры большая —
+       это перестановка (вбрасывание): сразу */
+    if(om>C.puckSnap && state!=='play') reset=true;
+    else {
+      PS.ox=ox; PS.oz=oz; PS.oy=PS.ly-ty;
+      if(PS.keepV==='stop'){ PS.vx=-tvx; PS.vz=-tvz; }
+      else if(PS.keepV){
+        PS.vx=PS.dvx-tvx; PS.vz=PS.dvz-tvz;
+        var vm=Math.hypot(PS.vx,PS.vz); if(vm>C.puckKeepV){ PS.vx*=C.puckKeepV/vm; PS.vz*=C.puckKeepV/vm; }
+      } else { PS.vx=0; PS.vz=0; }
+      PS.w=clamp(Math.sqrt(C.puckAcc/Math.max(om,0.01)), C.puckW[0], C.puckW[1]);
+    }
   }
-  PDS.mode=mode; PDS.lx=puck.x; PDS.lz=puck.z;
+  if(reset){ PS.ox=PS.oz=PS.oy=PS.vx=PS.vz=0; }
+  PS.keepV=false; PS.key=key; PS.kind=kind;
+  if(dt>0){
+    spring1(PS,'ox','vx',dt,PS.w); spring1(PS,'oz','vz',dt,PS.w); PS.oy*=Math.exp(-dt*PS.w);
+  }
+  var nx=tx+PS.ox, nz=tz+PS.oz;
+  if(dt>0 && !reset){ PS.dvx=(nx-PS.lx)/dt; PS.dvz=(nz-PS.lz)/dt; } else if(reset){ PS.dvx=tvx; PS.dvz=tvz; }
+  puck.x=nx; puck.z=nz; puck.y=Math.max(0.05, ty+PS.oy);
+  PS.lx=nx; PS.lz=nz; PS.ly=puck.y;
 }
 /* звук/анимация от события хоста: своё предсказанное действие уже озвучено и сыграно */
 function predictedOwn(e, kind){
@@ -5925,7 +6007,7 @@ function frameStepInner(dt){
     for(var bk=0;bk<BTN_KEYS.length;bk++) if(EDGE[BTN_KEYS[bk]]) NETV.cnt[bk]++;
     NET.sendT-=dt;
     _tn=pfNow();
-    if(NET.sendT<=0){ NET.sendT+=1/INPUT_HZ; if(NET.sendT<0) NET.sendT=0; netSendInput(); }
+    if(NET.sendT<=0){ NET.sendT+=1/NETCFG.inputHz; if(NET.sendT<0) NET.sendT=0; netSendInput(); }
     pfAdd('net',_tn);
   } else {
     var _ts2=pfNow();
@@ -5935,7 +6017,7 @@ function frameStepInner(dt){
     if(netHost()){
       var _tn2=pfNow();
       NET.sendT-=dt;
-      if(NET.sendT<=0){ NET.sendT+=1/SNAP_HZ; if(NET.sendT<0) NET.sendT=0; netSnap(); }
+      if(NET.sendT<=0){ NET.sendT+=1/NETCFG.snapHz; if(NET.sendT<0) NET.sendT=0; netSnap(); }
       pfAdd('net',_tn2);
     }
   }
@@ -7266,7 +7348,7 @@ function goStart(){
   if(ONLINE){
     if(!NET.on || NET.role!=='host' || !NET.peer) return;
     ROUTE.done=true;
-    netSend({t:'cfg',a:selMy,b:selOp,min:selMin,id:mid});
+    netSend({t:'cfg',a:selMy,b:selOp,min:selMin,id:mid,hz:NETCFG.askHz});
     /* серверный режим: матч начнёт сервер — его cfg придёт обоим, как гостю */
     if(NET.srv){ netSrvWatch('go'); return; }
   } else { NET.on=false; HUMAN=TEST.side; lastSave(); }
@@ -7294,7 +7376,7 @@ function startMatchAgain(){
   var mid=newMatchId();
   if(NET.on && NET.role==='host'){
     if(!NET.peer) return;
-    netSend({t:'cfg',a:MATCH.clubs[0],b:MATCH.clubs[1],min:MATCH_MIN,id:mid});
+    netSend({t:'cfg',a:MATCH.clubs[0],b:MATCH.clubs[1],min:MATCH_MIN,id:mid,hz:NETCFG.askHz});
     if(NET.srv){ netSrvWatch('again'); return; }   /* серверный режим: реванш начнёт сервер (cfg придёт обоим) */
   }
   hideResult(); setPaused(false);
@@ -8041,7 +8123,7 @@ window.__hk={hs:function(){return HS;},net:function(){return NET;},setCam:functi
   rw:function(){ return {st:RWD.st, id:RWD.id, played:RWD.played, fly:document.querySelectorAll('.rw-fx').length,
     text:document.getElementById('oReward').textContent, wal:document.getElementById('oWal').textContent}; },
   /* сеть: источник картинки шайбы у гостя, задержка интерполяции, RTT — для tools/smoke-lag.mjs */
-  netInfo:function(){ return {src:PDS.mode, pmode:PUCKP&&PUCKP.on?PUCKP.mode:null, D:Math.round(NETV.D*1000), rtt:Math.round(NETV.rtt||0), buf:NETV.buf.length, pl:NETV.pl, route:ROUTE.list, routeDone:ROUTE.done}; },
+  netInfo:function(){ return {src:PS.kind, pmode:PUCKP&&PUCKP.on?PUCKP.mode:null, D:Math.round(NETV.D*1000), rtt:Math.round(NETV.rtt||0), buf:NETV.buf.length, pl:NETV.pl, route:ROUTE.list, routeDone:ROUTE.done}; },
   /* раскладка / подписи — для tools/smoke-tg.mjs */
   showFps:function(on){ setShowFps(on); }, fitPad:function(){ fitPadLabels(); }, T:function(k){ return T(k); },
   layoutTop:function(){ layoutTop(); },
