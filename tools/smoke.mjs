@@ -61,8 +61,9 @@ for (const name of browsers) {
     await page.evaluate('__hk.unfreeze()');
     const dClock = f0.clock - f1.clock;
     if (frames !== Math.round(STEP * 60)) fails.push(`step ran ${frames} frames, expected ${Math.round(STEP * 60)}`);
-    // the clock stops during goal celebrations and faceoffs start, so allow slack but not "nothing happened"
-    if (!(dClock > STEP * 0.5 && dClock <= STEP + 0.05)) fails.push(`step(${STEP}s) moved the clock by ${dClock.toFixed(2)} s`);
+    // the clock stops during goal celebrations and faceoffs (a faceoff is 3.4–6 s with the clock standing), so allow
+    // slack for one of each but not "nothing happened"
+    if (!(dClock > STEP * 0.25 && dClock <= STEP + 0.05)) fails.push(`step(${STEP}s) moved the clock by ${dClock.toFixed(2)} s`);
     await page.waitForTimeout(500);
     const end = await page.evaluate('__hk.snap()');
     if (end.shots + end.passes === 0) fails.push('no shot or pass in the whole run — AI is stuck?');
