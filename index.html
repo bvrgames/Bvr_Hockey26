@@ -396,6 +396,15 @@
   .mshopg.sm .mshop svg{width:28px}
   .mshopg.sm .mshop b{font-size:13px}
   .mshopg.sm .mshop .soon{position:static;margin-left:auto}
+  /* Магазин: «Без рекламы» за звёзды */
+  .mshna{display:flex;align-items:center;gap:12px;max-width:560px}
+  .mshna .mshc{flex:0 0 auto}
+  .mshna .mshc b{font-size:17px;text-transform:uppercase}
+  .mshna>i{font:600 11.5px/1.3 system-ui;font-style:normal;color:var(--mdim)}
+  /* итог: видео за монеты (AdsGram) */
+  #oAdRw{display:flex;align-items:center;gap:7px}
+  #oAdRw .ic{width:.95em;height:.95em}
+  #oAdRw.dis{opacity:.7;font:700 13px/1.3 system-ui;text-transform:none;color:var(--mdim)}
 
   /* медали */
   .md{display:inline-block;width:15px;height:15px;border-radius:50%;flex:none;vertical-align:middle;box-shadow:inset 0 -2px 0 rgba(0,0,0,.25),0 0 0 1px rgba(255,255,255,.25)}
@@ -599,6 +608,7 @@
       <div class="mleft"><div class="mlist">
         <div class="mi mf" id="oAgain" data-act="again"></div>
         <div class="mi mf" id="oNext" data-act="lnext" style="display:none"></div>
+        <div class="mi mf" id="oAdRw" data-act="adrw" style="display:none"></div>
         <div class="mi mf" id="oMenu" data-act="menu"></div>
       </div></div>
       <div class="mright"><div class="mcard mglass mres"><div id="oScore">0 : 0</div><div id="oWinner">—</div><div id="oReward"></div></div></div>
@@ -1339,7 +1349,7 @@ ru:{
   mDevD:'Ещё игры — @bvr_games_bot',
   mProfile:'Профиль', mShop:'Магазин', mShopD:'Форма, клюшки, празднования — за монеты', mPlayer:'Игрок',
   pMatches:'Матчи', pWins:'Победы', pDraws:'Ничьи', pLosses:'Поражения', pGoals:'Голы', pBest:'Лучшая серия',
-  pOnline:'С друзьями', pCoins:'Монеты', pStars:'Звёзды', mTopup:'Пополнить', sbTitle:'Пополнить звёзды', sbNote:'Звёзды — для оформления (лёд, форма), отключения рекламы и обмена на монеты в Магазине. В ставках не участвуют.', shCoins:'Монеты', shAsk:'Купить {c} за {s}?', shBuy:'Купить', shCancel:'Отмена', shNo:'Не хватает звёзд: нужно {s}, у тебя {h}', shTop:'Пополнить звёзды', shBusy:'Покупаем…', shDone:'Куплено: {c}', shErr:'Не получилось купить. Попробуй ещё раз.', shSoonL:'Скоро', sbFor:'за {n} Telegram Stars', sbLoad:'Загружаем пакеты…', sbMake:'Создаём счёт…', sbOpen:'Оплати в окне Telegram', sbWait:'Оплата прошла — ждём подтверждения…', sbDone:'Зачислено: {v}', sbCancel:'Оплата отменена — ничего не списано.', sbFail:'Оплата не прошла — ничего не списано.', sbLater:'Оплата прошла, звёзды появятся чуть позже.', sbErr:'Не получилось создать счёт. Попробуй ещё раз.', rwTotal:'Итого', rwCap:'Дневной лимит монет набран', rwWait:'Начисляем монеты…', rwLater:'Монеты начислятся позже', rwWin:'Победа', rwDraw:'Ничья', rwLoss:'Поражение', rwLeft:'Вышел из матча', rwBonus:'Голы и передачи', pNone:'Сыграй первый матч — здесь появится статистика.',
+  pOnline:'С друзьями', pCoins:'Монеты', pStars:'Звёзды', mTopup:'Пополнить', sbTitle:'Пополнить звёзды', sbNote:'Звёзды — для оформления (лёд, форма), отключения рекламы и обмена на монеты в Магазине. В ставках не участвуют.', shCoins:'Монеты', shAsk:'Купить {c} за {s}?', shBuy:'Купить', shCancel:'Отмена', shNo:'Не хватает звёзд: нужно {s}, у тебя {h}', shTop:'Пополнить звёзды', shBusy:'Покупаем…', shDone:'Куплено: {c}', shErr:'Не получилось купить. Попробуй ещё раз.', shSoonL:'Скоро', shNoAds:'Без рекламы', shNoAdsD:'Навсегда: без видео после матча. Видео за монеты остаётся.', shNoAdsAsk:'Отключить рекламу навсегда за {s}?', shNoAdsDone:'Реклама отключена', shOwned:'Куплено', adRw:'Видео: {c}', adRwWait:'Ждём подтверждения…', adRwDone:'За видео: {c}', adRwLater:'Монеты за видео начислятся позже', adRwFail:'Видео не загрузилось', adRwTest:'Тест: за видео монет нет', sbFor:'за {n} Telegram Stars', sbLoad:'Загружаем пакеты…', sbMake:'Создаём счёт…', sbOpen:'Оплати в окне Telegram', sbWait:'Оплата прошла — ждём подтверждения…', sbDone:'Зачислено: {v}', sbCancel:'Оплата отменена — ничего не списано.', sbFail:'Оплата не прошла — ничего не списано.', sbLater:'Оплата прошла, звёзды появятся чуть позже.', sbErr:'Не получилось создать счёт. Попробуй ещё раз.', rwTotal:'Итого', rwCap:'Дневной лимит монет набран', rwWait:'Начисляем монеты…', rwLater:'Монеты начислятся позже', rwWin:'Победа', rwDraw:'Ничья', rwLoss:'Поражение', rwLeft:'Вышел из матча', rwBonus:'Голы и передачи', pNone:'Сыграй первый матч — здесь появится статистика.',
   pStatsNote:'Статистика хранится в твоём Telegram и переезжает с тобой на другие устройства.',
   shKits:'Форма команд', shKitsD:'Ретро, зимняя, ночная', shSticks:'Клюшки', shSticksD:'Цвет обмотки и крюка',
   shGoal:'Празднование гола', shGoalD:'Сирена, салют, камера', shIce:'Лёд арены', shIceD:'Рисунок в центральном круге',
@@ -1433,7 +1443,7 @@ en:{
   mDevD:'More games — @bvr_games_bot',
   mProfile:'Profile', mShop:'Shop', mShopD:'Kits, sticks, celebrations — for coins', mPlayer:'Player',
   pMatches:'Matches', pWins:'Wins', pDraws:'Draws', pLosses:'Losses', pGoals:'Goals', pBest:'Best streak',
-  pOnline:'With friends', pCoins:'Coins', pStars:'Stars', mTopup:'Top up', sbTitle:'Top up stars', sbNote:'Stars are for looks (ice, kits), turning off ads and coins in the Shop. They are never staked.', shCoins:'Coins', shAsk:'Buy {c} for {s}?', shBuy:'Buy', shCancel:'Cancel', shNo:'Not enough stars: you need {s}, you have {h}', shTop:'Top up stars', shBusy:'Buying…', shDone:'Bought: {c}', shErr:'Could not buy. Try again.', shSoonL:'Soon', sbFor:'for {n} Telegram Stars', sbLoad:'Loading packs…', sbMake:'Creating the invoice…', sbOpen:'Pay in the Telegram window', sbWait:'Paid — waiting for confirmation…', sbDone:'Added: {v}', sbCancel:'Payment cancelled — nothing was charged.', sbFail:'Payment failed — nothing was charged.', sbLater:'Paid — your stars will arrive a little later.', sbErr:'Could not create the invoice. Try again.', rwTotal:'Total', rwCap:'Daily coin limit reached', rwWait:'Counting coins…', rwLater:'Coins will arrive later', rwWin:'Win', rwDraw:'Draw', rwLoss:'Loss', rwLeft:'Left the match', rwBonus:'Goals and assists', pNone:'Play your first match — your stats will show up here.',
+  pOnline:'With friends', pCoins:'Coins', pStars:'Stars', mTopup:'Top up', sbTitle:'Top up stars', sbNote:'Stars are for looks (ice, kits), turning off ads and coins in the Shop. They are never staked.', shCoins:'Coins', shAsk:'Buy {c} for {s}?', shBuy:'Buy', shCancel:'Cancel', shNo:'Not enough stars: you need {s}, you have {h}', shTop:'Top up stars', shBusy:'Buying…', shDone:'Bought: {c}', shErr:'Could not buy. Try again.', shSoonL:'Soon', shNoAds:'No ads', shNoAdsD:'Forever: no video after a match. Videos for coins stay.', shNoAdsAsk:'Turn off ads forever for {s}?', shNoAdsDone:'Ads are off', shOwned:'Owned', adRw:'Video: {c}', adRwWait:'Waiting for confirmation…', adRwDone:'For the video: {c}', adRwLater:'Coins for the video will arrive later', adRwFail:'The video did not load', adRwTest:'Test: no coins for videos', sbFor:'for {n} Telegram Stars', sbLoad:'Loading packs…', sbMake:'Creating the invoice…', sbOpen:'Pay in the Telegram window', sbWait:'Paid — waiting for confirmation…', sbDone:'Added: {v}', sbCancel:'Payment cancelled — nothing was charged.', sbFail:'Payment failed — nothing was charged.', sbLater:'Paid — your stars will arrive a little later.', sbErr:'Could not create the invoice. Try again.', rwTotal:'Total', rwCap:'Daily coin limit reached', rwWait:'Counting coins…', rwLater:'Coins will arrive later', rwWin:'Win', rwDraw:'Draw', rwLoss:'Loss', rwLeft:'Left the match', rwBonus:'Goals and assists', pNone:'Play your first match — your stats will show up here.',
   pStatsNote:'Your stats live in your Telegram account and follow you to other devices.',
   shKits:'Team kits', shKitsD:'Retro, winter, night', shSticks:'Sticks', shSticksD:'Tape and blade colours',
   shGoal:'Goal celebration', shGoalD:'Horn, fireworks, camera', shIce:'Arena ice', shIceD:'Centre circle art',
@@ -1529,7 +1539,7 @@ id:{
   mDevD:'Game lainnya — @bvr_games_bot',
   mProfile:'Profil', mShop:'Toko', mShopD:'Seragam, tongkat, selebrasi — dengan koin', mPlayer:'Pemain',
   pMatches:'Laga', pWins:'Menang', pDraws:'Seri', pLosses:'Kalah', pGoals:'Gol', pBest:'Rekor beruntun',
-  pOnline:'Dengan teman', pCoins:'Koin', pStars:'Bintang', mTopup:'Isi ulang', sbTitle:'Isi ulang bintang', sbNote:'Bintang untuk tampilan (es, seragam), mematikan iklan dan ditukar ke koin di Toko. Tidak dipakai untuk taruhan.', shCoins:'Koin', shAsk:'Beli {c} seharga {s}?', shBuy:'Beli', shCancel:'Batal', shNo:'Bintang kurang: perlu {s}, kamu punya {h}', shTop:'Isi ulang bintang', shBusy:'Membeli…', shDone:'Terbeli: {c}', shErr:'Gagal membeli. Coba lagi.', shSoonL:'Segera', sbFor:'seharga {n} Telegram Stars', sbLoad:'Memuat paket…', sbMake:'Membuat tagihan…', sbOpen:'Bayar di jendela Telegram', sbWait:'Sudah dibayar — menunggu konfirmasi…', sbDone:'Masuk: {v}', sbCancel:'Pembayaran dibatalkan — tidak ada yang ditagih.', sbFail:'Pembayaran gagal — tidak ada yang ditagih.', sbLater:'Sudah dibayar — bintang akan masuk sebentar lagi.', sbErr:'Gagal membuat tagihan. Coba lagi.', rwTotal:'Total', rwCap:'Batas koin harian tercapai', rwWait:'Menghitung koin…', rwLater:'Koin akan masuk nanti', rwWin:'Menang', rwDraw:'Seri', rwLoss:'Kalah', rwLeft:'Keluar dari laga', rwBonus:'Gol dan assist', pNone:'Mainkan laga pertamamu — statistik akan muncul di sini.',
+  pOnline:'Dengan teman', pCoins:'Koin', pStars:'Bintang', mTopup:'Isi ulang', sbTitle:'Isi ulang bintang', sbNote:'Bintang untuk tampilan (es, seragam), mematikan iklan dan ditukar ke koin di Toko. Tidak dipakai untuk taruhan.', shCoins:'Koin', shAsk:'Beli {c} seharga {s}?', shBuy:'Beli', shCancel:'Batal', shNo:'Bintang kurang: perlu {s}, kamu punya {h}', shTop:'Isi ulang bintang', shBusy:'Membeli…', shDone:'Terbeli: {c}', shErr:'Gagal membeli. Coba lagi.', shSoonL:'Segera', shNoAds:'Tanpa iklan', shNoAdsD:'Selamanya: tanpa video setelah laga. Video untuk koin tetap ada.', shNoAdsAsk:'Matikan iklan selamanya seharga {s}?', shNoAdsDone:'Iklan dimatikan', shOwned:'Dimiliki', adRw:'Video: {c}', adRwWait:'Menunggu konfirmasi…', adRwDone:'Dari video: {c}', adRwLater:'Koin dari video masuk nanti', adRwFail:'Video gagal dimuat', adRwTest:'Tes: video tanpa koin', sbFor:'seharga {n} Telegram Stars', sbLoad:'Memuat paket…', sbMake:'Membuat tagihan…', sbOpen:'Bayar di jendela Telegram', sbWait:'Sudah dibayar — menunggu konfirmasi…', sbDone:'Masuk: {v}', sbCancel:'Pembayaran dibatalkan — tidak ada yang ditagih.', sbFail:'Pembayaran gagal — tidak ada yang ditagih.', sbLater:'Sudah dibayar — bintang akan masuk sebentar lagi.', sbErr:'Gagal membuat tagihan. Coba lagi.', rwTotal:'Total', rwCap:'Batas koin harian tercapai', rwWait:'Menghitung koin…', rwLater:'Koin akan masuk nanti', rwWin:'Menang', rwDraw:'Seri', rwLoss:'Kalah', rwLeft:'Keluar dari laga', rwBonus:'Gol dan assist', pNone:'Mainkan laga pertamamu — statistik akan muncul di sini.',
   pStatsNote:'Statistikmu tersimpan di akun Telegram dan ikut ke perangkat lain.',
   shKits:'Seragam tim', shKitsD:'Retro, musim dingin, malam', shSticks:'Tongkat', shSticksD:'Warna lakban dan bilah',
   shGoal:'Selebrasi gol', shGoalD:'Sirene, kembang api, kamera', shIce:'Es arena', shIceD:'Gambar di lingkaran tengah',
@@ -2608,6 +2618,7 @@ function showResult(){
   MENU.foc.result=0;
   /* гость реванш не начинает — его запускает хост */
   var ag=document.getElementById('oAgain'); if(ag) ag.style.display=(NET.on && NET.role==='guest')?'none':'';
+  adsPaint();
   var e=document.getElementById('overscr'); if(e) e.style.display='flex';
 }
 function hideResult(){
@@ -6391,7 +6402,7 @@ var MSCR={
         c+='<div class="mshc mglass mf'+(SH && SH.pack===p.id && SH.st?' sel':'')+'" data-act="cbuy" data-pack="'+mEsc(p.id)+'">'+icHtml('coin')+'<b>'+(p.coins|0)+'</b>'+
           '<span class="pr">'+curHtml('star', p.stars|0)+'</span></div>';
       });
-      c='<div class="mshh">'+mEsc(T('shCoins'))+'</div><div class="mshcg">'+c+'</div><div class="mshq" data-paint="shQ"></div><div class="mshh">'+mEsc(T('shSoonL'))+'</div>';
+      c='<div class="mshh">'+mEsc(T('shCoins'))+'</div><div class="mshcg">'+c+'</div>'+adsShopHtml()+'<div class="mshq" data-paint="shQ"></div><div class="mshh">'+mEsc(T('shSoonL'))+'</div>';
     }
     return mHead(T('mShop'), '<span class="mpill mwal">'+walletHtml()+'</span>')+
       '<div class="mleft">'+c+'<div class="mshopg'+(cs?' sm':'')+'">'+h+'</div>'+(cs?'':'<div class="mnote dim" style="margin-top:8px">'+
@@ -6537,15 +6548,15 @@ var MPAINT={
       '<button class="mbtn mf" data-act="lstart" data-i="'+i+'">'+mEsc(T('tStart'))+'</button>';
   },
   shQ:function(el){
-    var st=SH ? SH.st : null, p=st ? cpack(SH.pack) : null;
+    var st=SH ? SH.st : null, p=st ? shPack(SH.pack) : null;
     if(!p){ el.innerHTML=''; el.className='mshq'; return; }
     var c=curHtml('coin', p.coins), sv=curHtml('star', p.stars), h='';
     el.className='mshq'+(st==='done'?' ok':(st==='err'||st==='no'?' bad':''));
-    if(st==='ask') h='<span class="t">'+mEsc(T('shAsk')).replace('{c}', c).replace('{s}', sv)+'</span><button class="mbtn mf" data-act="cyes">'+mEsc(T('shBuy'))+'</button><button class="mbtn ghost mf" data-act="cno">'+mEsc(T('shCancel'))+'</button>';
+    if(st==='ask') h='<span class="t">'+(p.noads ? mEsc(T('shNoAdsAsk')).replace('{s}', sv) : mEsc(T('shAsk')).replace('{c}', c).replace('{s}', sv))+'</span><button class="mbtn mf" data-act="cyes">'+mEsc(T('shBuy'))+'</button><button class="mbtn ghost mf" data-act="cno">'+mEsc(T('shCancel'))+'</button>';
     else if(st==='no') h='<span class="t">'+mEsc(T('shNo')).replace('{s}', sv).replace('{h}', curHtml('star', STARS===null?0:STARS))+'</span>'+
       (starsBuyOK() ? '<button class="mbtn mf" data-act="topup">'+mEsc(T('shTop'))+'</button>' : '')+'<button class="mbtn ghost mf" data-act="cno">'+mEsc(T('shCancel'))+'</button>';
     else if(st==='buy') h='<span class="mdot"></span><span class="t">'+mEsc(T('shBusy'))+'</span>';
-    else if(st==='done') h='<span class="t">'+mEsc(T('shDone')).replace('{c}', curHtml('coin', '+'+p.coins))+'</span>';
+    else if(st==='done') h='<span class="t">'+(p.noads ? mEsc(T('shNoAdsDone')) : mEsc(T('shDone')).replace('{c}', curHtml('coin', '+'+p.coins)))+'</span>';
     else if(st==='err') h='<span class="t">'+mEsc(T('shErr'))+'</span>';
     el.innerHTML=h;
   },
@@ -6823,8 +6834,10 @@ var ACT={
   resume:function(){ setPaused(false); },
   pctrl:function(){ openPauseSub('ctrl'); },
   pset:function(){ openPauseSub('settings'); },
-  menu:function(){ backToMenu(); },
-  again:function(){ if(TRAIN.on) trainStart(TRAIN.i); else startMatchAgain(); }
+  /* с экрана итога — через видео после матча, если пора (adsLeave); в паузе и тренировке — сразу */
+  menu:function(){ adsLeave(backToMenu); },
+  again:function(){ if(TRAIN.on) trainStart(TRAIN.i); else adsLeave(startMatchAgain); },
+  adrw:function(){ adsReward(); }
 };
 function barVal(ev, el, cur, d){
   var bar=ev && ev.target && ev.target.closest && ev.target.closest('.mbar');
@@ -7074,6 +7087,7 @@ function soundUnlock(){
 ['touchend','pointerdown','keydown','click'].forEach(function(ev){ window.addEventListener(ev, soundUnlock, true); });
 /* свернули игру (или Telegram свернул мини-приложение): звук на паузе — с «playback» он иначе играл бы в фоне */
 function soundPause(off){
+  if(!off && typeof ADS!=='undefined' && ADS && ADS.busy) return;   /* идёт видео AdsGram: звук вернёт adsShow */
   SND.off=off;
   if(off){
     if(AC && AC.state==='running'){ try{ AC.suspend(); }catch(e){} }
@@ -7806,15 +7820,22 @@ function shIdem(){
   for(var j=0;j<12;j++) s+=(b[j]<16?'0':'')+b[j].toString(16);
   return s;
 }
+/* пакет монет или «Без рекламы» (id 'noads', цена с сервера — ADS.price) */
+function shPack(id){
+  if(id==='noads') return (typeof ADS!=='undefined' && ADS && ADS.price) ? {id:'noads', stars:ADS.price, noads:true} : null;
+  return cpack(id);
+}
 function shAsk(id){
-  var p=cpack(id); if(!p || (SH && SH.st==='buy')) return;
+  var p=shPack(id); if(!p || (SH && SH.st==='buy')) return;
+  if(p.noads && ADS.noads) return;
   SH={st:(STARS!==null && STARS<p.stars) ? 'no' : 'ask', pack:id, idem:shIdem()};
   shPaint();
 }
 function shBuy(){
   if(!SH || SH.st!=='ask' || !coinShopOK()) return;
-  var p=cpack(SH.pack), idem=SH.idem, wasCoins=COINS; if(!p) return;
+  var p=shPack(SH.pack), idem=SH.idem, wasCoins=COINS; if(!p) return;
   SH.st='buy'; shPaint();
+  if(p.noads){ adsNoadsBuy(idem); return; }
   fetch(STATS_API+'/v1/shop/coins', {method:'POST', headers:apiHeaders(true), body:JSON.stringify({pack:p.id, idem:idem})})
   .then(function(r){ return r.json().then(function(j){ return {s:r.status, j:j}; }, function(){ return {s:r.status, j:null}; }); })
   .then(function(x){
@@ -8003,13 +8024,169 @@ function profileFetch(){
   .then(function(r){ return r.ok ? r.json() : null; })
   .then(function(j){
     if(!j) return;
-    testBotSet(j.test); coinsSet(j.coins, j.stars); packsSet(j.packs); cpacksSet(j.coinPacks);
+    testBotSet(j.test); coinsSet(j.coins, j.stars); packsSet(j.packs); cpacksSet(j.coinPacks); adsProfile(j);
     if(j.totals && profApply(JSON.stringify(j.totals))){ prefSet('profile', JSON.stringify(PROF)); if(MENU.ready){ MENU.build('main'); MENU.build('profile'); } }
   })
   .catch(function(){});
 }
 /* при запуске: сначала неотправленные итоги, потом профиль (чтобы баланс был уже с ними) */
 setTimeout(function(){ sumFlush(); setTimeout(function(){ profileFetch(); extCheck(); }, 1500); }, 0);
+
+/* ---------- реклама: только AdsGram (docs/EVENTS.md «Реклама») ----------
+   Всё настраиваемое — в ADS_CFG. SDK грузится после показа меню и только в Telegram; вне Telegram, в автотестах
+   (navigator.webdriver, если тест сам не подложил window.Adsgram), при ошибке или без ответа SDK реклама молча
+   пропускается — игра не ждёт. В тестовом боте (TEST.preview) — debug-режим AdsGram (тестовые ролики).
+   Видео после матча (interstitial) — при уходе с экрана итога («Ещё раз» / «Главное меню»), после доигранного матча
+   с компьютером («Быстрый матч», «Против компьютера»): не чаще чем после каждого every-го такого матча и раз в gapMs;
+   не после первого матча игрока, не в тренировке, не в игре с другом, не с «Без рекламы» (inventory 'noads' с сервера).
+   Видео за монеты (reward) — кнопка на экране итога (не в игре с другом и не в тренировке). Монеты начисляет только
+   сервер, когда AdsGram вызовет Reward URL (GET /v1/ad/reward); клиент ждёт их в /v1/profile (ad.n вырос). Лимит в
+   день и сумма — на сервере (AD_REWARDS_DAY, AD_REWARD_COINS). Пока идёт видео, звук матча и музыка на паузе. */
+var ADS_CFG={
+  sdk:'https://sad.adsgram.ai/js/sad.min.js',
+  inter:'int-51931',     /* блок «после матча» (Interstitial) */
+  reward:'51932',        /* блок «видео за монеты» (Reward) */
+  every:2,               /* видео после матча — не чаще чем после каждого 2-го доигранного матча… */
+  gapMs:180000,          /* …и не чаще раза в 3 минуты */
+  loadDelayMs:2000,      /* SDK — через столько после показа меню */
+  maxMs:120000,          /* видео не ответило за столько — дальше без него */
+  waitMs:15000           /* монеты за видео: сколько ждать подтверждения сервера, потом «начислятся позже» */
+};
+/* st: null | 'load' | 'ok' | 'off'; n, t — доигранные матчи с прошлого видео после матча и когда оно было (localStorage);
+   ok — id последнего доигранного матча с компьютером; rw — {n, max, coins} из /v1/profile; price — «Без рекламы» в
+   звёздах (null — не продаётся); rs — кнопка видео за монеты: null | 'show' | 'wait' | 'done' | 'later' | 'fail' | 'test' */
+var ADS={st:null, ctl:{}, busy:false, noads:false, rw:null, price:null, n:0, t:0, ok:'', rs:null, rsId:'', got:0};
+try{ var _a0=JSON.parse(localStorage.getItem('bvr_ads')||'null'); if(_a0){ ADS.n=_a0.n|0; ADS.t=+_a0.t||0; } }catch(e){}
+try{ ADS.noads=localStorage.getItem('bvr_noads')==='1'; }catch(e){}
+function adsSave(){ try{ localStorage.setItem('bvr_ads', JSON.stringify({n:ADS.n, t:ADS.t})); }catch(e){} }
+function adsLoad(){
+  if(ADS.st || !inTelegram()) return;
+  if(window.Adsgram){ ADS.st='ok'; adsPaint(); return; }
+  if(navigator.webdriver){ ADS.st='off'; return; }
+  ADS.st='load';
+  var s=document.createElement('script'); s.src=ADS_CFG.sdk; s.async=true;
+  s.onload=function(){ ADS.st=window.Adsgram ? 'ok' : 'off'; adsPaint(); };
+  s.onerror=function(){ ADS.st='off'; };
+  document.head.appendChild(s);
+}
+requestAnimationFrame(function(){ setTimeout(adsLoad, ADS_CFG.loadDelayMs); });
+function adsCtl(block){
+  if(ADS.st!=='ok' || !window.Adsgram) return null;
+  if(!(block in ADS.ctl)){ try{ ADS.ctl[block]=window.Adsgram.init({blockId:block, debug:!!TEST.preview}); }catch(e){ ADS.ctl[block]=null; } }
+  return ADS.ctl[block];
+}
+/* показ видео: звук на паузе; done(r) — ровно один раз: ответ AdsGram ({done, state, error, description}) или {error:true} */
+function adsShow(block, done){
+  var c=adsCtl(block), fin=false, to=0;
+  if(!c || ADS.busy){ done({error:true}); return; }
+  var end=function(r){
+    if(fin) return; fin=true; clearTimeout(to); ADS.busy=false;
+    if(!document.hidden) soundPause(false);
+    done(r && typeof r==='object' ? r : {error:true});
+  };
+  ADS.busy=true; soundPause(true);
+  to=setTimeout(function(){ end({error:true, description:'timeout'}); }, ADS_CFG.maxMs);
+  try{ c.show().then(end, end); }catch(e){ end({error:true}); }
+}
+/* доигранный матч с компьютером — в счёт частоты видео после матча */
+EV.on('match:summary', function(s){
+  if(!s || s.mode!=='ai' || s.result==='left' || TRAIN.on) return;
+  ADS.n++; ADS.ok=s.id; adsSave();
+});
+function adsInterDue(){
+  return ADS.st==='ok' && !ADS.noads && !ADS.busy && state==='over' && !TRAIN.on && !ONLINE && !NET.on &&
+    !!MATCH.id && ADS.ok===MATCH.id && PROF.m>1 && ADS.n>=ADS_CFG.every && !(Date.now()-ADS.t<ADS_CFG.gapMs);
+}
+/* уход с экрана итога: видео после матча, если пора, потом next (ошибка или нет видео — сразу next) */
+function adsLeave(next){
+  if(ADS.busy) return;
+  if(!adsInterDue()){ next(); return; }
+  adsShow(ADS_CFG.inter, function(r){
+    if(!r.error){ ADS.n=0; ADS.t=Date.now(); adsSave(); }
+    next();
+  });
+}
+/* /v1/profile: просмотры за сегодня, «Без рекламы» куплено ли, его цена */
+function adsProfile(j){
+  if(!j) return;
+  var was=ADS.price+'|'+ADS.noads;
+  if(j.ad && typeof j.ad.n==='number') ADS.rw=j.ad;
+  if('noadsPrice' in j) ADS.price=j.noadsPrice||null;
+  if(Array.isArray(j.inventory)) adsNoadsSet(j.inventory.indexOf('noads')>=0);
+  if(MENU.ready && was!==ADS.price+'|'+ADS.noads){ MENU.build('shop'); if(MENU.top()==='shop' && MENU.layer()==='menu') MENU.refocus(); }
+  adsPaint();
+}
+function adsNoadsSet(v){ ADS.noads=!!v; try{ localStorage.setItem('bvr_noads', v?'1':'0'); }catch(e){} }
+/* Магазин: карточка «Без рекламы» (в Telegram, с сервером; в тестовом боте цены нет — карточки нет) */
+function adsShopHtml(){
+  if(typeof ADS==='undefined' || !ADS || !(ADS.price || ADS.noads)) return '';
+  var sel=SH && SH.pack==='noads' && SH.st ? ' sel' : '';
+  return '<div class="mshh">'+mEsc(T('shNoAds'))+'</div><div class="mshna"><div class="mshc mglass mf'+sel+'" data-act="'+(ADS.noads?'noop':'cbuy')+'" data-pack="noads">'+
+    '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="3" fill="none" stroke="currentColor" stroke-width="2"/>'+
+    '<path d="M10.2 9.4v5.2l4.4-2.6z" fill="currentColor"/><path d="M4.5 19.5l15-15" stroke="#ff8a7a" stroke-width="2.4" stroke-linecap="round"/></svg>'+
+    '<b>'+mEsc(T('shNoAds'))+'</b><span class="pr">'+(ADS.noads ? mEsc(T('shOwned')) : curHtml('star', ADS.price|0))+'</span></div><i>'+mEsc(T('shNoAdsD'))+'</i></div>';
+}
+/* покупка «Без рекламы»: POST /v1/shop/noads {idem}; 409 — уже куплено (тоже успех), 402 — не хватает звёзд */
+function adsNoadsBuy(idem){
+  fetch(STATS_API+'/v1/shop/noads', {method:'POST', headers:apiHeaders(true), body:JSON.stringify({idem:idem})})
+  .then(function(r){ return r.json().then(function(j){ return {s:r.status, j:j}; }, function(){ return {s:r.status, j:null}; }); })
+  .then(function(x){
+    if(SH.idem!==idem) return;
+    if(x.s===402 && x.j){ coinsSet(undefined, x.j.have); SH.st='no'; shPaint(); return; }
+    if((x.s===200 || x.s===409) && x.j && x.j.balance){ coinsSet(x.j.balance.coins, x.j.balance.stars); adsNoadsSet(true); SH.st='done'; shPaint(); return; }
+    SH.st='err'; shPaint();
+  })
+  .catch(function(){ if(SH.idem===idem){ SH.st='err'; shPaint(); } });
+}
+/* кнопка «Видео: +20» на экране итога */
+function adsRw(){ return ADS.rw || (TEST.preview ? {n:0, max:5, coins:20} : null); }   /* тестовый бот: профиля может не быть */
+function adsRwOK(){
+  var rw=adsRw();
+  return ADS.st==='ok' && !!STATS_API && inTelegram() && !TRAIN.on && !ONLINE && !NET.on && !!rw && (!!ADS.rs || rw.n<rw.max);
+}
+function adsPaint(){
+  var b=document.getElementById('oAdRw'); if(!b) return;
+  if(ADS.rsId!==MATCH.id && !ADS.busy){ ADS.rsId=MATCH.id; ADS.rs=null; }
+  var on=adsRwOK(), rs=ADS.rs, rw=adsRw(), h='';
+  b.style.display=on?'':'none';
+  if(!on) return;
+  if(!rs || rs==='fail') h=(rs==='fail' ? mEsc(T('adRwFail'))+' · ' : '')+mEsc(T('adRw')).replace('{c}', curHtml('coin', '+'+(rw.coins|0)));
+  else if(rs==='show' || rs==='wait') h='<span class="mdot"></span>'+mEsc(T('adRwWait'));
+  else if(rs==='done') h=mEsc(T('adRwDone')).replace('{c}', curHtml('coin', '+'+(ADS.got|0)));
+  else h=mEsc(T(rs==='test' ? 'adRwTest' : 'adRwLater'));
+  b.className='mi mf'+(!rs || rs==='fail' ? '' : ' dis');
+  b.setAttribute('data-act', !rs || rs==='fail' ? 'adrw' : 'noop');
+  if(b.innerHTML!==h) b.innerHTML=h;
+}
+function adsReward(){
+  if(ADS.busy || !adsRwOK() || (ADS.rs && ADS.rs!=='fail')) return;
+  var n0=adsRw().n, id=MATCH.id;
+  ADS.rs='show'; adsPaint();
+  adsShow(ADS_CFG.reward, function(r){
+    if(ADS.rsId!==id) return;
+    if(r.error || !r.done){ ADS.rs=r.error ? 'fail' : null; adsPaint(); return; }
+    if(TESTBOT || !ADS.rw){ ADS.rs='test'; adsPaint(); return; }
+    ADS.rs='wait'; adsPaint(); adsRwPoll(n0, id, Date.now());
+  });
+}
+/* монеты за видео: ждём, пока сервер их запишет (ad.n в /v1/profile вырос) */
+function adsRwPoll(n0, id, t0){
+  fetch(STATS_API+'/v1/profile', {headers:apiHeaders()})
+  .then(function(r){ return r.ok ? r.json() : null; })
+  .catch(function(){ return null; })
+  .then(function(j){
+    if(ADS.rsId!==id || ADS.rs!=='wait') return;
+    if(j && j.ad && j.ad.n>n0){
+      ADS.got=j.ad.coins|0; ADS.rs='done'; coinsSet(j.coins, j.stars); adsProfile(j);
+      var wl=document.getElementById('oWal');
+      if(wl && resultShown()){ wl.style.visibility=''; rwWal(COINS); wl.classList.remove('pop'); void wl.offsetWidth; wl.classList.add('pop'); }
+      SFX.coin(1);
+      return;
+    }
+    if(Date.now()-t0>ADS_CFG.waitMs){ ADS.rs='later'; adsPaint(); setTimeout(profileFetch, 30000); return; }
+    setTimeout(function(){ adsRwPoll(n0, id, t0); }, 1500);
+  });
+}
 
 /* ---------- закрытый экран (страница разработчика) ----------
    В игре нет ни его кода, ни текстов: сервер отвечает на /v1/admin/me 200 только тем, кто в ADMIN_IDS (по Telegram id
@@ -8220,13 +8397,19 @@ window.__hk={hs:function(){return HS;},net:function(){return NET;},setCam:functi
   /* пополнение звёзд (tools/smoke-api.mjs, stars-shots.mjs): состояние покупки, пакеты, видна ли кнопка */
   /* закрытый экран: есть ли пункт меню и загружен ли модуль (tools/smoke-api.mjs, dev-shots.mjs) */
   ext:function(){ return {ok:EXT.ok, mod:!!EXT.mod, st:EXT.st, n:EXT.n, item:document.querySelectorAll('#start [data-act="ext"]').length}; },
-  sh:function(){ return {st:SH.st, pack:SH.pack, idem:SH.idem, packs:CPACKS, ok:coinShopOK(), cards:document.querySelectorAll('#start section[data-s="shop"] .mshc').length,
+  sh:function(){ return {st:SH.st, pack:SH.pack, idem:SH.idem, packs:CPACKS, ok:coinShopOK(), cards:document.querySelectorAll('#start section[data-s="shop"] .mshcg .mshc').length,
     fly:document.querySelectorAll('.rw-fx').length, text:(document.querySelector('#start [data-paint="shQ"]')||{}).textContent||''}; },
   invite:function(code, host){ return inviteLink(code, host); }, build:function(){ return BUILD; }, ndg:function(){ return NDG; },
   sb:function(){ return {st:SB.st, order:SB.order, got:SB.got, packs:PACKS, ok:starsBuyOK(), btn:document.querySelectorAll('#start .mtopup').length,
     fly:document.querySelectorAll('.rw-fx').length, text:(document.querySelector('#start [data-paint="sbSt"]')||{}).textContent||''}; },
   /* экран итога для теста начисления (tools/smoke-api.mjs, wallet-shots.mjs): матч id «отправлен», ответа ещё нет */
   result:function(id){ if(!id){ backToMenu(); return; } hideResult(); MATCH.id=id; MATCH.sent=true; MATCH.reward=null; state='over'; showResult(); },
+  /* реклама AdsGram — для tools/smoke-ads.mjs */
+  ads:function(o){ if(o){ if('n' in o) ADS.n=o.n; if('t' in o) ADS.t=o.t; if('prof' in o) PROF.m=o.prof; if('online' in o) ONLINE=!!o.online;
+      if('train' in o) TRAIN.on=!!o.train; if(o.cfg) for(var k in o.cfg) ADS_CFG[k]=o.cfg[k]; if(o.fetch) profileFetch(); }
+    var b=document.getElementById('oAdRw');
+    return {st:ADS.st, n:ADS.n, t:ADS.t, ok:ADS.ok, busy:ADS.busy, noads:ADS.noads, price:ADS.price, rw:ADS.rw, rs:ADS.rs, sndOff:SND.off, due:adsInterDue(),
+      btn:b && b.style.display!=='none' ? b.textContent : null, state:state, layer:MENU.layer(), top:MENU.top()}; },
   rw:function(){ return {st:RWD.st, id:RWD.id, played:RWD.played, fly:document.querySelectorAll('.rw-fx').length,
     text:document.getElementById('oReward').textContent, wal:document.getElementById('oWal').textContent}; },
   /* сеть: источник картинки шайбы у гостя, задержка интерполяции, RTT — для tools/smoke-lag.mjs */

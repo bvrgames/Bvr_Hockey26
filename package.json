@@ -27,6 +27,7 @@
     "assets": "node tools/pack-assets.mjs",
     "smoke:server": "node tools/smoke-server.mjs && node tools/smoke-server.mjs --target mock --browser webkit",
     "smoke:api": "node tools/smoke-api.mjs",
+    "smoke:ads": "node tools/smoke-ads.mjs && node tools/smoke-ads.mjs --browser webkit",
     "room:proto": "node tools/room-proto.mjs && node tools/room-proto.mjs --target wrangler"
   },
   "devDependencies": {
