@@ -7604,6 +7604,10 @@ function matchStart(id, clubA, clubB){
   MATCH.id=id; MATCH.mode=NET.on?'online':'ai'; MATCH.role=NET.on?NET.role:'solo'; MATCH.net=NET.on?(NET.srv?'server':'host'):null;
   MATCH.team=HUMAN; MATCH.clubs=[clubA,clubB]; MATCH.len=Math.round(clock);
   SIM.matchLen=clock;      /* от длины матча — длина удалений (shared/sim.js PEN_CFG) */
+  /* хост: события прошлого матча (match:end ещё едет в последних снимках) в новый не досылаем — гость при новом cfg
+     сбрасывает счётчик событий и принял бы их как свежие: экран итога поверх реванша и итог реванша 0:0 (комната
+     серверной схемы при старте делает то же: server/room-sim.js start) */
+  NET_EVQ=[];
   MATCH.played=0; MATCH.startedAt=Date.now(); MATCH.summary=null; MATCH.sent=false; MATCH.reward=null;
   MATCH.stake=(NET.on && NET.srv && STK.live && STK.live.id===id) ? STK.live.n : 0;
   MATCH.difficulty = NET.on ? null : DIFF;   /* в сетевом матче соперник — человек */
