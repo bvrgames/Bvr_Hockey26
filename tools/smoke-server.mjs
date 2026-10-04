@@ -19,7 +19,7 @@ import { startWrangler } from './wrangler-dev.mjs';
 const args = process.argv.slice(2);
 const opt = (k, d) => { const i = args.indexOf('--' + k); return i >= 0 ? args[i + 1] : d; };
 const name = opt('browser', 'chromium'), TARGET = opt('target', 'wrangler');
-const REAL = +opt('real', 15);
+const REAL = +opt('real', 20);   // ~4 s of it is the opening faceoff (the clock stands): ~15 s of play as before
 const port = +opt('port', 8504), rport = +opt('relay', 8797);
 const room = 'SRV' + Math.floor(Math.random() * 1e5);
 const url = `http://127.0.0.1:${port}/index.html?room=${room}&srv=http://127.0.0.1:${rport}&seed=5`;

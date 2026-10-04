@@ -642,7 +642,7 @@
   </div>
 </div>
 
-<script src="shared/sim.js?v=6d5ff32c37"></script>
+<script src="shared/sim.js?v=476c9f999a"></script>
 <script>
 (function(){
 'use strict';
@@ -1296,7 +1296,7 @@ ru:{
   abRed:'КРС', abBlue:'СИН', abYellow:'ЖЛТ', abGreen:'ЗЕЛ',
   match:'МАТЧ', goal:'ГОЛ!', ourGoal:'наша шайба', theirGoal:'пропустили',
   save:'СЕЙВ', hit:'СИЛОВОЙ!', penalty:'УДАЛЕНИЕ', penaltySub:'атака игрока без шайбы',
-  pr_trip:'ПОДНОЖКА', pr_slash:'УДАР КЛЮШКОЙ', pr_back:'АТАКА СЗАДИ', pr_board:'ТОЛЧОК НА БОРТ', pr_interference:'БЛОКИРОВКА',
+  pr_trip:'ПОДНОЖКА', pr_slash:'УДАР КЛЮШКОЙ', pr_hold:'ЗАДЕРЖКА КЛЮШКОЙ', pr_back:'АТАКА СЗАДИ', pr_board:'ТОЛЧОК НА БОРТ', pr_interference:'БЛОКИРОВКА',
   cover:'ВРАТАРЬ НАКРЫЛ ШАЙБУ', foHint:'Стик — кому отбросить · A жми, когда шайба упадёт', foWon:'ВБРАСЫВАНИЕ ВЫИГРАНО', foLost:'ВБРАСЫВАНИЕ ПРОИГРАНО',
   offside:'ОФСАЙД', icing:'ПРОБРОС', delayed:'ОТЛОЖЕННЫЙ ОФСАЙД',
   delayedYou:'ОТЛОЖЕННЫЙ ОФСАЙД · ВЫЙДИ ИЗ ЗОНЫ', icingWarn:'ВОЗМОЖЕН ПРОБРОС',
@@ -1332,7 +1332,7 @@ ru:{
   mTacK:'тактика', mDpad:'крестовина',
   rOff:'Офсайд', rOffD:'Нельзя въезжать в зону соперника раньше шайбы. Загорелось «офсайд» — выйди за синюю линию, и игра пойдёт дальше. Тронешь шайбу в зоне — свисток и вбрасывание.',
   rIce:'Проброс', rIceD:'Бросил шайбу из своей половины за линию ворот соперника, и её никто не тронул — вбрасывание у твоих ворот.',
-  rPen:'Удаления', rPenD:'Подножка, удар клюшкой, атака сзади или на борт, силовой против игрока без шайбы — удаление: команда играет в меньшинстве. Малый штраф — 2:00 на табло, большой (очень сильный удар сзади на скорости) — 5:00; время идёт быстрее, по длине матча. Гол в большинстве снимает малый штраф.',
+  rPen:'Удаления', rPenD:'Подножка, удар или задержка клюшкой, атака сзади или на борт, силовой против игрока без шайбы — удаление: команда играет в меньшинстве. Малый штраф — 2:00 на табло, большой (очень сильный удар сзади на скорости) — 5:00; время идёт быстрее, по длине матча. Гол в большинстве снимает малый штраф.',
   rFace:'Вбрасывание', rFaceD:'После гола, офсайда, проброса, удаления и когда вратарь накрыл шайбу. Шайба падает неожиданно: стиком выбери, кому отбросить, после падения жми A чаще соперника.',
   rLen:'Длина матча', rLenD:'1, 3 или 5 минут чистого времени. Ничья — значит ничья.',
   rGoal:'Гол', rGoalD:'Шайба целиком пересекла линию ворот. Вратарь может отбить её или накрыть.',
@@ -1390,7 +1390,7 @@ en:{
   abRed:'RED', abBlue:'BLU', abYellow:'YEL', abGreen:'GRN',
   match:'MATCH', goal:'GOAL!', ourGoal:'we scored', theirGoal:'conceded',
   save:'SAVE', hit:'BIG HIT!', penalty:'PENALTY', penaltySub:'hit on a player without the puck',
-  pr_trip:'TRIPPING', pr_slash:'SLASHING', pr_back:'CHECKING FROM BEHIND', pr_board:'BOARDING', pr_interference:'INTERFERENCE',
+  pr_trip:'TRIPPING', pr_slash:'SLASHING', pr_hold:'HOOKING', pr_back:'CHECKING FROM BEHIND', pr_board:'BOARDING', pr_interference:'INTERFERENCE',
   cover:'GOALIE COVERS THE PUCK', foHint:'Stick — where to send it · mash A once the puck drops', foWon:'FACEOFF WON', foLost:'FACEOFF LOST',
   offside:'OFFSIDE', icing:'ICING', delayed:'DELAYED OFFSIDE',
   delayedYou:'DELAYED OFFSIDE · CLEAR THE ZONE', icingWarn:'POSSIBLE ICING',
@@ -1426,7 +1426,7 @@ en:{
   mTacK:'tactics', mDpad:'D-pad',
   rOff:'Offside', rOffD:'Do not enter the attacking zone ahead of the puck. When OFFSIDE lights up, skate back over the blue line and play goes on. Touch the puck in the zone — whistle and a faceoff.',
   rIce:'Icing', rIceD:'Shot from your own half over the goal line and nobody touched it — faceoff at your end.',
-  rPen:'Penalties', rPenD:'Tripping, slashing, a hit from behind or into the boards, a check on a player without the puck — a penalty: your team plays a man short. A minor shows 2:00, a major (a very hard hit from behind at speed) 5:00; the clock runs faster, scaled to the match length. A power-play goal ends a minor.',
+  rPen:'Penalties', rPenD:'Tripping, slashing, hooking, a hit from behind or into the boards, a check on a player without the puck — a penalty: your team plays a man short. A minor shows 2:00, a major (a very hard hit from behind at speed) 5:00; the clock runs faster, scaled to the match length. A power-play goal ends a minor.',
   rFace:'Faceoff', rFaceD:'After a goal, offside, icing, a penalty or when the goalie covers the puck. The drop comes without warning: pick a teammate with the stick, then mash A faster than the opponent once the puck is down.',
   rLen:'Match length', rLenD:'1, 3 or 5 minutes of play. A draw is a draw.',
   rGoal:'Goal', rGoalD:'The whole puck crossed the goal line. The goalie can save it or cover it.',
@@ -1485,7 +1485,7 @@ id:{
   abRed:'MRH', abBlue:'BIR', abYellow:'KNG', abGreen:'HJU',
   match:'LAGA', goal:'GOL!', ourGoal:'kita mencetak gol', theirGoal:'kebobolan',
   save:'PENYELAMATAN', hit:'BENTURAN KERAS!', penalty:'PENALTI',
-  pr_trip:'MENJEGAL', pr_slash:'MEMUKUL DENGAN STIK', pr_back:'MENYERANG DARI BELAKANG', pr_board:'MENDORONG KE PAPAN', pr_interference:'MENGHALANGI',
+  pr_trip:'MENJEGAL', pr_slash:'MEMUKUL DENGAN STIK', pr_hold:'MENAHAN DENGAN STIK', pr_back:'MENYERANG DARI BELAKANG', pr_board:'MENDORONG KE PAPAN', pr_interference:'MENGHALANGI',
   cover:'KIPER MENUTUP KEPING', foHint:'Stik — arah keping · tekan A cepat saat keping jatuh', foWon:'FACE-OFF MENANG', foLost:'FACE-OFF KALAH',
   penaltySub:'menabrak pemain tanpa keping',
   offside:'OFFSIDE', icing:'ICING', delayed:'OFFSIDE TERTUNDA',
@@ -1522,7 +1522,7 @@ id:{
   mTacK:'taktik', mDpad:'D-pad',
   rOff:'Offside', rOffD:'Jangan masuk zona lawan sebelum keping. Saat OFFSIDE menyala, keluar lewat garis biru dan permainan lanjut. Sentuh keping di zona — peluit dan face-off.',
   rIce:'Icing', rIceD:'Keping dari separuh lapanganmu melewati garis gawang lawan tanpa disentuh — face-off di dekat gawangmu.',
-  rPen:'Penalti', rPenD:'Menjegal, memukul dengan stik, menyerang dari belakang atau ke papan, benturan ke pemain tanpa keping — penalti: timmu main kurang orang. Penalti kecil 2:00 di papan skor, besar (benturan keras dari belakang saat cepat) 5:00; waktunya berjalan lebih cepat, sesuai panjang laga. Gol saat power play mengakhiri penalti kecil.',
+  rPen:'Penalti', rPenD:'Menjegal, memukul atau menahan dengan stik, menyerang dari belakang atau ke papan, benturan ke pemain tanpa keping — penalti: timmu main kurang orang. Penalti kecil 2:00 di papan skor, besar (benturan keras dari belakang saat cepat) 5:00; waktunya berjalan lebih cepat, sesuai panjang laga. Gol saat power play mengakhiri penalti kecil.',
   rFace:'Face-off', rFaceD:'Setelah gol, offside, icing, penalti, atau saat kiper menutup keping. Keping jatuh tiba-tiba: pilih rekan dengan stik, lalu tekan A lebih cepat dari lawan setelah keping jatuh.',
   rLen:'Durasi laga', rLenD:'1, 3, atau 5 menit permainan. Seri tetap seri.',
   rGoal:'Gol', rGoalD:'Seluruh keping melewati garis gawang. Kiper bisa menepis atau menangkapnya.',

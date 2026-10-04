@@ -82,7 +82,10 @@ function create(env){
     /* блокировка: силовой против игрока без шайбы; чем дальше от него шайба, тем вернее свисток */
     intBase:0.35, intFar:0.07,
     /* тычок клюшкой (B): по игроку без шайбы — подножка (сзади) или удар клюшкой (спереди, сбоку) */
-    stickReach:1.5, stickBase:0.25, stickBack:0.45, stickSpeed:0.20, tripDot:0.3,
+    stickReach:1.5, stickBase:0.20, stickBack:0.35, stickSpeed:0.15, tripDot:0.3,
+    /* прессинг (удержание A): клюшка не достала до шайбы — по рукам, клюшке, корпусу владельца; чистый отбор — никогда */
+    holdReach:2.1, holdBase:0.01, holdBack:0.08,
+    maxChance:0.70,      /* потолок любого нарушения: за грязный приём иногда удаляют, а иногда судья не видит */
     /* тычок по владельцу сзади — мимо шайбы по ногам */
     hookDot:0.5, hookChance:0.08
   };
@@ -328,7 +331,8 @@ function create(env){
 
   /* ---------- удаления ---------- */
   function penLen(major){ var m=matchLen*PEN_CFG.minorFrac; return major ? m*PEN_CFG.majorMul : m; }
-  /* reason: 'trip' подножка, 'slash' удар клюшкой, 'back' атака сзади, 'board' толчок на борт, 'interference' блокировка */
+  /* reason: 'trip' подножка, 'slash' удар клюшкой, 'hold' задержка клюшкой, 'back' атака сзади, 'board' толчок на борт,
+     'interference' блокировка */
   function penalize(p,reason,major){
     var len=penLen(major);
     p.boxed=1; pen.push({team:p.team,t:len,full:len,p:p,major:!!major,reason:reason});
@@ -380,14 +384,14 @@ function create(env){
     var C=PEN_CFG, b=backness(p,o), sp=p.spd||0, sk=clamp((sp-PLAYER_CFG.checkMinSpeed)/4,0,1);
     if(b>C.backDot){
       var wall=nearBoards(o), k=(b-C.backDot)/(1-C.backDot);
-      if(R()<clamp((C.backBase+C.backSpeed*sk+(wall?C.backWall:0))*k,0,0.95)){
+      if(R()<clamp((C.backBase+C.backSpeed*sk+(wall?C.backWall:0))*k,0,C.maxChance)){
         var major = sp>=C.majorSpeed && b>=C.majorDot && R()<C.majorChance;
         return {reason:wall?'board':'back', major:major};
       }
     }
     if(!legal){
       var dP=Math.hypot(puck.x-o.x,puck.z-o.z);
-      if(R()<clamp(C.intBase+(dP-2)*C.intFar, C.intBase, 0.95)) return {reason:'interference', major:false};
+      if(R()<clamp(C.intBase+(dP-2)*C.intFar, C.intBase, C.maxChance)) return {reason:'interference', major:false};
     }
     return null;
   }
@@ -531,7 +535,7 @@ function create(env){
     if(o && o.team!==p.team){
       var d=Math.hypot(o.x-p.x,o.z-p.z);
       if(d<PLAYER_CFG.pokeRangeCarrier){
-        if(hookCall(p,o)){ penalize(p,'trip'); return; }
+        if(!auto && hookCall(p,o)){ penalize(p,'trip'); return; }
         puck.owner=null; puck.free=0.35;
         var a=Math.atan2(puck.z-p.z,puck.x-p.x);
         puck.vx=Math.cos(a)*7; puck.vz=Math.sin(a)*7;
@@ -541,8 +545,13 @@ function create(env){
     } else if(!puck.owner){
       if(Math.hypot(puck.x-p.x,puck.z-p.z)<PLAYER_CFG.pokeRangeLoose){ puck.owner=p; puck.vx=0;puck.vz=0; return; }
     }
+    /* прессинг: клюшка не достала до шайбы владельца — задержка клюшкой, чаще сзади */
+    if(auto){
+      if(o && o.team!==p.team && Math.hypot(o.x-p.x,o.z-p.z)<PEN_CFG.holdReach &&
+         R()<clamp(PEN_CFG.holdBase+PEN_CFG.holdBack*Math.max(0,backness(p,o)),0,PEN_CFG.maxChance)) penalize(p,'hold');
+      return;
+    }
     /* мимо шайбы — в соперника без шайбы рядом: подножка (сзади) или удар клюшкой */
-    if(auto) return;
     var C=PEN_CFG, v=null, vd=C.stickReach;
     for(var i=0;i<players.length;i++){
       var q=players[i];
@@ -551,7 +560,7 @@ function create(env){
     }
     if(!v) return;
     var b=backness(p,v);
-    if(R()<clamp(C.stickBase+C.stickBack*Math.max(0,b)+C.stickSpeed*clamp((p.spd||0)/7,0,1),0,0.95)){
+    if(R()<clamp(C.stickBase+C.stickBack*Math.max(0,b)+C.stickSpeed*clamp((p.spd||0)/7,0,1),0,C.maxChance)){
       penalize(p, b>C.tripDot?'trip':'slash');
     }
   }
