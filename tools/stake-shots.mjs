@@ -62,7 +62,10 @@ try {
   const [H, G] = pages.map((g) => g.page);
   const stk = (p) => p.evaluate(() => ({ top: __hk.menuState().stack.slice(-1)[0], row: (document.querySelector('[data-adj="stake"]') || {}).textContent || null,
     go: (document.getElementById('go') || {}).textContent, dis: !!(document.getElementById('go') || {}).disabled, coins: __hk.coins().coins }));
-  await H.waitForFunction(() => __hk.menuState().stack.slice(-1)[0] === 'prep' && document.querySelector('[data-adj="stake"]'), null, { timeout: 15000 }).catch(() => {});
+  // the stake is on the second screen (match settings): both press Next on the team select
+  await H.waitForFunction(() => __hk.menuState().stack.slice(-1)[0] === 'prep', null, { timeout: 15000 }).catch(() => {});
+  for (const P of [H, G]) await P.evaluate(() => { var b = document.querySelector('#start .mscr.cur [data-act="next"]'); if (b) b.click(); });
+  await H.waitForFunction(() => __hk.menuState().stack.slice(-1)[0] === 'setup' && document.querySelector('[data-adj="stake"]'), null, { timeout: 15000 }).catch(() => {});
   await G.waitForFunction(() => document.querySelector('[data-adj="stake"]'), null, { timeout: 15000 }).catch(() => {});
   let h = await stk(H), gs = await stk(G);
   ok(h.row && gs.row && h.coins === 30, `the stake row on both match screens (signed in over the socket) ${JSON.stringify([h, gs])}`);
