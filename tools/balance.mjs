@@ -55,7 +55,7 @@ try {
     await page.waitForFunction('window.__hk && __hk.match().id', null, { timeout: 60000 });
     await page.evaluate(LOGGER);
     const samples = [];
-    const steps = Math.ceil((LEN + 40) / CHUNK);
+    const steps = Math.ceil((LEN * 1.6 + 40) / CHUNK);   // the clock stands during faceoffs (~40 s of a 3-minute match)
     for (let k = 0; k < steps; k++) {
       await page.evaluate(`__hk.step(${CHUNK * 1000})`);
       samples.push(await page.evaluate(SAMPLE));

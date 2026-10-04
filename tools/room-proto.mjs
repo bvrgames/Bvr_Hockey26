@@ -52,7 +52,7 @@ try {
     const n = P.snaps.length, span = n > 1 ? (P.snaps[n - 1].at - P.snaps[0].at) / 1000 : 0;
     ok(n > 20 && n / span > 24 && n / span < 36, `${who}: ${n} snapshots in ${span.toFixed(2)} s`);
     const last = P.snaps[n - 1].m;
-    ok(Array.isArray(last.d) && last.d.length === 20 + 12 * 6 && typeof last.k === 'number' && Array.isArray(last.v) && last.a === 0, `${who} snapshot shape ${JSON.stringify(last).slice(0, 200)}`);
+    ok(Array.isArray(last.d) && last.d.length === 20 + 12 * 6 + 9 && typeof last.k === 'number' && Array.isArray(last.v) && last.a === 0, `${who} snapshot shape ${JSON.stringify(last).slice(0, 200)}`);
   }
   // wait for play, then the guest holds the stick toward +x (world), the host stands still
   const idx = (P, t) => P.snaps[P.snaps.length - 1].m.d[7 + t];
@@ -87,10 +87,10 @@ try {
   ok(H.ev.length === G.ev.length || Math.abs(H.ev.length - G.ev.length) <= 1, `events host ${H.ev.length} guest ${G.ev.length}`);
   ok(G.ev.every((e, i) => i === 0 || e.seq > G.ev[i - 1].seq), 'event seq not increasing');
 
-  // a 15-second match must end with match:end for both
+  // a 15-second match must end with match:end for both (the clock stands during faceoffs: ~5 s each on top)
   H.send({ t: 'cfg', a: 1, b: 2, min: 0.25, id: 'fedcba9876543210fedcba98' });
   const tEnd = Date.now();
-  while (!(H.ev.some((e) => e.n === 'match:end') && G.ev.some((e) => e.n === 'match:end')) && Date.now() - tEnd < 25000) await wait(200);
+  while (!(H.ev.some((e) => e.n === 'match:end') && G.ev.some((e) => e.n === 'match:end')) && Date.now() - tEnd < 60000) await wait(200);
   ok(H.ev.some((e) => e.n === 'match:end') && G.ev.some((e) => e.n === 'match:end'), 'no match:end after the 15 s match');
   const lastD = G.snaps[G.snaps.length - 1].m.d;
   ok(lastD[6] === 4 && lastD[5] === 0, `final snapshot state ${lastD[6]} clock ${lastD[5]}`);

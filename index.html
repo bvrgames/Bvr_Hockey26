@@ -116,6 +116,13 @@
   #chip{padding:5px 12px;border-radius:7px;background:rgba(210,140,30,.92);color:#1d1305;
     font-size:11px;font-weight:800;letter-spacing:.10em;text-transform:uppercase;
     opacity:0;transition:opacity .18s;white-space:nowrap}
+  /* вбрасывание: своя доля нажатий слева (синяя), соперника — справа (красная) */
+  #fobar{display:flex;flex-direction:column;align-items:center;gap:4px;opacity:0;transition:opacity .15s}
+  #fobar span{font-size:11px;font-weight:800;letter-spacing:.06em;color:#fff;text-shadow:0 2px 8px rgba(0,0,0,.8);
+    white-space:nowrap;font-variant-numeric:tabular-nums}
+  #fobar div{width:min(220px,46vw);height:9px;border-radius:5px;background:#e04848;overflow:hidden;
+    border:1px solid rgba(255,255,255,.35);transition:opacity .15s}
+  #fobar i{display:block;height:100%;width:50%;background:#46a8ff;transition:width .08s linear}
   body.portrait #legend{display:none}
   body.portrait #hud{left:8px;top:8px}
   body.portrait #hud>div{padding:0 7px;font-size:11px}
@@ -414,7 +421,7 @@
   /* урок: экран поверх матча */
   #lhud{display:none}
   body.training #lhud{display:block}
-  body.training #hud,body.training #hud2,body.training #legend,body.training #tacbadge,body.training #chip{display:none!important}
+  body.training #hud,body.training #hud2,body.training #legend,body.training #tacbadge,body.training #chip,body.training #fobar{display:none!important}
   #lhud>div{position:absolute;z-index:7;pointer-events:none;background:rgba(6,14,28,.82);border-radius:12px;color:#f2f7ff}
   #lhud .lh-task{top:var(--mt);left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:3px;
     padding:6px 16px 7px;max-width:56vw;text-align:center;border:1px solid rgba(143,216,255,.25)}
@@ -545,6 +552,7 @@
   <div id="hud2"><span id="ppl"></span></div>
   <div id="topbar">
     <div id="chip"></div>
+    <div id="fobar"><span></span><div><i></i></div></div>
   </div>
   <div id="msgbox"><div id="msg"></div><div id="sub"></div></div>
   <div id="toast"></div>
@@ -634,7 +642,7 @@
   </div>
 </div>
 
-<script src="shared/sim.js?v=7cb65cbf64"></script>
+<script src="shared/sim.js?v=6d5ff32c37"></script>
 <script>
 (function(){
 'use strict';
@@ -1287,7 +1295,9 @@ ru:{
   red:'КРАСНЫЕ', blue:'СИНИЕ', yellow:'ЖЁЛТЫЕ', green:'ЗЕЛЁНЫЕ',
   abRed:'КРС', abBlue:'СИН', abYellow:'ЖЛТ', abGreen:'ЗЕЛ',
   match:'МАТЧ', goal:'ГОЛ!', ourGoal:'наша шайба', theirGoal:'пропустили',
-  save:'СЕЙВ', hit:'СИЛОВОЙ!', penalty:'УДАЛЕНИЕ · 2 МИН', penaltySub:'атака игрока без шайбы',
+  save:'СЕЙВ', hit:'СИЛОВОЙ!', penalty:'УДАЛЕНИЕ', penaltySub:'атака игрока без шайбы',
+  pr_trip:'ПОДНОЖКА', pr_slash:'УДАР КЛЮШКОЙ', pr_back:'АТАКА СЗАДИ', pr_board:'ТОЛЧОК НА БОРТ', pr_interference:'БЛОКИРОВКА',
+  cover:'ВРАТАРЬ НАКРЫЛ ШАЙБУ', foHint:'Стик — кому отбросить · A жми, когда шайба упадёт', foWon:'ВБРАСЫВАНИЕ ВЫИГРАНО', foLost:'ВБРАСЫВАНИЕ ПРОИГРАНО',
   offside:'ОФСАЙД', icing:'ПРОБРОС', delayed:'ОТЛОЖЕННЫЙ ОФСАЙД',
   delayedYou:'ОТЛОЖЕННЫЙ ОФСАЙД · ВЫЙДИ ИЗ ЗОНЫ', icingWarn:'ВОЗМОЖЕН ПРОБРОС',
   powerplay:'БОЛЬШИНСТВО', shorthand:'МЕНЬШИНСТВО',
@@ -1322,8 +1332,8 @@ ru:{
   mTacK:'тактика', mDpad:'крестовина',
   rOff:'Офсайд', rOffD:'Нельзя въезжать в зону соперника раньше шайбы. Загорелось «офсайд» — выйди за синюю линию, и игра пойдёт дальше. Тронешь шайбу в зоне — свисток и вбрасывание.',
   rIce:'Проброс', rIceD:'Бросил шайбу из своей половины за линию ворот соперника, и её никто не тронул — вбрасывание у твоих ворот.',
-  rPen:'Удаления', rPenD:'Силовой против игрока без шайбы — удаление на 2 минуты: команда играет вчетвером.',
-  rFace:'Вбрасывание', rFaceD:'После гола, офсайда, проброса и остановки. Кто первым коснётся шайбы — тот владеет.',
+  rPen:'Удаления', rPenD:'Подножка, удар клюшкой, атака сзади или на борт, силовой против игрока без шайбы — удаление: команда играет в меньшинстве. Малый штраф — 2:00 на табло, большой (очень сильный удар сзади на скорости) — 5:00; время идёт быстрее, по длине матча. Гол в большинстве снимает малый штраф.',
+  rFace:'Вбрасывание', rFaceD:'После гола, офсайда, проброса, удаления и когда вратарь накрыл шайбу. Шайба падает неожиданно: стиком выбери, кому отбросить, после падения жми A чаще соперника.',
   rLen:'Длина матча', rLenD:'1, 3 или 5 минут чистого времени. Ничья — значит ничья.',
   rGoal:'Гол', rGoalD:'Шайба целиком пересекла линию ворот. Вратарь может отбить её или накрыть.',
   mDevD:'Ещё игры — @bvr_games_bot',
@@ -1339,7 +1349,7 @@ ru:{
   tToList:'К урокам', tNoMedal:'без медали', tBronze:'Бронза', tSilver:'Серебро', tGold:'Золото', tMedalsP:'Медали', tTries:'попытка',
   tSec:'с', tMin:'мин', tOf:'из', tTriesN:'попыток', tGate:'ворота!', tGateMiss:'мимо ворот', tNice:'есть!', tMiss:'мимо', tNeedLead:'нужен пас в разрез — Y',
   tNeedLob:'нужен навес — X', tHit:'в мишень!', tWeak:'слабо — держи B дольше', tSave:'сейв!', tConceded:'гол в ворота', tGoal:'гол!',
-  tSave2:'вратарь отбил', tLost:'потеря', tPen:'удаление: силовой против игрока без шайбы',
+  tSave2:'вратарь отбил', tLost:'потеря', tPen:'удаление: нарушение правил',
   tq0:'Соперник давит — включи Оборону', tq1:'Нужен гол — включи Атаку', tq2:'Игра ровная — включи Стандарт',
   tDoneW:'Выполнено',
   wTitle:'Пройди тренировку за 2 минуты', wSub:'Катание, пас и бросок — и сразу в матч. Можно пропустить и вернуться позже в «Тренировку».',
@@ -1379,7 +1389,9 @@ en:{
   red:'RED', blue:'BLUE', yellow:'YELLOW', green:'GREEN',
   abRed:'RED', abBlue:'BLU', abYellow:'YEL', abGreen:'GRN',
   match:'MATCH', goal:'GOAL!', ourGoal:'we scored', theirGoal:'conceded',
-  save:'SAVE', hit:'BIG HIT!', penalty:'PENALTY · 2 MIN', penaltySub:'hit on a player without the puck',
+  save:'SAVE', hit:'BIG HIT!', penalty:'PENALTY', penaltySub:'hit on a player without the puck',
+  pr_trip:'TRIPPING', pr_slash:'SLASHING', pr_back:'CHECKING FROM BEHIND', pr_board:'BOARDING', pr_interference:'INTERFERENCE',
+  cover:'GOALIE COVERS THE PUCK', foHint:'Stick — where to send it · mash A once the puck drops', foWon:'FACEOFF WON', foLost:'FACEOFF LOST',
   offside:'OFFSIDE', icing:'ICING', delayed:'DELAYED OFFSIDE',
   delayedYou:'DELAYED OFFSIDE · CLEAR THE ZONE', icingWarn:'POSSIBLE ICING',
   powerplay:'POWER PLAY', shorthand:'SHORT-HANDED',
@@ -1414,8 +1426,8 @@ en:{
   mTacK:'tactics', mDpad:'D-pad',
   rOff:'Offside', rOffD:'Do not enter the attacking zone ahead of the puck. When OFFSIDE lights up, skate back over the blue line and play goes on. Touch the puck in the zone — whistle and a faceoff.',
   rIce:'Icing', rIceD:'Shot from your own half over the goal line and nobody touched it — faceoff at your end.',
-  rPen:'Penalties', rPenD:'A check on a player without the puck — 2 minutes in the box, your team plays with four.',
-  rFace:'Faceoff', rFaceD:'After a goal, offside, icing or a stoppage. The first to touch the puck owns it.',
+  rPen:'Penalties', rPenD:'Tripping, slashing, a hit from behind or into the boards, a check on a player without the puck — a penalty: your team plays a man short. A minor shows 2:00, a major (a very hard hit from behind at speed) 5:00; the clock runs faster, scaled to the match length. A power-play goal ends a minor.',
+  rFace:'Faceoff', rFaceD:'After a goal, offside, icing, a penalty or when the goalie covers the puck. The drop comes without warning: pick a teammate with the stick, then mash A faster than the opponent once the puck is down.',
   rLen:'Match length', rLenD:'1, 3 or 5 minutes of play. A draw is a draw.',
   rGoal:'Goal', rGoalD:'The whole puck crossed the goal line. The goalie can save it or cover it.',
   mDevD:'More games — @bvr_games_bot',
@@ -1431,7 +1443,7 @@ en:{
   tToList:'To lessons', tNoMedal:'no medal', tBronze:'Bronze', tSilver:'Silver', tGold:'Gold', tMedalsP:'Medals', tTries:'try',
   tSec:'s', tMin:'min', tOf:'of', tTriesN:'tries', tGate:'gate!', tGateMiss:'missed the gate', tNice:'nice!', tMiss:'miss', tNeedLead:'use a through pass — Y',
   tNeedLob:'use a lob — X', tHit:'target hit!', tWeak:'too soft — hold B longer', tSave:'save!', tConceded:'goal against', tGoal:'goal!',
-  tSave2:'saved', tLost:'turnover', tPen:'penalty: a hit on a player without the puck',
+  tSave2:'saved', tLost:'turnover', tPen:'penalty: a rule broken',
   tq0:'They press — switch to Defence', tq1:'We need a goal — switch to Attack', tq2:'Even game — switch to Balanced',
   tDoneW:'Complete',
   wTitle:'Take the 2-minute training', wSub:'Skating, passing and shooting — then straight into a match. You can skip it and come back in Training.',
@@ -1472,7 +1484,9 @@ id:{
   red:'MERAH', blue:'BIRU', yellow:'KUNING', green:'HIJAU',
   abRed:'MRH', abBlue:'BIR', abYellow:'KNG', abGreen:'HJU',
   match:'LAGA', goal:'GOL!', ourGoal:'kita mencetak gol', theirGoal:'kebobolan',
-  save:'PENYELAMATAN', hit:'BENTURAN KERAS!', penalty:'PENALTI · 2 MNT',
+  save:'PENYELAMATAN', hit:'BENTURAN KERAS!', penalty:'PENALTI',
+  pr_trip:'MENJEGAL', pr_slash:'MEMUKUL DENGAN STIK', pr_back:'MENYERANG DARI BELAKANG', pr_board:'MENDORONG KE PAPAN', pr_interference:'MENGHALANGI',
+  cover:'KIPER MENUTUP KEPING', foHint:'Stik — arah keping · tekan A cepat saat keping jatuh', foWon:'FACE-OFF MENANG', foLost:'FACE-OFF KALAH',
   penaltySub:'menabrak pemain tanpa keping',
   offside:'OFFSIDE', icing:'ICING', delayed:'OFFSIDE TERTUNDA',
   delayedYou:'OFFSIDE TERTUNDA · KELUAR DARI ZONA', icingWarn:'KEMUNGKINAN ICING',
@@ -1508,8 +1522,8 @@ id:{
   mTacK:'taktik', mDpad:'D-pad',
   rOff:'Offside', rOffD:'Jangan masuk zona lawan sebelum keping. Saat OFFSIDE menyala, keluar lewat garis biru dan permainan lanjut. Sentuh keping di zona — peluit dan face-off.',
   rIce:'Icing', rIceD:'Keping dari separuh lapanganmu melewati garis gawang lawan tanpa disentuh — face-off di dekat gawangmu.',
-  rPen:'Penalti', rPenD:'Benturan ke pemain tanpa keping — 2 menit keluar, timmu main berempat.',
-  rFace:'Face-off', rFaceD:'Setelah gol, offside, icing, atau penghentian. Yang pertama menyentuh keping menguasainya.',
+  rPen:'Penalti', rPenD:'Menjegal, memukul dengan stik, menyerang dari belakang atau ke papan, benturan ke pemain tanpa keping — penalti: timmu main kurang orang. Penalti kecil 2:00 di papan skor, besar (benturan keras dari belakang saat cepat) 5:00; waktunya berjalan lebih cepat, sesuai panjang laga. Gol saat power play mengakhiri penalti kecil.',
+  rFace:'Face-off', rFaceD:'Setelah gol, offside, icing, penalti, atau saat kiper menutup keping. Keping jatuh tiba-tiba: pilih rekan dengan stik, lalu tekan A lebih cepat dari lawan setelah keping jatuh.',
   rLen:'Durasi laga', rLenD:'1, 3, atau 5 menit permainan. Seri tetap seri.',
   rGoal:'Gol', rGoalD:'Seluruh keping melewati garis gawang. Kiper bisa menepis atau menangkapnya.',
   mDevD:'Game lainnya — @bvr_games_bot',
@@ -1525,7 +1539,7 @@ id:{
   tToList:'Ke daftar', tNoMedal:'tanpa medali', tBronze:'Perunggu', tSilver:'Perak', tGold:'Emas', tMedalsP:'Medali', tTries:'percobaan',
   tSec:'d', tMin:'mnt', tOf:'dari', tTriesN:'percobaan', tGate:'gerbang!', tGateMiss:'lewat gerbang', tNice:'bagus!', tMiss:'meleset', tNeedLead:'pakai umpan terobosan — Y',
   tNeedLob:'pakai umpan lambung — X', tHit:'kena sasaran!', tWeak:'terlalu pelan — tahan B lebih lama', tSave:'selamat!', tConceded:'kebobolan', tGoal:'gol!',
-  tSave2:'ditepis kiper', tLost:'kehilangan keping', tPen:'penalti: benturan ke pemain tanpa keping',
+  tSave2:'ditepis kiper', tLost:'kehilangan keping', tPen:'penalti: melanggar aturan',
   tq0:'Lawan menekan — pilih Bertahan', tq1:'Butuh gol — pilih Menyerang', tq2:'Laga seimbang — pilih Seimbang',
   tDoneW:'Selesai',
   wTitle:'Ikuti latihan 2 menit', wSub:'Meluncur, umpan, dan tembak — lalu langsung main. Bisa dilewati dan dibuka lagi di Latihan.',
@@ -4437,12 +4451,18 @@ function render(){
            {tint:rc,tintK:1,alpha:0.55,mat:'flat',boost:1.0},0.98);
     var hsA=HS[HUMAN];
     var aim=Math.atan2(hsA.aimZ||0, hsA.aimX||1);
+    /* вбрасывание: стрелка от центра к выбранному партнёру и указатель над ним */
+    var FI=state==='face'?faceInfo():null;
+    if(FI && FI.ph && FI.tgt && !FI.tgt.boxed){
+      aim=Math.atan2(FI.tgt.z-controlled.z, FI.tgt.x-controlled.x);
+      drawGeo(GEO.pointer, m4model(_mm, FI.tgt.x, 1.95+Math.sin(PTRT*5.2)*0.06, FI.tgt.z, cam.yaw, 0.8, 0.8), {tint:[0.42,0.88,0.55], tintK:1, alpha:0.95, mat:'flat', boost:1.5});
+    }
     var ax=controlled.x+Math.cos(aim)*0.95, az=controlled.z+Math.sin(aim)*0.95;
     var arot=-aim+Math.PI/2;
     drawGeo(GEO.arrowBack, m4model(_mm, ax,0.020,az, arot,1,1),
             {alpha:hasP?0.55:0.26, mat:'flat', boost:0.2});
     drawGeo(GEO.arrow,     m4model(_mm, ax,0.024,az, arot,1,1),
-            {tint:rc, tintK:1, alpha:hasP?0.95:0.42, mat:'flat', boost:1.4});
+            {tint:rc, tintK:1, alpha:(hasP||(FI&&FI.ph))?0.95:0.42, mat:'flat', boost:1.4});
     /* указатель над головой: слегка покачивается, чтобы цеплять взгляд */
     PTRT+=RDT;
     var py=1.86+Math.sin(PTRT*3.4)*0.045;
@@ -5418,6 +5438,7 @@ function netSnap(){
     var p=players[i];
     d.push(r2(p.x),r2(p.z),r2(p.yaw),(p.down>0?1:0)+(p.boxed?2:0),r1(p.stride),r1(p.spd||0));
   }
+  d.push.apply(d, SIM.netTail());      /* удаления (табло) и вбрасывание — как у сервера (server/room-sim.js) */
   var c0=HS[0].ctrl, c1=HS[1].ctrl;
   var o={t:'s',d:d,k:netNow(), a:NETV.inQ,
          v:[r2(c0?c0.vx:0),r2(c0?c0.vz:0),r2(c1?c1.vx:0),r2(c1?c1.vz:0)]};
@@ -5427,6 +5448,47 @@ function netSnap(){
 }
 function r2(v){ return Math.round(v*100)/100; }
 function r1(v){ return Math.round(v*10)/10; }
+
+/* --- удаления и вбрасывание у гостя: хвост снимка (shared/sim.js netTail) ---
+   NETF — что решил тот, кто считает матч: хоккейные секунды удалений, фаза вбрасывания, его номер, нажатия, адресаты,
+   победитель. GFO — своё окно нажатий: телефон сам считает A после падения шайбы (как он её видит: снимок + задержка
+   отрисовки D) и шлёт число в каждом пакете ввода; победителя выбирает сервер / хост. */
+var NETF={pen:[0,0], ph:0, id:0, taps:[0,0], tgt:[-1,-1], win:-1};
+var GFO={id:0, n:0, t0:0, done:false, lock:0};
+function netFaceRecv(d){
+  var o=20+players.length*6;
+  if(d.length<o+9){ NETF.pen[0]=NETF.pen[1]=0; NETF.ph=0; return; }   /* старый сервер — без хвоста */
+  NETF.pen[0]=d[o]; NETF.pen[1]=d[o+1]; NETF.ph=d[o+2]; NETF.id=d[o+3];
+  NETF.taps[0]=d[o+4]; NETF.taps[1]=d[o+5]; NETF.tgt[0]=d[o+6]; NETF.tgt[1]=d[o+7]; NETF.win=d[o+8];
+  if(NETF.ph===3 && NETF.id!==GFO.id){
+    var W=SIM.FACE_CFG.window*1000;
+    GFO.id=NETF.id; GFO.n=0; GFO.done=false; GFO.t0=performance.now()+NETV.D*1000; GFO.lock=GFO.t0+W+600;
+  }
+}
+/* каждый кадр гостя: нажатия A в своём окне (до падения шайбы — не считаются) */
+function netFaceTick(){
+  if(!GFO.id) return;
+  var now=performance.now(), end=GFO.t0+SIM.FACE_CFG.window*1000;
+  if(!GFO.done){
+    if(EDGE.A && now>=GFO.t0 && now<end && GFO.n<SIM.FACE_CFG.tapMax) GFO.n++;
+    if(now>=end) GFO.done=true;
+  }
+  /* сервер решил — номер больше не шлём; число остаётся для шкалы */
+  if(GFO.done && state!=='face' && now>GFO.lock) GFO.id=0;
+}
+/* нажатия A во время вбрасывания и сразу после окна — не пас и не смена игрока в начавшейся игре */
+function netFaceHoldA(){ return state==='face' || performance.now()<GFO.lock; }
+function penShow(t){ return netFollow() ? (NETF.pen[t]||0) : SIM.penaltyShow(t); }
+/* вбрасывание для интерфейса: фаза, свои и чужие нажатия, выбранный партнёр */
+function faceInfo(){
+  var me=HUMAN, op=1-HUMAN;
+  if(netFollow()){
+    var ph=state==='face'?NETF.ph:0;
+    return {ph:ph, my:(GFO.id===NETF.id||!GFO.id)?GFO.n:0, op:NETF.taps[op]||0, tgt:players[NETF.tgt[me]]||null};
+  }
+  var F=SIM.FO;
+  return {ph:state==='face'?F.ph:0, my:F.taps[me], op:F.taps[op], tgt:F.tgt[me]||null};
+}
 
 /* --- гость: приём снимка --- */
 function netRecvSnap(m){
@@ -5454,6 +5516,7 @@ function netRecvSnap(m){
   HS[1].aimX=d[16];
   HS[1].aimZ=d[17];
   puck.owner=players[d[18]]||null;
+  netFaceRecv(d);
   var tf=d[19]||0;
   HS[0].press.on=!!(tf&1);
   HS[1].press.on=!!(tf&2);
@@ -5819,7 +5882,9 @@ function netSendInput(){
   /* серверу — стик уже в мировых координатах (у него нет камеры); хосту — как раньше, экранный */
   var sm=IN.mx, sz=IN.mz;
   if(NET.srv){ var wv=toWorld(IN.mx,IN.mz,[0,0]); sm=wv[0]; sz=wv[1]; }
-  netSend({t:'i',m:[r2(sm),r2(sz)],b:b,tc:TACTIC[HUMAN],q:q,c:NETV.cnt.slice()});
+  var io={t:'i',m:[r2(sm),r2(sz)],b:b,tc:TACTIC[HUMAN],q:q,c:NETV.cnt.slice()};
+  if(GFO.id) io.f=[GFO.id, GFO.n, GFO.done?1:0];    /* вбрасывание: свои нажатия A в своём окне */
+  netSend(io);
   NETV.sentT[q]=performance.now();
   NETDBG.iSent++; /* TEMP debug — see netSnap() comment */
   /* client-side prediction: история своего ввода для доигрывания после
@@ -5849,6 +5914,7 @@ function netRecvInput(m){
   }
   _npv.A=NIN._A; _npv.B=NIN._B; _npv.X=NIN._X; _npv.Y=NIN._Y; _npv.LB=NIN._LB;
   if(m.tc!==undefined) TACTIC[1-HUMAN]=m.tc|0;
+  if(m.f && m.f.length) NETV.fo={id:m.f[0]|0, n:Math.max(0,m.f[1]|0), done:!!m.f[2]};
 }
 
 function updateFxOnly(dt){
@@ -5863,7 +5929,7 @@ function updateFxOnly(dt){
     if(!p.goalie && !p.boxed && Math.random()<0.10) addSpray(p);
   }
   fxUpdate(dt);
-  if(clock>0) clock-=dt;
+  if(clock>0 && state==='play') clock-=dt;    /* на вбрасывании часы стоят (как у того, кто считает матч) */
 }
 
 /* ---------- цикл ---------- */
@@ -5941,6 +6007,26 @@ function hudEls(){
 }
 function hudText(el, v){ if(el && el._ht!==v){ el._ht=v; el.textContent=v; } }
 function hudStyle(el, k, v){ if(!el) return; var c=el._hs||(el._hs={}); if(c[k]!==v){ c[k]=v; el.style[k]=v; } }
+/* вбрасывание: подсказка, пока судья держит шайбу; шкала-перетягивание после падения; итог — 0.9 с */
+var FOH={t:-1e9, w:-1, my:0, op:0};
+EV.on('faceoff', function(e){
+  if(!e.taps) return;
+  FOH.t=performance.now(); FOH.w=e.w; FOH.my=e.taps[HUMAN]; FOH.op=e.taps[1-HUMAN];
+  if(netFollow() && GFO.n>FOH.my) FOH.my=GFO.n;
+});
+function faceHud(){
+  var el=document.getElementById('fobar'); if(!el) return;
+  var F=faceInfo(), res=performance.now()-FOH.t<900 && state==='play';
+  if(TRAIN.on || (!F.ph && !res)){ hudStyle(el,'opacity','0'); return; }
+  var my=F.my, op=F.op, txt;
+  if(res){ my=FOH.my; op=FOH.op; txt=T(FOH.w===HUMAN?'foWon':'foLost'); }
+  else txt=F.ph<3 ? T('foHint') : my+' : '+op;
+  hudText(el.firstChild, txt);
+  var k=(my+op)>0 ? my/(my+op) : 0.5;
+  hudStyle(el.lastChild.firstChild, 'width', Math.round(k*100)+'%');
+  hudStyle(el.lastChild, 'opacity', (F.ph===3||res)?'1':'0.35');
+  hudStyle(el,'opacity','1');
+}
 function frameStepInner(dt){
   if(state!=='menu' && state!=='over' && !PAUSED) MATCH.played+=dt;
   /* вход/выход из меню — кнопка «на весь экран»; геймпад — его подсказки */
@@ -6012,7 +6098,8 @@ function frameStepInner(dt){
     updateFxOnly(dt);
     pfAdd('sim',_ts);
     /* счётчики нажатий гостя (EDGE — фронты этого кадра, включая тап по экрану) */
-    for(var bk=0;bk<BTN_KEYS.length;bk++) if(EDGE[BTN_KEYS[bk]]) NETV.cnt[bk]++;
+    netFaceTick();
+    for(var bk=0;bk<BTN_KEYS.length;bk++) if(EDGE[BTN_KEYS[bk]] && !(bk===0 && netFaceHoldA())) NETV.cnt[bk]++;
     NET.sendT-=dt;
     _tn=pfNow();
     if(NET.sendT<=0){ NET.sendT+=1/NETCFG.inputHz; if(NET.sendT<0) NET.sendT=0; netSendInput(); }
@@ -6054,9 +6141,10 @@ function frameStepInner(dt){
   hudText(he.clk, mm+':'+(ss<10?'0':'')+ss);
 
   /* большинство / меньшинство */
-  var myPen=penaltyLeft(HUMAN), opPen=penaltyLeft(HUMAN===0?1:0);
+  /* таймер удаления — в хоккейных минутах (2:00 / 5:00 вниз), реально идёт быстрее: shared/sim.js PEN_CFG */
+  var myPen=penShow(HUMAN), opPen=penShow(HUMAN===0?1:0);
   if(myPen>0||opPen>0){
-    var tt=Math.max(myPen,opPen), mm2=Math.floor(tt/60), ss2=Math.floor(tt%60);
+    var tt=Math.ceil(Math.max(myPen,opPen)), mm2=Math.floor(tt/60), ss2=Math.floor(tt%60);
     hudText(he.ppl, mm2+':'+(ss2<10?'0':'')+ss2+'  '+(opPen>myPen?T('powerplay'):T('shorthand')));
     hudStyle(he.h2, 'opacity', '1');
   } else hudStyle(he.h2, 'opacity', '0');
@@ -6072,6 +6160,7 @@ function frameStepInner(dt){
   else if(icing.armed && state==='play'){ hudText(chip, T('icingWarn'));
     hudStyle(chip, 'background', 'rgba(210,140,30,0.92)'); hudStyle(chip, 'color', '#1d1305'); hudStyle(chip, 'opacity', '1'); }
   else hudStyle(chip, 'opacity', '0');
+  faceHud();
 
   /* скорость активного игрока */
   /* км/ч меняется почти каждый кадр — 8 раз в секунду глазу достаточно, а табло не пересчитывается в каждом кадре */
@@ -7423,14 +7512,17 @@ EV.on('hit',     function(e){
   SFX.hit();
   if(e.hard) buzz(45,'hard'); else if(e.vt===HUMAN) buzz(45,'hard');
   fxHit(e);
-  if(!e.clean) flash(T('penalty'),T('penaltySub'),1.6);
-  else if(e.hard) flash(T('hit'),'',0.8);
+  if(e.clean && e.hard) flash(T('hit'),'',0.8);     /* нарушение показывает плашка удаления (penalty) */
+});
+/* «УДАЛЕНИЕ: причина — 2:00» (большой — 5:00) */
+EV.on('penalty', function(e){
+  flash(T('penalty')+': '+T('pr_'+e.reason)+' — '+(e.major?'5:00':'2:00'), '', 2.2);
 });
 EV.on('post',    function(){ SFX.post(); buzz(30,'hard'); fxKick('m',7,12); fxPost(); });
 EV.on('save',    function(e){ SFX.save(); if(e.kind==='line') flash(T('save'),'',0.7); });
 EV.on('goal',    function(e){ SFX.whistle(); SFX.horn(); buzz([60,50,120],'goal'); fxGoal(e.t);
                               flash(T('goal'), e.t===HUMAN?T('ourGoal'):T('theirGoal'), 1.4); });
-EV.on('stoppage',function(e){ SFX.whistle(); buzz(25); flash(T(e.reason),'',1.3); });
+EV.on('stoppage',function(e){ SFX.whistle(); buzz(25); if(e.reason!=='penalty') flash(T(e.reason),'',1.3); });
 EV.on('match:start', function(){ SFX.whistle(); fxReset(); });
 EV.on('match:end',   function(e){
   /* у хоста экран результата показывает симуляция, у гостя — пришедшее событие */
@@ -7511,6 +7603,7 @@ function matchStart(id, clubA, clubB){
   }
   MATCH.id=id; MATCH.mode=NET.on?'online':'ai'; MATCH.role=NET.on?NET.role:'solo'; MATCH.net=NET.on?(NET.srv?'server':'host'):null;
   MATCH.team=HUMAN; MATCH.clubs=[clubA,clubB]; MATCH.len=Math.round(clock);
+  SIM.matchLen=clock;      /* от длины матча — длина удалений (shared/sim.js PEN_CFG) */
   MATCH.played=0; MATCH.startedAt=Date.now(); MATCH.summary=null; MATCH.sent=false; MATCH.reward=null;
   MATCH.stake=(NET.on && NET.srv && STK.live && STK.live.id===id) ? STK.live.n : 0;
   MATCH.difficulty = NET.on ? null : DIFF;   /* в сетевом матче соперник — человек */
@@ -7999,7 +8092,7 @@ if(TEST.autostart && !ONLINE){
   /* после загрузки моделей: иначе старт отложился бы, а длина матча ниже выставилась бы раньше него */
   playersReady(function(){
     goStart();
-    if(TEST.autoLen>0){ MATCH_MIN=TEST.autoLen/60; clock=TEST.autoLen; }
+    if(TEST.autoLen>0){ MATCH_MIN=TEST.autoLen/60; clock=TEST.autoLen; SIM.matchLen=clock; }
   });
 }
 

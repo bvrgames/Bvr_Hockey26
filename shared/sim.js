@@ -71,6 +71,36 @@ function create(env){
   var gkRush=[false,false];
   var offT=0;   /* время удержания отложенного офсайда (для мигания) */
   var icing={armed:false,team:-1};
+  /* ---------- удаления и вбрасывание: все настройки здесь ---------- */
+  var PEN_CFG={
+    minorFrac:1/6,       /* малый штраф = длина матча / 6: 1 мин → 10 с, 3 мин → 30 с, 5 мин → 50 с игрового времени */
+    majorMul:2.5,        /* большой = малый × 2.5 (25 / 75 / 125 с) */
+    showMinor:120, showMajor:300,   /* на табло — хоккейные 2:00 и 5:00, идут вниз с ускорением */
+    /* силовой сзади: направление удара и взгляд жертвы сходятся (cos > backDot); шанс растёт со скоростью и у борта */
+    backDot:0.5, backBase:0.15, backSpeed:0.25, backWall:0.15, wallDist:2.6,
+    majorSpeed:8.6, majorDot:0.8, majorChance:0.6,   /* очень сильный на скорости строго в спину — большой */
+    /* блокировка: силовой против игрока без шайбы; чем дальше от него шайба, тем вернее свисток */
+    intBase:0.35, intFar:0.07,
+    /* тычок клюшкой (B): по игроку без шайбы — подножка (сзади) или удар клюшкой (спереди, сбоку) */
+    stickReach:1.5, stickBase:0.25, stickBack:0.45, stickSpeed:0.20, tripDot:0.3,
+    /* тычок по владельцу сзади — мимо шайбы по ногам */
+    hookDot:0.5, hookChance:0.08
+  };
+  var FACE_CFG={
+    holdMin:1, holdMax:3,     /* шайба падает через случайное время после расстановки, с */
+    window:1.5,               /* окно нажатий A после падения, с */
+    grace:1.2,                /* сколько ждать счёт удалённого игрока после окна (сеть), с */
+    tapMax:30,                /* больше нажатий за окно не бывает (защита от подделки) */
+    botRate:{easy:5, normal:7, hard:9}, botSpread:0.15,   /* нажатий в секунду у бота по сложности, разброс ±15 % */
+    setGoal:1.0, setStop:1.4, /* расстановка после гола / после свистка, с (начало матча задаёт клиент: stateT) */
+    puckY:1.2,                /* высота шайбы в руке судьи, м */
+    coverPress:3.5,           /* вратарь накрывает шайбу, если соперник ближе, м */
+    lockA:0.5                 /* после вбрасывания A ещё столько не пас и не смена игрока: добивание кнопки, с */
+  };
+  var matchLen=5*60;          /* длина матча, с (задают клиент и комната вместе с clock) — от неё длина удалений */
+  /* вбрасывание: ph 0 нет, 1 расстановка, 2 судья держит шайбу, 3 шайба упала — окно нажатий */
+  var FO={ph:0, id:0, x:0, z:0, t:0, wait:0, taps:[0,0], acc:[0,0], rate:[0,0], done:[false,false],
+          tgt:[null,null], ctr:[null,null], win:-1, lockT:-1};
   function attackDir(t){ return t===0?1:-1; }
   function zoneOf(x,dir){ var v=x*dir; return v>BLUE_X?1:(v<-BLUE_X?-1:0); }
   function onIce(t){ return players.filter(function(p){return p.team===t&&!p.goalie&&!p.boxed;}); }
@@ -138,7 +168,7 @@ function create(env){
   function reset(faceoff){
     players.length=0; makeTeam(0); makeTeam(1);
     puck.x=0;puck.z=0;puck.y=0.05;puck.vx=0;puck.vz=0;puck.vy=0;puck.owner=null;puck.free=0;
-    HS[0]=mkHS(); HS[1]=mkHS();
+    HS[0]=mkHS(); HS[1]=mkHS(); FO.ph=0; FO.ctr=[null,null]; FO.tgt=[null,null];
     HS[0].ctrl = players.filter(function(p){return p.team===0&&!p.goalie;})[2];
     HS[1].ctrl = players.filter(function(p){return p.team===1&&!p.goalie;})[2];
   }
@@ -153,18 +183,37 @@ function create(env){
 
   /* ---------- правила ---------- */
   var FACE_OFFS=[[0,0],[20,7],[20,-7],[-20,7],[-20,-7],[4.5,7],[4.5,-7],[-4.5,7],[-4.5,-7]];
+  /* Расстановка как в NHL: центр на точке, крайние на краю круга, защитники за кругом (позиция — по роли, а не по
+     порядку в списке). Нет центра (удалён) — на точку встаёт крайний, нет и их — защитник. Смещения — по атаке команды. */
+  var FO_SPOT={c:[-1.0,0], w:[-1.2,4.9], d:[-6.6,3.4]};
+  function faceCenter(arr){
+    var pref=[1,0,2,3,4];
+    for(var i=0;i<pref.length;i++) for(var j=0;j<arr.length;j++) if(arr[j].role===pref[i]) return arr[j];
+    return arr[0]||null;
+  }
+  /* куда центр отбросит шайбу без стика: назад к ближайшему защитнику */
+  function faceDefault(t){
+    var arr=onIce(t), c=FO.ctr[t], best=null, bd=1e9, i, d;
+    for(i=0;i<arr.length;i++){ if(arr[i]===c||arr[i].role<3) continue; d=Math.hypot(arr[i].x-FO.x,arr[i].z-FO.z); if(d<bd){bd=d;best=arr[i];} }
+    if(!best) for(i=0;i<arr.length;i++){ if(arr[i]===c) continue; d=Math.hypot(arr[i].x-FO.x,arr[i].z-FO.z); if(d<bd){bd=d;best=arr[i];} }
+    return best;
+  }
   function placeFaceoff(dx,dz){
     puck.x=dx;puck.z=dz;puck.y=0.05;puck.vx=0;puck.vz=0;puck.vy=0;puck.owner=null;puck.free=0.35;
-    var offs=[[-1.1,0],[-3.4,-4.6],[-3.4,4.6],[-8.0,-3.2],[-8.0,3.2]];
     for(var t=0;t<2;t++){
-      var dir=attackDir(t), arr=onIce(t);
+      var dir=attackDir(t), arr=onIce(t), C=faceCenter(arr);
+      FO.ctr[t]=C;
       for(var i=0;i<arr.length;i++){
-        var o=offs[Math.min(i,offs.length-1)];
-        arr[i].x=clamp(dx+o[0]*dir,-RL+2,RL-2);
-        arr[i].z=clamp(dz+o[1],-RW+2,RW-2);
-        arr[i].vx=0; arr[i].vz=0; arr[i].down=0; arr[i].os=0;
-        arr[i].yaw=dir>0?0:Math.PI;
+        var p=arr[i], o, sz=(p.role===0||p.role===3)?-1:1;
+        o = p===C ? FO_SPOT.c : (p.role<3 ? FO_SPOT.w : FO_SPOT.d);
+        p.x=clamp(dx+o[0]*dir,-RL+2,RL-2);
+        p.z=clamp(dz+o[1]*sz,-RW+2,RW-2);
+        p.vx=0; p.vz=0; p.spd=0; p.down=0; p.os=0;
+        p.yaw=dir>0?0:Math.PI;
+        p._fx=p.x; p._fz=p.z;
       }
+      var g=goalieOf(t);
+      if(g){ g.x=g.dir*(GOAL_X-0.7); g.z=0; g.vx=0; g.vz=0; g.spd=0; g.yaw=g.dir>0?-Math.PI/2:Math.PI/2; }
     }
     lastTouch=null; icing.armed=false; offWarn=-1; offT=0;
     for(var zz=0;zz<players.length;zz++) players[zz].os=0;
@@ -174,34 +223,179 @@ function create(env){
        после вбрасывания в чужой зоне читался как «шайба только что вошла» —
        и на каждом атакующем вбрасывании зажигался отложенный офсайд. */
     prevZone=[zoneOf(dx,attackDir(0)), zoneOf(dx,attackDir(1))];
+    /* настоящее вбрасывание (не перестановка урока тренировки): управление — на центра, судья держит шайбу */
+    if(state==='face'){
+      FO.ph=1; FO.id=(FO.id+1)%1000000; FO.x=dx; FO.z=dz; FO.taps=[0,0]; FO.acc=[0,0]; FO.done=[false,false]; FO.win=-1;
+      for(var t2=0;t2<2;t2++){
+        var hs=HS[t2]; hs.charge=0; hs.pressT=0; hs.press.on=false; gkRush[t2]=false;
+        if(FO.ctr[t2]) hs.ctrl=FO.ctr[t2];
+        FO.tgt[t2]=faceDefault(t2);
+      }
+      puck.y=FACE_CFG.puckY;
+    }
   }
-  /* reason: 'offside' | 'icing' | 'penalty' — по нему подписчик выбирает надпись */
+  /* reason: 'offside' | 'icing' | 'penalty' | 'cover' — по нему подписчик выбирает надпись */
   function whistle(reason,dx,dz,team){
-    state='face'; stateT=1.4;
+    state='face'; stateT=FACE_CFG.setStop;
     emit('stoppage',{reason:reason, t:team===undefined?-1:team});
     placeFaceoff(dx,dz);
   }
-  function penalize(p,reason){
-    p.boxed=1; pen.push({team:p.team,t:120,p:p});
+
+  /* ---------- вбрасывание: судья держит шайбу, падение в случайный момент, кто чаще жмёт A ---------- */
+  function faceAim(t){
+    var C=FO.ctr[t]; if(!C || !CFG.hum[t]) return;
+    var inp=CFG.inp[t]; if(!inp) return;
+    var L=Math.hypot(inp.mx||0,inp.mz||0); if(L<0.35) return;     /* стик не трогал — остаётся прежний выбор */
+    var w=toWorld(inp.mx/L,inp.mz/L,[0,0]), arr=onIce(t), best=null, bs=-2;
+    for(var i=0;i<arr.length;i++){
+      var m=arr[i]; if(m===C) continue;
+      var dx=m.x-FO.x, dz=m.z-FO.z, D=Math.hypot(dx,dz)||1, k=(dx*w[0]+dz*w[1])/D;
+      if(k>bs){bs=k;best=m;}
+    }
+    if(best) FO.tgt[t]=best;
+  }
+  function faceTick(dt){
+    if(!FO.ph) placeFaceoff(puck.x,puck.z);          /* начало матча: state='face' без расстановки */
+    /* все стоят; нажатия во время вбрасывания в игру не переходят */
+    for(var i=0;i<players.length;i++){
+      var p=players[i]; if(p.boxed||p.goalie||p._fx===undefined) continue;
+      p.x=p._fx; p.z=p._fz; p.vx=0; p.vz=0; p.spd=0;
+    }
+    for(var t=0;t<2;t++){
+      var RM=CFG.rem[t], NE=CFG.edge[t];
+      if(RM){ if(NE){ NE.A=NE.B=NE.X=NE.Y=NE.LB=false; } RM.tapB=false; if(RM.pend) RM.pend.t=0; }
+    }
+    if(FO.ph===1){
+      puck.y=FACE_CFG.puckY; faceAim(0); faceAim(1);
+      stateT-=dt;
+      if(stateT<=0){ FO.ph=2; FO.t=rnd(FACE_CFG.holdMin,FACE_CFG.holdMax); }
+      return;
+    }
+    if(FO.ph===2){
+      puck.y=FACE_CFG.puckY; faceAim(0); faceAim(1);
+      FO.t-=dt;
+      if(FO.t<=0){
+        FO.ph=3; FO.t=FACE_CFG.window; FO.wait=FACE_CFG.window+FACE_CFG.grace; puck.vy=0;
+        for(var b=0;b<2;b++){
+          FO.taps[b]=0; FO.acc[b]=0; FO.done[b]=false;
+          if(!CFG.hum[b]){ var r0=FACE_CFG.botRate[CFG.lv[b]]||FACE_CFG.botRate.normal;
+            FO.rate[b]=r0*(1+FACE_CFG.botSpread*(2*R()-1)); }
+        }
+        emit('face:drop',{id:FO.id, x:r2(FO.x), z:r2(FO.z)});
+      }
+      return;
+    }
+    /* ph 3: шайба падает, считаем нажатия после падения */
+    if(puck.y>0.05){ puck.vy-=13*dt; puck.y=Math.max(0.05, puck.y+puck.vy*dt); }
+    FO.t-=dt; FO.wait-=dt;
+    for(var q=0;q<2;q++){
+      if(FO.done[q]) continue;
+      var rm=CFG.rem[q];
+      if(!CFG.hum[q]){                                  /* бот (или ИИ за ушедшего игрока) */
+        if(FO.t>-dt){ FO.acc[q]+=FO.rate[q]*Math.min(dt, FO.t+dt); while(FO.acc[q]>=1){ FO.taps[q]++; FO.acc[q]-=1; } }
+        if(FO.t<=0) FO.done[q]=true;
+      } else if(rm){                                    /* удалённый: его телефон считает сам и шлёт число */
+        var f=rm.fo;
+        if(f && f.id===FO.id){ FO.taps[q]=Math.max(FO.taps[q], Math.min(FACE_CFG.tapMax, f.n|0)); if(f.done) FO.done[q]=true; }
+        if(FO.wait<=0) FO.done[q]=true;
+      } else {                                          /* живой на этом устройстве: фронты A этого шага */
+        var e=CFG.edge[q];
+        if(FO.t>-dt && e && e.A && FO.taps[q]<FACE_CFG.tapMax) FO.taps[q]++;
+        if(FO.t<=0) FO.done[q]=true;
+      }
+    }
+    if(!FO.done[0] || !FO.done[1]) return;
+    var w = FO.taps[0]>FO.taps[1] ? 0 : (FO.taps[1]>FO.taps[0] ? 1 : (R()<0.5?0:1));
+    var C=FO.ctr[w], m=FO.tgt[w];
+    if(m && m.boxed) m=null;
+    puck.x=FO.x; puck.z=FO.z; puck.y=0.05; puck.vy=0; puck.vx=0; puck.vz=0; puck.owner=null;
+    if(C){
+      var tx=m?m.x:C.x-attackDir(w)*6, tz=m?m.z:C.z, ddx=tx-puck.x, ddz=tz-puck.z, L=Math.hypot(ddx,ddz)||1;
+      var sp=clamp(6+L*0.8, 8, 13);
+      puck.vx=ddx/L*sp; puck.vz=ddz/L*sp; puck.free=0.12;
+      lastTouch=C;
+    }
+    FO.ph=0; FO.win=w; FO.lockT=SIMT+FACE_CFG.lockA;
+    state='play'; stateT=0;
+    emit('faceoff',{x:r2(FO.x), z:r2(FO.z), w:w, taps:FO.taps.slice(), to:pIdx(m)});
+  }
+  /* что нужно второму игроку по сети: хвост снимка (index.html netSnap, server/room-sim.js) */
+  function netTail(){
+    var ph=state==='face'?FO.ph:0;
+    return [penaltyShow(0)|0, penaltyShow(1)|0, ph, FO.id, FO.taps[0], FO.taps[1],
+            pIdx(FO.tgt[0]), pIdx(FO.tgt[1]), FO.win];
+  }
+
+  /* ---------- удаления ---------- */
+  function penLen(major){ var m=matchLen*PEN_CFG.minorFrac; return major ? m*PEN_CFG.majorMul : m; }
+  /* reason: 'trip' подножка, 'slash' удар клюшкой, 'back' атака сзади, 'board' толчок на борт, 'interference' блокировка */
+  function penalize(p,reason,major){
+    var len=penLen(major);
+    p.boxed=1; pen.push({team:p.team,t:len,full:len,p:p,major:!!major,reason:reason});
     if(HS[p.team].ctrl===p){ var alt=onIce(p.team)[0]; if(alt) HS[p.team].ctrl=alt; }
-    emit('penalty',{p:pIdx(p), t:p.team, reason:reason});
+    emit('penalty',{p:pIdx(p), t:p.team, reason:reason, major:major?1:0, len:Math.round(len)});
     var dir=attackDir(p.team);
     whistle('penalty', -dir*20, puck.z>0?7:-7, p.team);
   }
+  /* сколько осталось, с игрового времени (самое длинное удаление команды) */
   function penaltyLeft(t){
     var m=0;
     for(var i=0;i<pen.length;i++) if(pen[i].team===t&&pen[i].t>m) m=pen[i].t;
     return m;
   }
-  function clearOnePenalty(t){
-    for(var i=0;i<pen.length;i++) if(pen[i].team===t){
-      var pp=pen[i].p;
-      pp.boxed=0;
-      /* выпускаем со скамейки, а не из точки, где он стоял два месяца назад */
-      pp.x=-attackDir(t)*BLUE_X; pp.z=(RW-2)*(R()<0.5?1:-1);
-      pp.vx=0; pp.vz=0; pp.down=0; pp.os=0;
-      pen.splice(i,1); return;
+  /* то же в хоккейных секундах для табло: 2:00 / 5:00 идут вниз с ускорением */
+  function penaltyShow(t){
+    var m=0;
+    for(var i=0;i<pen.length;i++){
+      var q=pen[i]; if(q.team!==t) continue;
+      var v=q.t/(q.full||q.t||1)*(q.major?PEN_CFG.showMajor:PEN_CFG.showMinor);
+      if(v>m) m=v;
     }
+    return m;
+  }
+  function releasePen(i){
+    var q=pen[i], pp=q.p;
+    pp.boxed=0;
+    /* выпускаем со скамейки, а не из точки, где он стоял два месяца назад */
+    pp.x=-attackDir(q.team)*BLUE_X; pp.z=(RW-2)*(R()<0.5?1:-1);
+    pp.vx=0; pp.vz=0; pp.down=0; pp.os=0;
+    pen.splice(i,1);
+  }
+  /* гол в большинстве: досрочно кончается малый штраф (тот, где меньше осталось); большой сидят до конца */
+  function clearOnePenalty(t){
+    var k=-1;
+    for(var i=0;i<pen.length;i++) if(pen[i].team===t && !pen[i].major && (k<0 || pen[i].t<pen[k].t)) k=i;
+    if(k>=0) releasePen(k);
+  }
+  /* насколько удар пришёлся в спину: 1 — строго сзади, 0 — сбоку, −1 — в лицо */
+  function backness(p,o){
+    var dx=o.x-p.x, dz=o.z-p.z, L=Math.hypot(dx,dz)||1;
+    return (dx*Math.cos(o.yaw)+dz*Math.sin(o.yaw))/L;
+  }
+  function nearBoards(o){
+    return halfWidthAt(o.x)-Math.abs(o.z)<PEN_CFG.wallDist || RL-Math.abs(o.x)<PEN_CFG.wallDist;
+  }
+  /* силовой: нарушение или нет. legal — жертва с шайбой (или только что её касалась рядом) */
+  function hitCall(p,o,legal){
+    var C=PEN_CFG, b=backness(p,o), sp=p.spd||0, sk=clamp((sp-PLAYER_CFG.checkMinSpeed)/4,0,1);
+    if(b>C.backDot){
+      var wall=nearBoards(o), k=(b-C.backDot)/(1-C.backDot);
+      if(R()<clamp((C.backBase+C.backSpeed*sk+(wall?C.backWall:0))*k,0,0.95)){
+        var major = sp>=C.majorSpeed && b>=C.majorDot && R()<C.majorChance;
+        return {reason:wall?'board':'back', major:major};
+      }
+    }
+    if(!legal){
+      var dP=Math.hypot(puck.x-o.x,puck.z-o.z);
+      if(R()<clamp(C.intBase+(dP-2)*C.intFar, C.intBase, 0.95)) return {reason:'interference', major:false};
+    }
+    return null;
+  }
+  /* тычок по владельцу сзади: мимо шайбы — по ногам */
+  function hookCall(p,o){
+    var C=PEN_CFG, b=backness(p,o); if(b<=C.hookDot) return false;
+    var k=(b-C.hookDot)/(1-C.hookDot);
+    return R()<C.hookChance*k*(0.5+0.5*clamp((p.spd||0)/7,0,1));
   }
 
   /* ---------- действия ---------- */
@@ -329,20 +523,36 @@ function create(env){
     LASTSHOT={p:p, t:SIMT};
     emit('shot',{p:pIdx(p), t:p.team, x:r2(p.x), z:r2(p.z), power:r2(power), dist:r2(Math.hypot(gx-p.x,p.z))});
   }
-  function doPoke(p){
+  /* auto — тычок от прессинга (удержание A): по игроку без шайбы он не бьёт */
+  function doPoke(p,auto){
     fx.act(p,'poke_check',0.45);
     HS[p.team].pokeT=0.22; pokeT=0.22;
     var o=puck.owner;
     if(o && o.team!==p.team){
       var d=Math.hypot(o.x-p.x,o.z-p.z);
       if(d<PLAYER_CFG.pokeRangeCarrier){
+        if(hookCall(p,o)){ penalize(p,'trip'); return; }
         puck.owner=null; puck.free=0.35;
         var a=Math.atan2(puck.z-p.z,puck.x-p.x);
         puck.vx=Math.cos(a)*7; puck.vz=Math.sin(a)*7;
         emit('poke',{p:pIdx(p), t:p.team, from:pIdx(o), btn:1});
+        return;
       }
     } else if(!puck.owner){
-      if(Math.hypot(puck.x-p.x,puck.z-p.z)<PLAYER_CFG.pokeRangeLoose){ puck.owner=p; puck.vx=0;puck.vz=0; }
+      if(Math.hypot(puck.x-p.x,puck.z-p.z)<PLAYER_CFG.pokeRangeLoose){ puck.owner=p; puck.vx=0;puck.vz=0; return; }
+    }
+    /* мимо шайбы — в соперника без шайбы рядом: подножка (сзади) или удар клюшкой */
+    if(auto) return;
+    var C=PEN_CFG, v=null, vd=C.stickReach;
+    for(var i=0;i<players.length;i++){
+      var q=players[i];
+      if(q.team===p.team||q.goalie||q.boxed||q.down>0||q===puck.owner) continue;
+      var dq=Math.hypot(q.x-p.x,q.z-p.z); if(dq<vd){vd=dq;v=q;}
+    }
+    if(!v) return;
+    var b=backness(p,v);
+    if(R()<clamp(C.stickBase+C.stickBack*Math.max(0,b)+C.stickSpeed*clamp((p.spd||0)/7,0,1),0,0.95)){
+      penalize(p, b>C.tripDot?'trip':'slash');
     }
   }
   function doCheck(p){
@@ -357,14 +567,15 @@ function create(env){
         /* запоминаем до того, как отберём шайбу: ниже puck.owner уже null,
            и чистый силовой на владельце засчитывался как нарушение */
         var wasCarrier = (puck.owner===o);
+        /* нарушение решаем до отброса: шайба ещё у него */
+        var call = hitCall(p,o, wasCarrier || (lastTouch===o && Math.hypot(puck.x-o.x,puck.z-o.z)<2.2));
         o.down=1.5;
         var a=Math.atan2(o.z-p.z,o.x-p.x);
         o.vx=Math.cos(a)*9; o.vz=Math.sin(a)*9;
         if(puck.owner===o){ puck.owner=null; puck.free=0.4;
           puck.vx=Math.cos(a)*5.5; puck.vz=Math.sin(a)*5.5; }
-        var clean = wasCarrier || (lastTouch===o && Math.hypot(puck.x-o.x,puck.z-o.z)<2.2);
-        emit('hit',{p:pIdx(p), t:p.team, v:pIdx(o), vt:o.team, clean:clean, x:r2(o.x), z:r2(o.z), hard:1});
-        if(!clean) penalize(p,'interference');
+        emit('hit',{p:pIdx(p), t:p.team, v:pIdx(o), vt:o.team, clean:!call, x:r2(o.x), z:r2(o.z), hard:1});
+        if(call) penalize(p,call.reason,call.major);
         return;
       }
     }
@@ -710,6 +921,7 @@ function create(env){
     var hs=HS[team];
     if(!hs.ctrl || hs.ctrl.boxed){ var f0=onIce(team)[0]; if(f0) hs.ctrl=f0; }
     if(state!=='play'){ hs.press.on=false; hs.pressT=0; gkRush[team]=false; return; }
+    var lockA = SIMT<FO.lockT;     /* сразу после вбрасывания A ещё жмут по инерции */
 
     /* заряд броска */
     if(hs.charge>0 && !inp._B){
@@ -749,14 +961,15 @@ function create(env){
     if(hasPuck){
       /* счётчик пасов для тестов: считаем само нажатие, а не игрока —
          игра может переключить управление между тапом и пасом */
-      if(edge.A){ doPass(p,19,false,false); passN[team]++; }
+      if(edge.A && !lockA){ doPass(p,19,false,false); passN[team]++; }
       if(edge.Y){ doPass(p,21,false,true);  passN[team]++; }
       if(edge.X){ doPass(p,15,true,false);  passN[team]++; }
       if(inp._B) hs.charge=Math.min(0.85,hs.charge+dt);
     } else {
       gkRush[team]=!!inp._Y;
       if(true){
-        if(inp._A) hs.pressT+=dt;
+        if(lockA) hs.pressT=0;
+        else if(inp._A) hs.pressT+=dt;
         else { if(hs.pressT>0 && hs.pressT<0.20) switchPlayer(team); hs.pressT=0; }
         if(edge.B) doPoke(p);
         if(edge.X) doCheck(p);
@@ -767,7 +980,7 @@ function create(env){
           var tx3=tgt?tgt.x:puck.x, tz3=tgt?tgt.z:puck.z;
           var ddx=tx3-p.x, ddz=tz3-p.z, L4=Math.hypot(ddx,ddz)||1;
           hs.press.on=true; hs.press.x=ddx/L4; hs.press.z=ddz/L4; hs.press.d=L4;
-          if(L4<2.1 && hs.pressCd<=0){ hs.pressCd=0.42; doPoke(p); }
+          if(L4<2.1 && hs.pressCd<=0){ hs.pressCd=0.42; doPoke(p,true); }
         } else hs.press.on=false;
       }
     }
@@ -915,18 +1128,19 @@ function create(env){
     if(state==='menu') return 0;
     SIMT+=dt;
     if(state==='over'){ stateT-=dt; return 0; }
-    if(state==='goal'||state==='face'){
+    if(state==='goal'){
       stateT-=dt;
-      if(stateT<=0){
-        if(state==='goal'){ state='face'; stateT=1.0; placeFaceoff(0,0); }
-        else { state='play'; emit('faceoff',{x:r2(puck.x), z:r2(puck.z)}); }
-      }
-      if(state==='goal') return 0;
+      if(stateT>0) return 0;
+      state='face'; stateT=FACE_CFG.setGoal; placeFaceoff(0,0);
     }
+    /* вбрасывание: время матча и удалений стоит, все на местах (полный шаг — камера у клиента едет к точке) */
+    if(state==='face'){ faceTick(dt); return 2; }
 
     clock-=dt;
     if(clock<=0){
       clock=0;
+      /* время вышло — удаления просто заканчиваются */
+      for(var pe=pen.length-1;pe>=0;pe--) releasePen(pe);
       state='over'; stateT=99;
       puck.vx=0; puck.vz=0; puck.vy=0; puck.owner=null;
       emit('match:end',{score:score.slice(), reason:'time'});
@@ -937,10 +1151,7 @@ function create(env){
     /* --- удаления --- */
     for(var pi=pen.length-1;pi>=0;pi--){
       pen[pi].t-=dt;
-      if(pen[pi].t<=0){ var pb=pen[pi].p; pb.boxed=0;
-        pb.x=-attackDir(pen[pi].team)*BLUE_X; pb.z=(RW-2)*(R()<0.5?1:-1);
-        pb.vx=0; pb.vz=0; pb.down=0; pb.os=0;
-        pen.splice(pi,1); }
+      if(pen[pi].t<=0) releasePen(pi);
     }
 
     /* --- ОТЛОЖЕННЫЙ ОФСАЙД (как в NHL на Xbox) и проброс --- */
@@ -1111,7 +1322,8 @@ function create(env){
             score[scorer]++;
             goalEvent(scorer, czg);
             fx.score();
-            clearOnePenalty(scorer===0?1:0);
+            /* гол в большинстве — малый штраф соперника кончается досрочно */
+            if(onIce(scorer).length>onIce(1-scorer).length) clearOnePenalty(1-scorer);
             puck.vx=0;puck.vz=0;puck.vy=0;
             state='goal'; stateT=1.5;
             return 1;
@@ -1140,9 +1352,15 @@ function create(env){
           var p=pick;
           /* сейвом считаем, только если это чужой бросок, а не любая шайба у вратаря */
           var fromShot = !!(LASTSHOT && LASTSHOT.p.team!==p.team && SIMT-LASTSHOT.t<2.5);
-          puck.vx=rnd(-6,6); puck.vz=rnd(-6,6); puck.free=0.3; icing.armed=false;
+          /* соперник рядом — вратарь накрывает шайбу: свисток, вбрасывание в его зоне */
+          var cover=false, foes2=teamOf(1-p.team);
+          for(var fi=0;fi<foes2.length;fi++) if(foes2[fi].down<=0 && Math.hypot(foes2[fi].x-p.x,foes2[fi].z-p.z)<FACE_CFG.coverPress){ cover=true; break; }
+          if(cover){ puck.vx=0; puck.vz=0; puck.vy=0; puck.free=0.3; }
+          else { puck.vx=rnd(-6,6); puck.vz=rnd(-6,6); puck.free=0.3; }
+          icing.armed=false;
           if(fromShot){ LASTSHOT=null; LASTSAVE={t:p.team, time:SIMT}; }
-          emit('save',{g:pIdx(p), t:p.team, by:lastTouch?pIdx(lastTouch):-1, kind:'body', shot:fromShot?1:0});
+          emit('save',{g:pIdx(p), t:p.team, by:lastTouch?pIdx(lastTouch):-1, kind:'body', shot:fromShot?1:0, cover:cover?1:0});
+          if(cover){ whistle('cover', -attackDir(p.team)*20, puck.z>0?7:-7, p.team); return 2; }
         } else if(pick){
           var prevT=lastTouch;
           puck.owner=pick; lastTouch=pick; icing.armed=false;
@@ -1364,6 +1582,7 @@ function create(env){
           var dc=Math.hypot(carrier.x-p.x,carrier.z-p.z);
           if(dc<1.5){
             p._cd=0.55;
+            if(hookCall(p,carrier)){ penalize(p,'trip'); continue; }
             if(R()<0.55){
               puck.owner=null; puck.free=0.3;
               var aa=Math.atan2(puck.z-p.z,puck.x-p.x);
@@ -1373,13 +1592,15 @@ function create(env){
             }
           } else if(dc<1.9 && p.spd>5.0 && R()<0.30){
             p._cd=1.2;
+            var callH=hitCall(p,carrier,true);
             carrier.down=1.3;
             var ab=Math.atan2(carrier.z-p.z,carrier.x-p.x);
             carrier.vx=Math.cos(ab)*8; carrier.vz=Math.sin(ab)*8;
             puck.owner=null; puck.free=0.4;
             puck.vx=Math.cos(ab)*5; puck.vz=Math.sin(ab)*5;
             lastTouch=p;
-            emit('hit',{p:pIdx(p), t:p.team, v:pIdx(carrier), vt:carrier.team, clean:true, x:r2(carrier.x), z:r2(carrier.z), hard:0});
+            emit('hit',{p:pIdx(p), t:p.team, v:pIdx(carrier), vt:carrier.team, clean:!callH, x:r2(carrier.x), z:r2(carrier.z), hard:0});
+            if(callH){ penalize(p,callH.reason,callH.major); continue; }
           }
         }
       }
@@ -1421,6 +1642,11 @@ function create(env){
   api.whistle=whistle;
   api.penalize=penalize;
   api.penaltyLeft=penaltyLeft;
+  api.penaltyShow=penaltyShow;
+  api.netTail=netTail;
+  api.PEN_CFG=PEN_CFG;
+  api.FACE_CFG=FACE_CFG;
+  api.FO=FO;
   api.clearOnePenalty=clearOnePenalty;
   api.aimInput=aimInput;
   api.aimDir=aimDir;
@@ -1478,6 +1704,7 @@ function create(env){
     checkT:{enumerable:true, get:function(){ return checkT; }, set:function(v){ checkT=v; }},
     pokeT:{enumerable:true, get:function(){ return pokeT; }, set:function(v){ pokeT=v; }},
     pen:{enumerable:true, get:function(){ return pen; }, set:function(v){ pen=v; }},
+    matchLen:{enumerable:true, get:function(){ return matchLen; }, set:function(v){ matchLen=v; }},
     offWarn:{enumerable:true, get:function(){ return offWarn; }, set:function(v){ offWarn=v; }},
     lastTouch:{enumerable:true, get:function(){ return lastTouch; }, set:function(v){ lastTouch=v; }},
     prevZone:{enumerable:true, get:function(){ return prevZone; }, set:function(v){ prevZone=v; }},

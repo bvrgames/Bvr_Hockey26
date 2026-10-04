@@ -12,12 +12,14 @@
  *   client → server
  *     {t:'cfg', a, b, min, id, hz?}     start / restart the match (slot 0 only): team picks, minutes, match id,
  *                                       hz = snapshots a second the room sends (SNAP_HZ_OK, default 30; index.html NETCFG)
- *     {t:'i', m:[x,z], b, q, c, tc}     input: stick in WORLD coordinates (the client applies its own camera), buttons
+ *     {t:'i', m:[x,z], b, q, c, tc, f?} input: stick in WORLD coordinates (the client applies its own camera), buttons
  *                                       held b (A1 B2 X4 Y8 RT16 LB32), packet number q, press counters c[A,B,X,Y,LB],
- *                                       tactic tc
+ *                                       tactic tc, f = [faceoff id, A presses after the drop, window over 0|1]: the phone
+ *                                       counts its own presses in its own window, the room picks the winner (sim faceTick)
  *   server → both
  *     {t:'cfg', a, b, min, id, hz}      the match (re)starts; hz = snapshot rate of this match
- *     {t:'s', d, k, a, v, e?, w?}       snapshot, same layout as the host's (index.html netSnap); a = the last input
+ *     {t:'s', d, k, a, v, e?, w?}       snapshot, same layout as the host's (index.html netSnap; after the players — sim
+ *                                       netTail: penalty clocks, faceoff phase, id, presses, targets, winner); a = the last input
  *                                       packet of THIS recipient the simulation has used, k = server time (ms),
  *                                       w = who is away (bits: 1 slot 0, 2 slot 1; 4 / 8 — away for over 30 s)
  *
@@ -42,7 +44,7 @@ const r2 = (v) => Math.round(v * 100) / 100, r1 = (v) => Math.round(v * 10) / 10
 function mkPort() {
   return { inp: { mx: 0, mz: 0, _A: false, _B: false, _X: false, _Y: false, RT: false, _LB: false },
            edge: { A: false, B: false, X: false, Y: false, LB: false },
-           tapB: false, pend: null, lastCnt: [0, 0, 0, 0, 0], inQ: 0, npv: {},
+           tapB: false, pend: null, lastCnt: [0, 0, 0, 0, 0], inQ: 0, npv: {}, fo: null,
            conn: false, lastIn: 0, away: false, awayAt: 0, left: false };
 }
 
@@ -95,7 +97,7 @@ export class MatchRoom {
   clearInput(t) {
     const P = this.port[t], I = P.inp, E = P.edge;
     I.mx = I.mz = 0; I._A = I._B = I._X = I._Y = I.RT = I._LB = false;
-    E.A = E.B = E.X = E.Y = E.LB = false; P.tapB = false; P.pend = null; P.npv = {};
+    E.A = E.B = E.X = E.Y = E.LB = false; P.tapB = false; P.pend = null; P.npv = {}; P.fo = null;
   }
 
   // a socket for this slot is open. fresh = a new page (its packet and press counters start from zero again)
@@ -127,6 +129,7 @@ export class MatchRoom {
     }
     P.npv = { A: I._A, B: I._B, X: I._X, Y: I._Y, LB: I._LB };
     if ((m.q | 0) > P.inQ) P.inQ = m.q | 0;
+    if (Array.isArray(m.f)) P.fo = { id: m.f[0] | 0, n: Math.max(0, m.f[1] | 0), done: !!m.f[2] };
     if (m.tc === 0 || m.tc === 1 || m.tc === 2) this.sim.TACTIC[t] = m.tc;
   }
 
@@ -139,7 +142,7 @@ export class MatchRoom {
     const hz = SNAP_HZ_OK.includes(m.hz | 0) ? m.hz | 0 : SIM_HZ / SNAP_EVERY;
     this.snapEvery = SIM_HZ / hz;
     this.cfg = { t: 'cfg', a, b, min, id, hz };
-    S.score[0] = 0; S.score[1] = 0; S.period = 1; S.clock = min * 60; S.pen.length = 0;
+    S.score[0] = 0; S.score[1] = 0; S.period = 1; S.clock = min * 60; S.matchLen = min * 60; S.pen.length = 0;
     S.reset(true);
     S.TACTIC[0] = 0; S.TACTIC[1] = 0; S.gkRush[0] = false; S.gkRush[1] = false;
     S.state = 'face'; S.stateT = 0.9;
@@ -203,6 +206,7 @@ export class MatchRoom {
                P.indexOf(pk.owner),
                (HS[0].press.on ? 1 : 0) | (HS[1].press.on ? 2 : 0) | (HS[0].goalieCtl ? 4 : 0) | (HS[1].goalieCtl ? 8 : 0)];
     for (const p of P) d.push(r2(p.x), r2(p.z), r2(p.yaw), (p.down > 0 ? 1 : 0) + (p.boxed ? 2 : 0), r1(p.stride), r1(p.spd || 0));
+    d.push(...S.netTail());
     const c0 = HS[0].ctrl, c1 = HS[1].ctrl;
     const v = [r2(c0 ? c0.vx : 0), r2(c0 ? c0.vz : 0), r2(c1 ? c1.vx : 0), r2(c1 ? c1.vz : 0)];
     let ev = '';

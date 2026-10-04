@@ -26,18 +26,19 @@ EV.emit('shot', { p: 3, t: 0, ... });                 // возвращает pa
 | событие | payload | где | сеть |
 |---|---|---|---|
 | `match:start` | `{ id, mode: 'ai'\|'online', role: 'solo'\|'host'\|'guest', team, len, clubs: [a, b], difficulty }` | кнопка «Играть», реванш, у гостя — приход `cfg` | нет |
-| `faceoff` | `{ x, z }` — шайба вброшена (переход `face → play`) | `sim` | да |
+| `face:drop` | `{ id, x, z }` — судья бросил шайбу, открылось окно нажатий A | `faceTick` | нет |
+| `faceoff` | `{ x, z, w, taps: [a, b], to }` — вбрасывание разыграно (переход `face → play`): `w` — победитель, `taps` — нажатия A после падения, `to` — кому центр отбросил шайбу (`-1` — никому) | `faceTick` | да |
 | `pass` | `{ p, t, to, x, z, power, lift, lead }` — `to` — кому адресован (`-1` — в сторону), `lead` — пас в разрез | `doPass` | да |
 | `pass:recv` | `{ p, t, from, aimed, lead }` — пас дошёл до своего (≤ 3 с после паса); `aimed` — принял именно адресат | подбор шайбы | да |
 | `pickup` | `{ p, t, prev, turnover?, intercept? }` — полевой подобрал шайбу; `turnover` — до этого касался соперник, `intercept` — перехват паса | подбор шайбы | да |
 | `shot` | `{ p, t, x, z, power, dist }` | `doShot` | да |
-| `save` | `{ g, t, by, kind: 'line'\|'body', shot, noShot }` — `t` — команда вратаря; `shot: 1` — сейв после броска (идёт в статистику); `noShot: 1` — шайба шла в створ без `doShot` (пас, рикошет) | пересечение створа / подбор вратарём | да |
+| `save` | `{ g, t, by, kind: 'line'\|'body', shot, noShot, cover? }` — `t` — команда вратаря; `shot: 1` — сейв после броска (идёт в статистику); `noShot: 1` — шайба шла в створ без `doShot` (пас, рикошет); `cover: 1` — вратарь накрыл шайбу (за ним `stoppage` `cover`) | пересечение створа / подбор вратарём | да |
 | `post` | `{ t, p, bar }` — штанга (`bar` — перекладина); `t`, `p` — кто касался последним | `sim` | да |
 | `goal` | `{ t, p, assist, own, noShot, z, score: [a, b], clock }` — `p` — автор (последний коснувшийся из забившей команды), `assist` — отдавший ему пас ≤ 10 с назад, `own` — последним касался соперник | `sim` | да |
 | `hit` | `{ p, t, v, vt, clean, hard, x, z }` — силовой `p` → `v`; `hard: 1` — кнопкой / `doCheck`, `0` — сбил ИИ на ходу; `clean: 0` — нарушение (за ним идёт `penalty`) | `doCheck`, ИИ | да |
 | `poke` | `{ p, t, from, btn? }` — выбил шайбу у владельца; `btn` — кнопкой | `doPoke`, ИИ | да |
-| `penalty` | `{ p, t, reason }` — `reason: 'interference'` | `penalize` | да |
-| `stoppage` | `{ reason: 'offside'\|'icing'\|'penalty', t }` — свисток и вбрасывание; `t` — команда-нарушитель | `whistle` | да |
+| `penalty` | `{ p, t, reason, major, len }` — `reason`: `'trip'` подножка, `'slash'` удар клюшкой, `'back'` атака сзади, `'board'` толчок на борт, `'interference'` блокировка; `major: 1` — большой штраф; `len` — длина, с игрового времени (малый = длина матча / 6, большой ×2.5, `PEN_CFG` в `shared/sim.js`) | `penalize` | да |
+| `stoppage` | `{ reason: 'offside'\|'icing'\|'penalty'\|'cover', t }` — свисток и вбрасывание; `t` — команда-нарушитель (у `cover` — команда вратаря) | `whistle` | да |
 | `match:end` | `{ score: [a, b], reason: 'time' }` | конец времени | да |
 | `match:abort` | `{ score }` — вышли в меню посреди матча (итог не отправляется) | `backToMenu` | нет |
 | `match:summary` | итог матча, см. ниже | подписчик `match:end` | нет |

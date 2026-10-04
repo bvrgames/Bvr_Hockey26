@@ -14,9 +14,9 @@ function match(seed) {
   const ev = {}, log = [];
   const S = BVRSim.create({ random: mulberry(seed), emit: (n, e) => { ev[n] = (ev[n] || 0) + 1; log.push(n); return e; } });
   S.setControl({ tick: [true, false], hum: [false, false], inp: [S.NOIN, S.NOIN], edge: [S.NOEDGE, S.NOEDGE] });
-  S.reset(true); S.clock = LEN; S.state = 'face'; S.stateT = 1.4; S.placeFaceoff(0, 0);
+  S.reset(true); S.clock = LEN; S.matchLen = LEN; S.state = 'face'; S.stateT = 1.4; S.placeFaceoff(0, 0);
   let n = 0; const t0 = performance.now();
-  while (S.state !== 'over' && n < LEN * 70) { S.step(1 / 60); n++; }
+  while (S.state !== 'over' && n < LEN * 150) { S.step(1 / 60); n++; }   // the clock stops during faceoffs: more steps than the match length
   const P = S.players.map((p) => [p.x, p.z].map((v) => v.toFixed(4)).join(',')).join(';');
   return { score: S.score.slice(), ev, steps: n, ms: performance.now() - t0, sig: log.length + '|' + P, over: S.state === 'over' };
 }
@@ -27,7 +27,7 @@ for (let s = 1; s <= N; s++) {
   if (!a.over) fails.push(`seed ${s}: match did not end`);
   if (a.sig !== b.sig) fails.push(`seed ${s}: not deterministic`);
   console.log(`seed ${s}: ${a.score.join(':')} · ${a.steps} steps in ${a.ms.toFixed(0)} ms (${(a.ms / a.steps * 1000).toFixed(1)} µs/step) · ` +
-    ['shot', 'save', 'goal', 'pass', 'hit', 'poke', 'stoppage'].map((k) => `${k} ${a.ev[k] || 0}`).join(' · '));
+    ['shot', 'save', 'goal', 'pass', 'hit', 'poke', 'stoppage', 'penalty', 'faceoff'].map((k) => `${k} ${a.ev[k] || 0}`).join(' · '));
 }
 if (fails.length) console.log('FAIL:\n  ' + fails.join('\n  '));
 console.log(fails.length ? 'SIM NODE FAIL' : 'SIM NODE OK');
