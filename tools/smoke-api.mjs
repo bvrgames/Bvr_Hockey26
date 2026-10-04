@@ -96,6 +96,22 @@ function summary(o = {}) {
       return 'ok';
     },
     async stakesOverdue(uid, now) { return [...St.values()].filter((s) => s.status === 'locked' && s.deadline <= now && s.uids.includes(uid)); },
+    // the rewarded video and «no ads»: the same contract as server/coins-d1.js
+    async adRewardsSince(uid, t) { const a = Lg.filter((l) => l.uid === uid && l.reason === 'ad_reward'); return { n: a.filter((l) => l.at >= t).length, last: a.reduce((m, l) => Math.max(m, l.at), 0) }; },
+    async grant(p) {
+      if (Lg.some((l) => l.uid === p.uid && l.reason === p.reason && l.ref === p.ref)) return 'repeat';
+      if (!U.has(p.uid)) U.set(p.uid, { coins: 0, stars: 0, matches: 0, wins: 0, draws: 0, losses: 0, goals: 0, goals_against: 0, streak: 0, best_streak: 0, online: 0, inventory: [] });
+      U.get(p.uid).coins += p.delta; Lg.push({ uid: p.uid, d: p.delta, reason: p.reason, ref: p.ref, at: p.now });
+      return 'ok';
+    },
+    async itemBuy(p) {
+      const u = U.get(p.uid);
+      if (Lg.some((l) => l.uid === p.uid && l.reason === 'stars_item' && l.ref === p.idem)) return 'repeat';
+      if (u && u.inventory.includes(p.item)) return 'owned';
+      if (!u || u.stars < p.stars) return 'funds';
+      u.stars -= p.stars; u.inventory.push(p.item); Lg.push({ uid: p.uid, d: -p.stars, reason: 'stars_item', ref: p.idem, at: p.now });
+      return 'ok';
+    },
   };
   const P = { id: 777000111, first_name: 'Node' };
   const deps = { botToken: TOKEN, store, roomResult: async () => null };
@@ -208,6 +224,7 @@ function summary(o = {}) {
         return 'ok';
       },
       async profile(uid) { return TT.get(uid) || null; },
+      async adRewardsSince() { return { n: 0, last: 0 }; },
       async stakesOverdue() { return []; },
     };
     const TOKEN_T = 'TEST_BOT_TOKEN_second_bot', T1 = { id: 777000222, first_name: 'Tester' };
@@ -223,7 +240,7 @@ function summary(o = {}) {
     ok(r.j.coins === 300, `test bot: below 50 → back to 300 (${r.j.coins})`);
     TT.get(T1.id).coins = 20;
     ok((await tgo(tdeps, 'GET', '/v1/profile', tsig)).j.coins === 20, 'test bot: the top-up once a day');
-    for (const [m, path] of [['POST', '/v1/stars/invoice'], ['POST', '/v1/shop/coins'], ['GET', '/v1/stars/order?id=x']]) {
+    for (const [m, path] of [['POST', '/v1/stars/invoice'], ['POST', '/v1/shop/coins'], ['POST', '/v1/shop/noads'], ['GET', '/v1/stars/order?id=x']]) {
       const x = await tgo(tdeps, m, path, tsig, m === 'POST' ? { pack: 's50', idem: 'abcdefgh' } : undefined);
       ok(x.status === 403 && x.j.reason === 'test', `test bot: ${path} → 403 test (${x.status})`);
     }
@@ -339,6 +356,47 @@ function summary(o = {}) {
       `setup: the menu button is not touched, own commands kept ${JSON.stringify([r.status, smc && smc.params])}`);
   }
 
+  // ---- the rewarded video (AdsGram Reward URL): only with the secret, its own daily cap, a quick second call is a repeat
+  {
+    const AK = 'ad-secret-node-0123456789';
+    let t0 = 1_900_000_000 - (1_900_000_000 % 86400) + 3600;
+    const adeps = (now) => ({ ...deps, adSecret: AK, now });
+    const ad = async (q, now = t0) => { const r = await handleCoins(new Request('http://local/v1/ad/reward?' + q), adeps(now)); return { status: r.status, j: await r.json() }; };
+    const V = { id: 777000333, first_name: 'Viewer' }, vq = (k = AK) => `uid=${V.id}&k=${encodeURIComponent(k)}`;
+    ok((await handleCoins(new Request('http://local/v1/ad/reward?' + vq()), deps)).status === 503, 'ad reward: no ADSGRAM_REWARD_SECRET → 503');
+    ok((await ad(`uid=${V.id}`)).status === 403 && (await ad(vq('wrong'))).status === 403 && (await ad(vq(AK + 'x'))).status === 403, 'ad reward: no / wrong secret → 403');
+    ok((await ad(`uid=abc&k=${AK}`)).status === 422 && (await ad(`uid=0&k=${AK}`)).status === 422, 'ad reward: a bad uid → 422');
+    r = await ad(vq());
+    ok(r.status === 200 && r.j.paid && r.j.coins === 20 && r.j.n === 1 && U.get(V.id).coins === 20, `ad reward: the first view → +20 ${JSON.stringify(r.j)}`);
+    r = await ad(vq(), t0 + 3);
+    ok(r.status === 200 && !r.j.paid && r.j.reason === 'repeat' && U.get(V.id).coins === 20, `ad reward: the same call 3 s later → a repeat, nothing paid ${JSON.stringify(r.j)}`);
+    for (let i = 2; i <= 5; i++) r = await ad(vq(), t0 + i * 60);
+    ok(r.j.paid && r.j.n === 5 && U.get(V.id).coins === 100, `ad reward: 5 views → 100 coins ${JSON.stringify(r.j)}`);
+    r = await ad(vq(), t0 + 600);
+    ok(r.status === 200 && !r.j.paid && r.j.reason === 'limit' && U.get(V.id).coins === 100, `ad reward: the 6th view a day → limit ${JSON.stringify(r.j)}`);
+    r = await ad(vq(), t0 + 86400);
+    ok(r.j.paid && r.j.n === 1 && U.get(V.id).coins === 120, `ad reward: the next UTC day → paid again ${JSON.stringify(r.j)}`);
+    const pv = await handleCoins(req('GET', '/v1/profile', initData(V, { authDate: t0 + 86400 })), { ...adeps(t0 + 86400 + 60) });
+    const pj = await pv.json();
+    ok(pj.ad && pj.ad.n === 1 && pj.ad.max === 5 && pj.ad.coins === 20 && pj.noadsPrice === 150 && pj.day.coins === 0, `ad reward: the profile shows ad {n, max, coins}, outside the match cap ${JSON.stringify([pj.ad, pj.day, pj.noadsPrice])}`);
+    // «no ads» for 150 stars: 402 without stars, once, the same idem again is a repeat, a second purchase → 409
+    const W = { id: 777000444, first_name: 'Buyer' }, iw = initData(W);
+    const nb = (idem, idata = iw) => go('POST', '/v1/shop/noads', idata, { idem });
+    user(W.id, 0);
+    r = await nb('noads-idem-0001');
+    ok(r.status === 402 && r.j.need === 150, `noads: no stars → 402 ${JSON.stringify(r.j)}`);
+    U.get(W.id).stars = 200;
+    r = await nb('noads-idem-0001');
+    ok(r.status === 200 && r.j.balance.stars === 50 && r.j.inventory.includes('noads') && !r.j.repeat, `noads: bought, −150 stars ${JSON.stringify(r.j)}`);
+    r = await nb('noads-idem-0001');
+    ok(r.status === 200 && r.j.repeat && U.get(W.id).stars === 50, `noads: the same idem → repeat, nothing taken ${JSON.stringify(r.j)}`);
+    U.get(W.id).stars = 500;
+    r = await nb('noads-idem-0002');
+    ok(r.status === 409 && r.j.reason === 'owned' && U.get(W.id).stars === 500, `noads: already owned → 409, nothing taken ${JSON.stringify(r.j)}`);
+    ok((await nb('bad idem!')).status === 422 && (await nb('noads-idem-0003', null)).status === 401, 'noads: bad idem → 422, unsigned → 401');
+    ok((await go('GET', '/v1/profile', iw)).j.inventory.includes('noads'), 'noads: in the profile inventory');
+  }
+
   // ---- the developer's page: only ADMIN_IDS by the verified Telegram id
   const adeps = { ...sdeps, adminIds: '42, 9101', adminUi: 'function BVRDev(K){ return {}; }' };
   const ago = async (path, idata) => (await handleCoins(req('GET', path, idata), adeps)).status;
@@ -375,7 +433,8 @@ const botSrv = createServer((rq, rs) => { let b = ''; rq.on('data', (c) => { b +
 await new Promise((res) => botSrv.listen(BOT_PORT, '127.0.0.1', res));
 const ADMIN = { id: 777000999, first_name: 'Dev', username: 'dev_admin', language_code: 'ru' };
 const TOKEN_TEST = 'TEST_BOT_TOKEN_second_bot';
-const VARS = ['--var', `BOT_TOKEN:${TOKEN}`, '--var', `BOT_TOKEN_TEST:${TOKEN_TEST}`, '--var', `TG_API:http://127.0.0.1:${BOT_PORT}`, '--var', `TG_WEBHOOK_SECRET:${HOOK_SECRET}`,
+const AD_SECRET = 'smoke-adsgram-secret-0123';
+const VARS = ['--var', `BOT_TOKEN:${TOKEN}`, '--var', `ADSGRAM_REWARD_SECRET:${AD_SECRET}`, '--var', `BOT_TOKEN_TEST:${TOKEN_TEST}`, '--var', `TG_API:http://127.0.0.1:${BOT_PORT}`, '--var', `TG_WEBHOOK_SECRET:${HOOK_SECRET}`,
   '--var', `ADMIN_IDS:123, ${ADMIN.id}`, '--var', 'ADMIN_CACHE:0'];
 try {
   for (const db of ['DB', 'DB_TEST']) {
@@ -799,6 +858,35 @@ try {
     r = await get(`/v1/admin/player?id=${A.id + 40}`, initData(ADMIN));
     ok(r.j.shop && r.j.shop.length === 4 && r.j.shop[0].coins === 700 && r.j.shop[0].stars === 100, `admin: the card lists coins bought for stars ${JSON.stringify(r.j.shop)}`);
     ok((await get('/v1/admin/player?id=abc', initData(ADMIN))).status === 422, 'admin: a bad id → 422');
+  }
+
+  // ---------- the rewarded video (AdsGram Reward URL) and «no ads» on the real Worker + D1 (after the admin page: its
+  // counts do not expect these players)
+  {
+    const hookRawY = (upd) => fetch(API + '/tg/webhook', { method: 'POST', body: JSON.stringify(upd), headers: { 'Content-Type': 'application/json', 'X-Telegram-Bot-Api-Secret-Token': HOOK_SECRET } });
+    const Y = { id: A.id + 41, first_name: 'Ads', language_code: 'en' }, iy = initData(Y);
+    const adr = (k = AD_SECRET, uid = Y.id) => fetch(`${API}/v1/ad/reward?uid=${uid}&k=${encodeURIComponent(k)}`).then(async (x) => ({ status: x.status, j: await x.json().catch(() => null) }));
+    ok((await adr('nope')).status === 403, 'D1 ad reward: wrong secret → 403');
+    let ar = await adr();
+    ok(ar.status === 200 && ar.j.paid && ar.j.coins === 20, `D1 ad reward: +20 for a player never seen before ${JSON.stringify(ar.j)}`);
+    ar = await adr();
+    ok(ar.status === 200 && !ar.j.paid && ar.j.reason === 'repeat', `D1 ad reward: the same call at once → repeat ${JSON.stringify(ar.j)}`);
+    let pp = (await call('GET', '/v1/profile', iy)).j;
+    ok(pp.coins === 20 && pp.ad.n === 1 && pp.ad.max === 5 && pp.day.coins === 0 && pp.noadsPrice === 150, `D1 ad reward: profile coins 20, ad.n 1, outside the match cap ${JSON.stringify([pp.coins, pp.ad, pp.day])}`);
+    // «no ads»
+    const nb = (idem) => call('POST', '/v1/shop/noads', iy, { idem });
+    ok((await nb('noads-d1-0001')).status === 402, 'D1 noads: no stars → 402');
+    const oy = (await call('POST', '/v1/stars/invoice', iy, { pack: 's300' })).j.order;
+    await hookRawY({ update_id: 30, message: { message_id: 70, from: Y, chat: { id: Y.id, type: 'private' }, date: Math.floor(Date.now() / 1000),
+      successful_payment: { currency: 'XTR', total_amount: 250, invoice_payload: oy, telegram_payment_charge_id: 'stxNOADS' + Date.now(), provider_payment_charge_id: '' } } });
+    let nr = await nb('noads-d1-0001');
+    ok(nr.status === 200 && nr.j.balance.stars === 150 && nr.j.inventory.includes('noads'), `D1 noads: bought, 300 → 150 stars ${JSON.stringify(nr.j)}`);
+    nr = await nb('noads-d1-0001');
+    ok(nr.status === 200 && nr.j.repeat && nr.j.balance.stars === 150, `D1 noads: the same idem → repeat ${JSON.stringify(nr.j)}`);
+    nr = await nb('noads-d1-0002');
+    ok(nr.status === 409 && nr.j.balance.stars === 150, `D1 noads: owned → 409, nothing taken ${JSON.stringify(nr.j)}`);
+    pp = (await call('GET', '/v1/profile', iy)).j;
+    ok(pp.inventory.includes('noads') && pp.stars === 150, `D1 noads: in the profile ${JSON.stringify([pp.inventory, pp.stars])}`);
   }
 
   // the game itself: queue on start, profile, reward on the result screen

@@ -11,6 +11,7 @@
  *     conf(key) → number,     // overrides of DEF below (Worker vars), or undefined
  *     store,                  // the database, see STORE below (server/coins-d1.js — D1 / SQLite)
  *     botTokenTest, storeTest, // optional: the test bot's token and its own database (authBot, testFunds)
+ *     adSecret,               // ADSGRAM_REWARD_SECRET: the key in the AdsGram Reward URL (getAdReward)
  *     roomResult(room, id),   // → { len, score } of a server-mode match the room counted itself, or null
  *     bot(method, params),    // the Bot API (botApiFrom below) — star invoices
  *     adminIds,               // ADMIN_IDS: Telegram ids allowed on /v1/admin/* (comma separated), adminUi — its page (text)
@@ -51,6 +52,11 @@
  *   coinsBuy({ uid, idem, coins, stars, now }) → 'ok' | 'funds' | 'repeat'   in one transaction: stars −stars (never below
  *                                              zero: 'funds', nothing changes), coins +coins, ledger 'stars_to_coins' and
  *                                              'coins_bought' (ref = idem); 'repeat' — this idem is in already, nothing changes
+ *   itemBuy({ uid, item, stars, idem, now }) → 'ok' | 'funds' | 'owned' | 'repeat'   a forever item for stars (NOADS): in
+ *                                              one transaction stars −stars (never below zero: 'funds'), ledger
+ *                                              'stars_item' (ref = idem), the inventory row; 'owned' — the player has it
+ *                                              already (nothing changes), 'repeat' — this idem is in already
+ *   adRewardsSince(uid, t) → { n, last }        paid rewarded videos (ledger 'ad_reward') since t, the latest one ever
  *   touch(user, platform, now)                 who the player is on every signed request (creates the row if new)
  *   grant({ uid, name, delta, reason, ref, now }) → 'ok' | 'repeat'   test coins (test store only): the ledger row and
  *                                              the balance in one transaction; the same (uid, reason, ref) again — 'repeat'
@@ -73,6 +79,9 @@ export const DEF = {
   STAKE_GRACE: 900,        // a stake still locked 2 × len + this (s) after the start, with no result from the room → refund
   INVOICES_HOUR: 20,       // star invoices one player may open per hour
   ADMIN_CACHE: 60,         // the developer's overview is counted again at most this often (s)
+  AD_REWARD_COINS: 20,     // a rewarded video (AdsGram, getAdReward below): coins per view, outside the match caps
+  AD_REWARDS_DAY: 5,       // paid views per player per UTC day
+  AD_REWARD_GAP: 10,       // a Reward URL call sooner than this (s) after the last paid one is the same view again
 };
 const REWARD = { win: 10, draw: 5, loss: 3, left: 0 };
 const BONUS_MAX = 5;
@@ -159,7 +168,7 @@ export async function testFunds(store, user, now) {
   }
 }
 // what the test bot may not do: stars are real money (Telegram Stars) and the webhook is the production bot's only
-const TEST_OFF = new Set(['POST /v1/stars/invoice', 'GET /v1/stars/order', 'POST /v1/shop/coins']);
+const TEST_OFF = new Set(['POST /v1/stars/invoice', 'GET /v1/stars/order', 'POST /v1/shop/coins', 'POST /v1/shop/noads']);
 
 // one line in `wrangler tail` per refused signature: why (no id — it is not proven when the signature is wrong)
 function authLog(path, c) { console.warn('auth refused', JSON.stringify({ path, why: c.why, age: c.age })); }
@@ -445,6 +454,45 @@ async function postShopCoins(request, d, user, now) {
   const balance = { coins: await d.store.balance(user.id), stars: await d.store.starsBalance(user.id) };
   if (r === 'funds') return json(402, { reason: 'stars', need: pack.stars, have: balance.stars });
   return json(200, { pack: pack.id, coins: pack.coins, stars: pack.stars, balance, ...(r === 'repeat' ? { repeat: true } : {}) });
+}
+
+// «No ads» for stars, forever (the inventory item 'noads'): turns off only the video after a match; the rewarded video
+// for coins stays. One edit here — the client takes the price from /v1/profile (noadsPrice).
+export const NOADS = { id: 'noads', stars: 150 };
+// POST /v1/shop/noads { idem } → 200 { item, stars, balance: { coins, stars }, inventory, repeat? } · 402 { reason:
+// 'stars', need, have } · 409 { reason: 'owned' } · 422. One transaction (store.itemBuy).
+async function postShopNoads(request, d, user, now) {
+  let b = null; try { const t = await request.text(); if (t.length < 1024) b = JSON.parse(t); } catch (e) {}
+  if (!b || typeof b.idem !== 'string' || !/^[A-Za-z0-9_-]{8,64}$/.test(b.idem)) return json(422, { reason: 'idem' });
+  const r = await d.store.itemBuy({ uid: user.id, item: NOADS.id, stars: NOADS.stars, idem: b.idem, now });
+  const balance = { coins: await d.store.balance(user.id), stars: await d.store.starsBalance(user.id) };
+  if (r === 'funds') return json(402, { reason: 'stars', need: NOADS.stars, have: balance.stars });
+  if (r === 'owned') return json(409, { reason: 'owned', balance });
+  const u = await d.store.profile(user.id);
+  return json(200, { item: NOADS.id, stars: NOADS.stars, balance, inventory: u ? u.inventory : [NOADS.id], ...(r === 'repeat' ? { repeat: true } : {}) });
+}
+
+// ---------- the rewarded video (AdsGram, block 51932). AdsGram's server calls the Reward URL set in its dashboard,
+// GET /v1/ad/reward?uid=[userId]&k=<ADSGRAM_REWARD_SECRET>, once the player has watched the video to the end. AdsGram
+// does not sign the call: the secret in the address is what proves it comes from AdsGram (403 without it). The client
+// never asks for these coins — it only waits for them in /v1/profile (ad: { n, max, coins }). Its own daily cap,
+// outside the match caps: AD_REWARDS_DAY × AD_REWARD_COINS a UTC day. No view id comes with the call, so one sooner than
+// AD_REWARD_GAP after the last paid view is taken for a repeat of it. A valid secret always gets 200 (no retries).
+async function getAdReward(request, d) {
+  if (!d.adSecret || !d.store) return json(503, { reason: 'not configured' });
+  const q = new URL(request.url).searchParams;
+  if (!sameBytes(enc.encode(q.get('k') || ''), enc.encode(d.adSecret))) return json(403, { reason: 'forbidden' });
+  const s = q.get('uid') || '', uid = /^[1-9][0-9]{0,15}$/.test(s) ? +s : 0;
+  if (!Number.isSafeInteger(uid) || uid <= 0) return json(422, { reason: 'uid' });
+  const conf = d.conf || confFrom(null), now = d.now || Math.floor(Date.now() / 1000);
+  const max = conf('AD_REWARDS_DAY'), coins = conf('AD_REWARD_COINS');
+  const a = await d.store.adRewardsSince(uid, dayStart(now));
+  let why = null;
+  if (a.n >= max) why = 'limit';
+  else if (a.last && now - a.last < conf('AD_REWARD_GAP')) why = 'repeat';
+  else if (await d.store.grant({ uid, name: null, delta: coins, reason: 'ad_reward', ref: dayStart(now) / 86400 + ':' + (a.n + 1), now }) === 'repeat') why = 'repeat';
+  console.log('ad reward', JSON.stringify({ uid, n: why ? a.n : a.n + 1, why }));
+  return json(200, why ? { paid: false, reason: why, n: a.n, max } : { paid: true, coins, n: a.n + 1, max });
 }
 
 const orderId = () => { const b = new Uint8Array(12); crypto.getRandomValues(b); return hex(b); };
@@ -735,6 +783,7 @@ async function getProfile(d, user, now) {
   const u = await store.profile(user.id);
   const earned = u ? await store.coinsSince(user.id, 'match_ai', dayStart(now)) : 0;
   const earnedDuo = u ? await store.coinsSince(user.id, 'match_duo', dayStart(now)) : 0;
+  const ad = u ? await store.adRewardsSince(user.id, dayStart(now)) : { n: 0 };
   return json(200, {
     user: { id: user.id, name: user.name },
     coins: u ? u.coins : 0, stars: u ? u.stars : 0,
@@ -743,6 +792,8 @@ async function getProfile(d, user, now) {
     inventory: u ? u.inventory : [], equipped: null,
     day: { coins: earned, cap: conf('AI_COIN_CAP_DAY'), duo: earnedDuo, duoCap: conf('DUO_COIN_CAP_DAY') },
     packs: d.test ? [] : STAR_PACKS, coinPacks: d.test ? [] : COIN_PACKS, ...(d.test ? { test: true } : {}),
+    // the rewarded video: paid views today (the client waits for n to grow after a view), «no ads» price (null — not sold)
+    ad: { n: ad.n, max: conf('AD_REWARDS_DAY'), coins: conf('AD_REWARD_COINS') }, noadsPrice: d.test ? null : NOADS.stars,
   });
 }
 
@@ -752,6 +803,11 @@ export async function handleCoins(request, d) {
   if (!path.startsWith('/v1/')) return null;
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
   const route = request.method + ' ' + path;
+  // AdsGram's server-to-server call: no initData, the secret in the address instead
+  if (route === 'GET /v1/ad/reward') {
+    try { return await getAdReward(request, d); }
+    catch (e) { console.error('ad reward', e && e.stack || e); return json(500, { reason: 'server' }); }
+  }
   // the developer's page: 403 to everyone but ADMIN_IDS — unsigned, forged and other ids alike, before anything else
   if (path.startsWith('/v1/admin/')) {
     const now = d.now || Math.floor(Date.now() / 1000), conf = d.conf || confFrom(null);
@@ -767,6 +823,7 @@ export async function handleCoins(request, d) {
     'GET /v1/profile': (dd, user, now) => getProfile(dd, user, now),
     'GET /v1/stars/packs': (dd) => json(200, dd.test ? { packs: [], coinPacks: [], test: true } : { packs: STAR_PACKS, coinPacks: COIN_PACKS }),
     'POST /v1/shop/coins': (dd, user, now) => postShopCoins(request, dd, user, now),
+    'POST /v1/shop/noads': (dd, user, now) => postShopNoads(request, dd, user, now),
     'POST /v1/stars/invoice': (dd, user, now) => postInvoice(request, dd, user, now),
     'GET /v1/stars/order': (dd, user) => getOrder(request, dd, user),
   }[route];

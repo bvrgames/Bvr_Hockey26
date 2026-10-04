@@ -168,7 +168,7 @@ export function d1Store(db) {
         db.prepare(`SELECT created_at / 86400 AS d, mode, COALESCE(json_extract(summary, '$.net'), '') AS net, COUNT(DISTINCT match_id) AS n
                     FROM matches WHERE created_at >= ? GROUP BY d, mode, net`).bind(t.d30),
         db.prepare(`SELECT COUNT(DISTINCT match_id) AS n, COUNT(*) AS cnt, AVG(len) AS avg_len, SUM(result != 'left') AS done FROM matches WHERE created_at >= ?`).bind(t.d30),
-        db.prepare(`SELECT SUM(CASE WHEN delta > 0 AND reason IN ('match_ai', 'match_duo', 'admin', 'reward') THEN delta ELSE 0 END) AS issued,
+        db.prepare(`SELECT SUM(CASE WHEN delta > 0 AND reason IN ('match_ai', 'match_duo', 'admin', 'reward', 'ad_reward') THEN delta ELSE 0 END) AS issued,
                     SUM(CASE WHEN reason = 'purchase' THEN -delta ELSE 0 END) AS spent FROM ledger WHERE currency = 'coins'`),
         db.prepare(`SELECT COUNT(*) AS n, SUM(amount) * 2 AS pot, SUM(outcome = 'refund') AS refunds, SUM(CASE WHEN outcome = 'refund' THEN amount * 2 ELSE 0 END) AS refundPot,
                     SUM(CASE WHEN status = 'locked' THEN amount * 2 ELSE 0 END) AS lockedPot FROM stakes`),
@@ -272,6 +272,32 @@ export function d1Store(db) {
         throw e;
       }
       return 'ok';
+    },
+    // ---- «no ads» and other forever items for stars (coins.js NOADS): the ledger row before the inventory row, so a
+    // player row missing (NULL balance_after) reads as 'funds', not as a constraint of the inventory
+    async itemBuy(p) {
+      const seen = () => one("SELECT 1 AS x FROM ledger WHERE user_id = ? AND reason = 'stars_item' AND ref = ?", p.uid, p.idem);
+      const owned = () => one('SELECT 1 AS x FROM inventory WHERE user_id = ? AND item_id = ?', p.uid, p.item);
+      if (await seen()) return 'repeat';
+      if (await owned()) return 'owned';
+      try {
+        await db.batch([
+          db.prepare('UPDATE users SET stars = stars - ?, updated_at = ? WHERE user_id = ?').bind(p.stars, p.now, p.uid),
+          db.prepare(`INSERT INTO ledger (user_id, delta, currency, reason, ref, balance_after, created_at)
+                      VALUES (?, ?, 'stars', 'stars_item', ?, (SELECT stars FROM users WHERE user_id = ?), ?)`).bind(p.uid, -p.stars, p.idem, p.uid, p.now),
+          db.prepare(`INSERT INTO inventory (user_id, item_id, source, acquired_at) VALUES (?, ?, 'purchase', ?)`).bind(p.uid, p.item, p.now),
+        ]);
+      } catch (e) {
+        const m = String(e && e.message);
+        if (/insufficient|NOT NULL/i.test(m)) return 'funds';
+        if (/UNIQUE|constraint/i.test(m)) { if (await seen()) return 'repeat'; if (await owned()) return 'owned'; }
+        throw e;
+      }
+      return 'ok';
+    },
+    async adRewardsSince(uid, t) {
+      const r = await one("SELECT SUM(created_at >= ?) AS n, MAX(created_at) AS last FROM ledger WHERE user_id = ? AND reason = 'ad_reward'", t, uid);
+      return { n: (r && r.n) || 0, last: (r && r.last) || 0 };
     },
     async starsBalance(uid) { const r = await one('SELECT stars FROM users WHERE user_id = ?', uid); return r ? r.stars : 0; },
     async balance(uid) { const r = await one('SELECT coins FROM users WHERE user_id = ?', uid); return r ? r.coins : 0; },

@@ -16,6 +16,8 @@
  * elsewhere (a VPS in Moscow: Node.js + SQLite or Postgres) means a new glue file and, for Postgres, a new store —
  * docs/EVENTS.md «Перенос API».
  *
+ *   POST /v1/shop/noads { idem } — «no ads» for stars;  GET /v1/ad/reward?uid=&k= — AdsGram's Reward URL (secret
+ *                     ADSGRAM_REWARD_SECRET), the coins for a rewarded video
  *   GET  /v1/admin/*  the developer's page, read only: 403 to all but the secret ADMIN_IDS (Telegram ids, comma separated)
  *
  * Here: the secrets BOT_TOKEN, TG_WEBHOOK_SECRET and ADMIN_IDS (BOT_TOKEN_TEST + binding DB_TEST — the test bot, coins.js authBot) (TG_API — another Bot API address, tests only), the D1 binding DB, numeric Worker vars overriding the limits (coins.js DEF), and where a
@@ -56,6 +58,8 @@ export async function handleApi(request, env) {
     roomResult: roomResultFrom(env),
     bot,
     adminIds: env.ADMIN_IDS,
+    // the AdsGram Reward URL key (secret ADSGRAM_REWARD_SECRET): GET /v1/ad/reward?uid=[userId]&k=<it>
+    adSecret: env.ADSGRAM_REWARD_SECRET,
     adminUi: ADMIN_UI,
   });
 }
