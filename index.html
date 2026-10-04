@@ -665,6 +665,8 @@ var BUILD=(function(){
   var h=0x811c9dc5; for(var i=0;i<t.length;i++){ h^=t.charCodeAt(i); h=Math.imul(h,16777619)>>>0; }
   return ('0000000'+h.toString(16)).slice(-8).slice(0,6);
 })();
+/* прод и тестовый бот: превью веток (*.vercel.app, кроме прода) открывает @Bvrtestbot — inviteBase, TEST.preview */
+var PROD_HOST='bvr-hockey26.vercel.app', TEST_BOT='Bvrtestbot';
 var TEST=(function(){
   var q=new URLSearchParams(location.search);
   var t={autostart:q.has('autostart'), autoLen:+q.get('autostart')||0,
@@ -690,6 +692,12 @@ var TEST=(function(){
   try{ sp0=window.Telegram && Telegram.WebApp && Telegram.WebApp.initDataUnsafe && Telegram.WebApp.initDataUnsafe.start_param; }catch(e){}
   t.sp=t.startParam(sp0);
   if(t.sp.dbg) t.debug=true;
+  /* Тестовый бот (@Bvrtestbot = превью ветки, любой *.vercel.app, кроме прода): всё отладочное включено сразу, без
+     startapp=dbg и кодов — проверка = просто открыть бота (правило в CLAUDE.md). Новые тестовые функции включать
+     так же — по TEST.preview. Прод и локальный запуск — как раньше (?debug / startapp=dbg) */
+  var hn=String(location.hostname).toLowerCase();
+  t.preview = hn!==PROD_HOST && /\.vercel\.app$/.test(hn);
+  if(t.preview) t.debug=true;
   /* Сетевой матч считает сервер (по умолчанию, фаза 3.5). ?net=host / startapp=host… — хост-схема вручную.
      Решает тот, кто открывает комнату; если сервер серверного режима не знает или молчит — хост-схема сама. */
   t.srv = !(q.get('net')==='host' || t.sp.host);
@@ -7262,7 +7270,6 @@ srvEl.addEventListener('change',function(){
    только bot — основное приложение бота: t.me/<бот>?startapp=.
    Без параметров (04.10): прод (bvr-hockey26.vercel.app) и локальный запуск — основной бот, как раньше; любой другой адрес
    *.vercel.app (превью веток, его открывает тестовый бот) — @Bvrtestbot, его основное приложение (t.me/Bvrtestbot?startapp=). */
-var PROD_HOST='bvr-hockey26.vercel.app', TEST_BOT='Bvrtestbot';
 function inviteBase(host){
   var q=new URLSearchParams(location.search), b=q.get('bot')||'', a=q.get('app')||'';
   host=String(host===undefined ? location.hostname : host).toLowerCase();
