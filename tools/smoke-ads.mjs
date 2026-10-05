@@ -42,7 +42,7 @@ window.Adsgram={init:function(o){
 let P;
 const profile0 = () => ({ user: { id: 1, name: 'T' }, coins: 40, stars: 200, totals: { m: 5, w: 3, d: 1, l: 1, g: 9, ga: 5, streak: 1, best: 2, online: 0 },
   inventory: [], equipped: null, day: { coins: 0, cap: 100 }, packs: [{ id: 's50', stars: 50, price: 50 }], coinPacks: [{ id: 'c100', coins: 100, stars: 20 }],
-  ad: { n: 0, max: 5, coins: 20 }, noadsPrice: 150 });
+  ad: { n: 0, max: 5, coins: 20 }, noadsPrice: 100 });
 const apiCalls = [];
 async function routeApi(page) {
   await page.route(/^http:\/\/api\.test\//, async (r) => {
@@ -53,9 +53,9 @@ async function routeApi(page) {
     if (path === '/v1/profile') return json(200, P);
     if (path === '/v1/shop/noads') {
       if (P.inventory.includes('noads')) return json(409, { reason: 'owned', balance: { coins: P.coins, stars: P.stars } });
-      if (P.stars < 150) return json(402, { reason: 'stars', need: 150, have: P.stars });
-      P.stars -= 150; P.inventory.push('noads');
-      return json(200, { item: 'noads', stars: 150, balance: { coins: P.coins, stars: P.stars }, inventory: P.inventory });
+      if (P.stars < 100) return json(402, { reason: 'stars', need: 100, have: P.stars });
+      P.stars -= 100; P.inventory.push('noads');
+      return json(200, { item: 'noads', stars: 100, balance: { coins: P.coins, stars: P.stars }, inventory: P.inventory });
     }
     if (path === '/v1/match') return json(409, { reason: 'duplicate' });
     return json(403, { reason: 'forbidden' });
@@ -121,7 +121,7 @@ try {
     await page.evaluate(() => __hk.result(null));
     // the rules below: every 2nd match, not after the player's first one
     a = await ads(page, { n: 0, t: 0, prof: 10, cfg: { every: 2, from: 2 } });
-    ok(a.rw && a.rw.max === 5 && a.price === 150 && !a.noads, `the profile gives the video limit and the «No ads» price ${JSON.stringify(a)}`);
+    ok(a.rw && a.rw.max === 5 && a.price === 100 && !a.noads, `the profile gives the video limit and the «No ads» price ${JSON.stringify(a)}`);
     // match 1: not yet (every 2nd)
     await finish(page);
     ok(!(await ads(page)).due, '1st finished match: no video yet');
@@ -253,12 +253,12 @@ try {
     await page.evaluate(() => __hk.menu('shop'));
     await page.waitForTimeout(150);
     const card = '#start section.cur .mshc[data-pack="noads"]';
-    ok(/150/.test(await page.evaluate((s) => (document.querySelector(s) || {}).textContent || '', card)), 'shop: «No ads» for 150 stars');
+    ok(/100/.test(await page.evaluate((s) => (document.querySelector(s) || {}).textContent || '', card)), 'shop: «No ads» for 100 stars');
     await click(page, card);
     ok(await click(page, '#start section.cur [data-act="cyes"]'), 'shop: «No ads» asks to confirm');
     ok(await waitFor(page, () => __hk.ads().noads === true, null, 5000), 'shop: bought → noads');
     const st = await page.evaluate((s) => ({ card: (document.querySelector(s) || {}).textContent, q: (document.querySelector('#start section.cur .mshq') || {}).textContent, stars: __hk.coins().stars }), card);
-    ok(st.card.includes(await page.evaluate(() => __hk.T('shOwned'))) && st.q.includes(await page.evaluate(() => __hk.T('shNoAdsDone'))) && st.stars === 50 && apiCalls.includes('POST /v1/shop/noads'), `shop: «Owned», «Ads are off», 50 stars left ${JSON.stringify(st)}`);
+    ok(st.card.includes(await page.evaluate(() => __hk.T('shOwned'))) && st.q.includes(await page.evaluate(() => __hk.T('shNoAdsDone'))) && st.stars === 100 && apiCalls.includes('POST /v1/shop/noads'), `shop: «Owned», «Ads are off», 100 stars left ${JSON.stringify(st)}`);
     // «No ads» works: a due video is not shown, the rewarded video stays
     await page.evaluate(() => __hk.menu('main'));
     await ads(page, { n: 5, t: 0 });
@@ -279,13 +279,13 @@ try {
   }
   // ---------- not enough stars for «No ads»; an SDK whose init throws
   {
-    P = profile0(); P.stars = 100;
+    P = profile0(); P.stars = 60;
     const g = await open(), { page } = g;
-    await waitFor(page, () => __hk.ads().price === 150, null, 8000);
+    await waitFor(page, () => __hk.ads().price === 100, null, 8000);
     await page.evaluate(() => __hk.menu('shop')); await page.waitForTimeout(150);
     await click(page, '#start section.cur .mshc[data-pack="noads"]');
     const q = await page.evaluate(() => ({ t: (document.querySelector('#start section.cur .mshq') || {}).textContent, top: !!document.querySelector('#start section.cur .mshq [data-act="topup"]') }));
-    ok(q.t.includes((await page.evaluate(() => __hk.T('shNo'))).split(':')[0]) && q.top && !apiCalls.slice(-3).includes('POST /v1/shop/noads'), `shop: 100 stars → «not enough», «top up» ${JSON.stringify(q)}`);
+    ok(q.t.includes((await page.evaluate(() => __hk.T('shNo'))).split(':')[0]) && q.top && !apiCalls.slice(-3).includes('POST /v1/shop/noads'), `shop: 60 stars → «not enough», «top up» ${JSON.stringify(q)}`);
     await page.evaluate(() => { __hk.menu('main'); __ads.initThrows = true; });
     await ads(page, { n: 5, t: 0, prof: 10 });
     await finish(page);
