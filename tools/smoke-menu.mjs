@@ -103,14 +103,15 @@ async function collect(g, tag) {
     await keys(page, ['ArrowDown', 'Enter', 'Enter']);             // Game modes → Vs computer
     s = await MS(page); ok(s.stack.join() === 'main,modes,prep' && s.focus === 'home', `keyboard: team select not open / focus: ${JSON.stringify(s)}`);
     ok(await page.evaluate('window.__tgBack.visible'), 'BackButton hidden on a sub-screen');
-    // team select (as in NHL): ↑↓ — the team in the active card, ←→ — the card, Q/E — the player's side
+    // team select (as in NHL): ↑↓ — the team in the active card, ←→ (Q/E) — the card; the player plays for the active card
     await keys(page, ['ArrowDown']);                               // home (mine): red → blue
-    await keys(page, ['ArrowRight', 'ArrowDown']);                 // away (computer): green → red (blue is taken)
-    s = await MS(page); ok(s.focus === 'away' && s.sel.my === 1 && s.sel.op === 0 && s.sel.side === 0, `keyboard: team cards ${JSON.stringify(s)}`);
-    await keys(page, ['KeyE']);                                    // the player moves to the away side, the teams stay
-    s = await MS(page); ok(s.sel.side === 1 && s.sel.my === 0 && s.sel.op === 1, `keyboard: side switch ${JSON.stringify(s.sel)}`);
-    await keys(page, ['KeyQ']);
-    s = await MS(page); ok(s.sel.side === 0 && s.sel.my === 1 && s.sel.op === 0, `keyboard: side back ${JSON.stringify(s.sel)}`);
+    s = await MS(page); ok(s.sel.side === 0 && s.sel.my === 1 && s.sel.op === 3, `keyboard: home team ${JSON.stringify(s.sel)}`);
+    await keys(page, ['ArrowRight']);                              // the away card: the player moves with it, the teams stay
+    s = await MS(page); ok(s.focus === 'away' && s.sel.side === 1 && s.sel.my === 3 && s.sel.op === 1, `keyboard: side follows the card ${JSON.stringify(s)}`);
+    await keys(page, ['ArrowDown']);                               // away (mine now): green → red (blue is taken)
+    s = await MS(page); ok(s.sel.side === 1 && s.sel.my === 0 && s.sel.op === 1, `keyboard: away team ${JSON.stringify(s.sel)}`);
+    await keys(page, ['KeyQ']);                                    // Q: the home card, the player goes back home
+    s = await MS(page); ok(s.focus === 'home' && s.sel.side === 0 && s.sel.my === 1 && s.sel.op === 0, `keyboard: side back ${JSON.stringify(s)}`);
     await keys(page, ['Enter']);                                   // Next: match settings
     s = await MS(page); ok(s.stack.join() === 'main,modes,prep,setup' && s.focus === 'diff', `keyboard: Next ${JSON.stringify(s)}`);
     await keys(page, ['ArrowDown', 'ArrowRight']);                 // length 3 → 5
@@ -204,7 +205,7 @@ async function collect(g, tag) {
     ok((await page.evaluate("document.querySelector('#start .mhints').textContent")).length > 0, 'gamepad: no button hints');
     const g0 = s.sel;
     await btn(13);                                                 // down: the next team in my card
-    await btn(15); await btn(5);                                   // right: the computer's card; RB: my side → away
+    await btn(15); await btn(5);                                   // right: the away card, the player moves with it; RB: stays there
     s = await MS(page); ok(s.focus === 'away' && s.sel.side === 1 && s.sel.op !== g0.my && s.sel.my === g0.op, `gamepad: team select ${JSON.stringify(s)} from ${JSON.stringify(g0)}`);
     await btn(0);                                                  // A: Next
     s = await MS(page); ok(s.stack.join() === 'main,modes,prep,setup', `gamepad: A should open the match settings ${JSON.stringify(s)}`);
@@ -234,20 +235,21 @@ async function collect(g, tag) {
     await page.tap('#start .mscr.cur [data-act="vsai"]'); await page.waitForTimeout(150);
     // ▼ on a card — the next team (the rival's is skipped); a tap on the card only selects it; a swipe up — the next team
     const sel0 = (await MS(page)).sel, nx = (c, o) => { let v = c; do { v = (v + 1) % 4; } while (v === o); return v; };
-    await page.tap('#start .mscr.cur [data-adj="home"] [data-dir="1"]'); await page.waitForTimeout(150);
+    await page.tap('#start .mscr.cur .mtar.dn[data-for="home"]'); await page.waitForTimeout(150);
     s = await MS(page); ok(s.sel.my === nx(sel0.my, sel0.op) && s.sel.op === sel0.op, `touch: ▼ on my card ${JSON.stringify(s.sel)} from ${JSON.stringify(sel0)}`);
     const sel1 = s.sel;
     await page.tap('#start .mscr.cur [data-adj="away"] .cpos'); await page.waitForTimeout(150);
-    s = await MS(page); ok(s.focus === 'away' && s.sel.op === sel1.op, `touch: a tap on the card should only select it ${JSON.stringify(s)}`);
+    s = await MS(page); ok(s.focus === 'away' && s.sel.side === 1 && s.sel.my === sel1.op && s.sel.op === sel1.my, `touch: a tap on the card selects it, the player moves there ${JSON.stringify(s)}`);
+    const sel1b = s.sel;
     const box = await page.locator('#start .mscr.cur [data-adj="away"]').boundingBox();
     const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
     await page.mouse.move(cx, cy + 30); await page.mouse.down();
     for (let k = 1; k <= 6; k++) { await page.mouse.move(cx, cy + 30 - k * 9); await page.waitForTimeout(16); }   // 54 px up: one step
     await page.mouse.up(); await page.waitForTimeout(150);
-    s = await MS(page); ok(s.sel.op === nx(sel1.op, sel1.my) && s.sel.my === sel1.my, `touch: swipe up on the away card ${JSON.stringify(s.sel)} from ${JSON.stringify(sel1)}`);
+    s = await MS(page); ok(s.sel.my === nx(sel1b.my, sel1b.op) && s.sel.op === sel1b.op, `touch: swipe up on the away card ${JSON.stringify(s.sel)} from ${JSON.stringify(sel1b)}`);
     const sel2 = s.sel;
-    await page.tap('#start .mscr.cur [data-act="side"]'); await page.waitForTimeout(150);
-    s = await MS(page); ok(s.sel.side === 1 - sel2.side && s.sel.my === sel2.op && s.sel.op === sel2.my, `touch: the side button ${JSON.stringify(s.sel)} from ${JSON.stringify(sel2)}`);
+    await page.tap('#start .mscr.cur [data-adj="home"] .cpos'); await page.waitForTimeout(150);
+    s = await MS(page); ok(s.sel.side === 0 && s.sel.my === sel2.op && s.sel.op === sel2.my, `touch: back to the home card ${JSON.stringify(s.sel)} from ${JSON.stringify(sel2)}`);
     await page.tap('#start .mscr.cur [data-act="next"]'); await page.waitForTimeout(150);
     s = await MS(page); ok(s.stack.join() === 'main,modes,prep,setup', `touch: Next ${JSON.stringify(s)}`);
     await page.tap('#start .mscr.cur [data-adj="min"] [data-dir="-1"]'); await page.waitForTimeout(150);   // 5 (saved? no: fresh) 3 → 1
