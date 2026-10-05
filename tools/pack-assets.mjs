@@ -13,6 +13,8 @@
 //   assets/src/music/*.mp3    menu music (title = file name, artist BvR) → assets/dist/music-<hash>.m4a, AAC 96 kbit/s via
 //                             macOS afconvert; the hash is of the source + encoder settings, so --check never re-encodes
 //   assets/src/fonts/*.woff2  menu font (Fira Sans Extra Condensed 800 italic, OFL) → assets/dist/font-lat|font-cyr.<hash>.woff2
+//   assets/src/kits/*.webp    kit fronts and flags for the team select (made by tools/prep-kits.mjs from the designer's
+//                             sheets) → assets/dist/kit-<name>.<hash>.webp, window.ASSETS.kits[name]
 //   assets/src/icons/*.svg    currency icons (coin, star) → minified <symbol id="ic-<name>"> in a hidden <svg data-asset="icons">
 //                             right after <body> (used as <svg class="ic"><use href="#ic-coin"/></svg>). Inline, not a dist
 //                             file: ~1.5 KB each, needed on the first menu frame (no request, no blank icon while it loads),
@@ -30,7 +32,7 @@ import { createHash } from 'node:crypto';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = join(ROOT, 'assets', 'src'), DIST = join(ROOT, 'assets', 'dist'), HTML = join(ROOT, 'index.html');
 const IMAGES = ['env', 'ads', 'logo'];
-const MUSIC = join(SRC, 'music'), FONTS = join(SRC, 'fonts'), ICONS = join(SRC, 'icons');
+const MUSIC = join(SRC, 'music'), FONTS = join(SRC, 'fonts'), ICONS = join(SRC, 'icons'), KITS = join(SRC, 'kits');
 // the drawing's own bounds (getBBox in Chromium) instead of the artboard: the icon is exactly as tall as the text it
 // stands next to; both share the artboard's rows 55.4…870.2. Measure again when the art changes.
 const ICON_BOX = { coin: '66.8 55.4 814.8 814.8', star: '49.5 55.4 849.5 814.8' };
@@ -119,13 +121,17 @@ function build() {
   const files = { lo: ['players-lo', 'bin', P.lo], hi: ['players-hi', 'bin', P.hi] };
   for (const n of IMAGES) files[n] = [n, 'png', readFileSync(join(SRC, n + '.png'))];
   files.train = ['train', 'js', readFileSync(join(SRC, 'train.js'))];   // lesson code, loaded on entering the training
-  const manifest = {};
-  for (const [k, [n, ext, buf]] of Object.entries(files)) manifest[k] = `assets/dist/${n}.${hash(buf)}.${ext}`;
+  // kit and flag pictures for the team select (tools/prep-kits.mjs): manifest.kits = { rus0, rus1, 'rus-flag', … }
+  const kits = existsSync(KITS) ? readdirSync(KITS).filter((f) => /\.webp$/.test(f)).sort() : [];
+  for (const f of kits) files['kit:' + f.replace(/\.webp$/, '')] = ['kit-' + f.replace(/\.webp$/, ''), 'webp', readFileSync(join(KITS, f))];
+  const manifest = {}, dist = {};
+  for (const [k, [n, ext, buf]] of Object.entries(files)) dist[k] = `assets/dist/${n}.${hash(buf)}.${ext}`;
+  for (const k of Object.keys(dist)) if (k.startsWith('kit:')) (manifest.kits = manifest.kits || {})[k.slice(4)] = dist[k]; else manifest[k] = dist[k];
   manifest.loBytes = P.lo.length; manifest.hiBytes = P.hi.length;   // loading progress (content-length is compressed)
   for (const [k, f] of Object.entries(FONT_FILES)) {
     const buf = readFileSync(join(FONTS, f));
     files[k] = [k === 'fontLat' ? 'font-lat' : 'font-cyr', 'woff2', buf];
-    manifest[k] = `assets/dist/${files[k][0]}.${hash(buf)}.woff2`;
+    manifest[k] = dist[k] = `assets/dist/${files[k][0]}.${hash(buf)}.woff2`;
   }
   // music: the output file is named by the hash of its source, encoded only when missing (encoding is slow, mac only)
   const music = [];
@@ -135,7 +141,7 @@ function build() {
     music.push({ n: f.replace(/\.mp3$/i, '').normalize('NFC'), u: `assets/dist/music-${h}.m4a`, src });
   }
   manifest.music = music.map((m) => ({ n: m.n, u: m.u }));
-  return { files, manifest, music };
+  return { files, manifest, music, dist };
 }
 
 // Illustrator SVG → one <symbol>: no XML header, comments, ids or <style> (class fills become fill attributes: the
@@ -173,8 +179,8 @@ function htmlWith(html, manifest) {
 }
 
 if (args.includes('--extract')) extract();
-const { files, manifest, music } = build();
-const allPaths = Object.values(manifest).filter((p) => typeof p === 'string').concat(manifest.music.map((m) => m.u));
+const { files, manifest, music, dist } = build();
+const allPaths = Object.values(dist).concat(manifest.music.map((m) => m.u));
 const html = readFileSync(HTML, 'utf8'), want = htmlWith(html, manifest);
 if (args.includes('--check')) {
   const bad = [];
@@ -186,12 +192,12 @@ if (args.includes('--check')) {
   mkdirSync(DIST, { recursive: true });
   const keep = new Set(allPaths.map((p) => p.split('/').pop()));
   for (const f of readdirSync(DIST)) if (!keep.has(f)) unlinkSync(join(DIST, f));
-  for (const [k, [, , buf]] of Object.entries(files)) writeFileSync(join(ROOT, manifest[k]), buf);
+  for (const [k, [, , buf]] of Object.entries(files)) writeFileSync(join(ROOT, dist[k]), buf);
   for (const m of music) {
     const out = join(ROOT, m.u);
     if (!existsSync(out)) execFileSync('afconvert', [...AAC, m.src, out]);
     console.log(`${m.u}  ${(readFileSync(out).length / 1024).toFixed(1)} KB  (${m.n})`);
   }
   writeFileSync(HTML, want);
-  for (const [k, [, , buf]] of Object.entries(files)) console.log(`${manifest[k]}  ${(buf.length / 1024).toFixed(1)} KB`);
+  for (const [k, [, , buf]] of Object.entries(files)) console.log(`${dist[k]}  ${(buf.length / 1024).toFixed(1)} KB`);
 }
