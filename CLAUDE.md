@@ -29,6 +29,14 @@
   `startapp=dbg`).
 - npm-кеш пользователя содержит root-файлы: при установке пакетов — `--cache <scratchpad>/npmcache`.
 
+## Следующий шаг (05.10, после «ок» пользователя)
+
+Ветка `teamsel` (выбор команд, DBG, приём паса, вбрасывание, вратарь, дисквалификация) — в тестовом боте (`netfix`),
+ждёт проверки. После «ок»: 1) пользователь сам выполняет `! git checkout main && git merge --ff-only teamsel && git push
+origin main` (пуш в `main` защита Claude Code не даёт); 2) я деплою Worker (`cd server && ../node_modules/.bin/wrangler
+deploy`) — без него в сетевом матче старая симуляция и нет штрафа −10; 3) проверить прод (`wrangler tail`). После этого
+`netfix` = `main`, следующую задачу — новой веткой от `main`, в тестовый бот через `git push origin <ветка>:netfix`.
+
 ## Статус (04.10.2026)
 
 - **netfix в main (04.10).** Сеть (выбор маршрута, буфер снимков, PHASE 2 — пружины, NETCFG, `hint=auto`) и
