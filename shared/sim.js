@@ -52,6 +52,11 @@ function create(env){
   function lerp(a,b,t){return a+(b-a)*t;}
   function r2(v){ return Math.round(v*100)/100; }
   function stickEnd(p){ return [p.x+Math.cos(p.yaw)*0.95, p.z+Math.sin(p.yaw)*0.95]; }
+  /* адресат паса партнёра (и выигранного вбрасывания), пока шайба свободна и летит: он разворачивается к ней клюшкой
+     и принимает и коньком / телом — раньше шайба, пришедшая в спину или в бок, проезжала мимо стоящего игрока */
+  function recvOf(p){
+    return !!(LASTPASS && LASTPASS.to===p && LASTPASS.from.team===p.team && !puck.owner && SIMT-LASTPASS.t<2 && !p.goalie);
+  }
 
   /* кем управляет ввод (см. setControl) */
   var CFG={tick:[false,false], hum:[false,false], inp:[null,null], edge:[null,null], rem:[null,null],
@@ -94,7 +99,7 @@ function create(env){
     window:1.5,               /* окно нажатий A после падения, с */
     grace:1.2,                /* сколько ждать счёт удалённого игрока после окна (сеть), с */
     tapMax:30,                /* больше нажатий за окно не бывает (защита от подделки) */
-    botRate:{easy:5, normal:7, hard:9}, botSpread:0.15,   /* нажатий в секунду у бота по сложности, разброс ±15 % */
+    botRate:{easy:3, normal:7, hard:9}, botSpread:0.15,   /* нажатий в секунду у бота по сложности, разброс ±15 % (лёгкий: ~4–5 за окно) */
     setGoal:1.0, setStop:1.4, /* расстановка после гола / после свистка, с (начало матча задаёт клиент: stateT) */
     puckY:1.2,                /* высота шайбы в руке судьи, м */
     coverPress:3.5,           /* вратарь накрывает шайбу, если соперник ближе, м */
@@ -133,6 +138,8 @@ function create(env){
     pickupReachSkater: 0.85,  // was 1.05 (body center)
     pickupReachGoalie: 1.35,  // unchanged
     leadReach: 1.15,          // the addressed receiver of a through pass (Y) reaches further — catching it in stride
+    recvBody: 0.8,             // the addressee of a pass stops it with the skate / body too, not only with the stick end
+    recvTurn: 9,              // and turns the stick to the coming puck, rad/s (even standing: his stick let go)
     pickupHeight: 0.85,       // unchanged
     pickupMaxSpeed: 24,       // unchanged
     /* poke check */
@@ -317,6 +324,8 @@ function create(env){
       var sp=clamp(6+L*0.8, 8, 13);
       puck.vx=ddx/L*sp; puck.vz=ddz/L*sp; puck.free=0.12;
       lastTouch=C;
+      /* это пас партнёру: адресат едет навстречу и принимает (recvOf), а не пропускает шайбу в спину */
+      if(m) LASTPASS={from:C, to:m, t:SIMT, lead:false, x:tx, z:tz, fo:true};   /* fo: в статистику пасов не идёт */
     }
     FO.ph=0; FO.win=w; FO.lockT=SIMT+FACE_CFG.lockA;
     state='play'; stateT=0;
@@ -450,7 +459,7 @@ function create(env){
   /* подбор шайбы полевым: владение, перехват или дошедший пас */
   function pickupEvent(p, prev){
     var e={p:pIdx(p), t:p.team, prev:pIdx(prev)};
-    if(LASTPASS && LASTPASS.from!==p && SIMT-LASTPASS.t<3){
+    if(LASTPASS && !LASTPASS.fo && LASTPASS.from!==p && SIMT-LASTPASS.t<3){
       if(LASTPASS.from.team===p.team){
         LASTRECV={from:LASTPASS.from, to:p, t:SIMT};
         p._recvT=SIMT; p._recvLead=!!LASTPASS.lead;
@@ -1124,7 +1133,13 @@ function create(env){
        мгновенная установка выглядит как телепорт, а на резкой смене
        направления игрок успевает мгновение ехать спиной — это и включает
        клип заднего хода. */
-    if(sp>0.5){
+    if(recvOf(st) && Math.hypot(puck.x-st.x,puck.z-st.z)<14){
+      /* адресат паса смотрит клюшкой на шайбу, куда бы ни ехал */
+      var ry=Math.atan2(puck.z-st.z,puck.x-st.x)-st.yaw;
+      ry=Math.atan2(Math.sin(ry),Math.cos(ry));
+      st.yaw+=clamp(ry,-PLAYER_CFG.recvTurn*dt,PLAYER_CFG.recvTurn*dt);
+      st._back=sp>0.5 && (Math.cos(st.yaw)*st.vx+Math.sin(st.yaw)*st.vz) < -0.30*sp;
+    } else if(sp>0.5){
       var tgt=Math.atan2(st.vz,st.vx);
       var dy=tgt-st.yaw;
       dy=Math.atan2(Math.sin(dy),Math.cos(dy));
@@ -1352,6 +1367,7 @@ function create(env){
           else k=Math.hypot(p.x+Math.cos(p.yaw)*0.95-puck.x, p.z+Math.sin(p.yaw)*0.95-puck.z)/
                  /* полевой: по концу клюшки; адресат паса в разрез тянется за шайбой дальше — приём на ход */
                  ((LASTPASS && LASTPASS.lead && LASTPASS.to===p && SIMT-LASTPASS.t<1.6) ? PLAYER_CFG.leadReach : PLAYER_CFG.pickupReachSkater);
+          if(!p.goalie && recvOf(p)) k=Math.min(k, Math.hypot(p.x-puck.x,p.z-puck.z)/PLAYER_CFG.recvBody);
           /* ничья (например, на вбрасывании концы клюшек ровно на одинаковом
              расстоянии) решается случаем, а не порядком в массиве */
           k+=R()*0.03;
