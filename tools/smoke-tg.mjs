@@ -188,7 +188,7 @@ for (const S of SETUPS) {
 // ---------- the menu (docs/MENU_PLAN.md): every screen and the pause, landscape setups, RU / EN / ID.
 // Nothing under Telegram's buttons or outside the device safe area, texts fit their items, the screen content stays
 // above the footer (now playing + button hints) and the two columns do not overlap.
-const MENU_SCREENS = [['main'], ['welcome'], ['prep'], ['setup'], ['friend'], ['settings'], ['profile'], ['shop'], ['train', 0], ['train', 1], ['ctrl'], ['pause'], ['result'], ['lesson', 4], ['lesson', 8]];
+const MENU_SCREENS = [['main'], ['modes'], ['welcome'], ['prep'], ['setup'], ['friend'], ['settings'], ['profile'], ['shop'], ['train', 0], ['train', 1], ['ctrl'], ['pause'], ['result'], ['lesson', 4], ['lesson', 8]];
 for (const S of SETUPS.filter((x) => !x.name.startsWith('port'))) {
   const g = await openGame(browserName, { w: S.w, h: S.h, mobile: true, tg: fakeTelegram({ fullscreen: true, safe: S.safe, content: S.content, lang: S.tgLang, platform: S.platform || 'ios' }) });
   const { page } = g;

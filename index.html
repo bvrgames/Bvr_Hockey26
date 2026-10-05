@@ -1399,6 +1399,7 @@ ru:{
   mQuick:'Быстрый матч', mTrain:'Тренировка', mSettings:'Настройки',
   mTrainD:'Уроки и правила хоккея',
   mSettingsD:'Язык, графика, звук, вибрация',
+  mModes:'Режим игры',
   mVsAI:'Против компьютера', mVsAID:'Ты и твоя команда против ИИ · 3 уровня сложности',
   mFriend:'С другом', mFriendD:'Приглашение в чат Telegram · матч считает сервер',
   mPrep:'Подготовка матча', mTeams:'Выбор команд', mHome:'Дома', mAway:'Гости', mYou:'Ты', mCpu:'Компьютер', mPal:'Друг', mKit:'Форма', mKit1:'основная', mNext:'Далее', mSetup:'Настройки матча', mTeamK:'Команда', mCardK:'Карточка', mSideK:'Сторона', mMy:'Твоя команда', mOpp:'Соперник', mLen:'Длина матча', mTac:'Тактика',
@@ -1493,6 +1494,7 @@ en:{
   mQuick:'Quick match', mTrain:'Training', mSettings:'Settings',
   mTrainD:'Lessons and hockey rules',
   mSettingsD:'Language, graphics, sound, vibration',
+  mModes:'Game modes',
   mVsAI:'Vs computer', mVsAID:'You and your team against the AI · 3 difficulty levels',
   mFriend:'With a friend', mFriendD:'Invite in a Telegram chat · the server runs the match',
   mPrep:'Match setup', mTeams:'Team select', mHome:'Home', mAway:'Away', mYou:'You', mCpu:'CPU', mPal:'Friend', mKit:'Kit', mKit1:'primary', mNext:'Next', mSetup:'Match settings', mTeamK:'Team', mCardK:'Card', mSideK:'Side', mMy:'Your team', mOpp:'Opponent', mLen:'Match length', mTac:'Tactics',
@@ -1589,6 +1591,7 @@ id:{
   mQuick:'Main cepat', mTrain:'Latihan', mSettings:'Pengaturan',
   mTrainD:'Pelajaran dan aturan hoki',
   mSettingsD:'Bahasa, grafis, suara, getar',
+  mModes:'Mode permainan',
   mVsAI:'Lawan komputer', mVsAID:'Kamu dan timmu melawan AI · 3 tingkat kesulitan',
   mFriend:'Dengan teman', mFriendD:'Undang di chat Telegram · server menjalankan laga',
   mPrep:'Persiapan laga', mTeams:'Pilih tim', mHome:'Kandang', mAway:'Tandang', mYou:'Kamu', mCpu:'Komputer', mPal:'Teman', mKit:'Seragam', mKit1:'utama', mNext:'Lanjut', mSetup:'Pengaturan laga', mTeamK:'Tim', mCardK:'Kartu', mSideK:'Sisi', mMy:'Timmu', mOpp:'Lawan', mLen:'Durasi laga', mTac:'Taktik',
@@ -2718,7 +2721,7 @@ function backToMenu(){
   st.style.display='block';
   /* из урока — к списку уроков; из сетевого матча — к подготовке в той же комнате (реванш); иначе в главное меню */
   var wasTrain=TRAIN.on; trainStop();
-  MENU.setStack(wasTrain ? ['main','train'] : (ONLINE && NET.on ? ['main','friend','prep'] : ['main']));
+  MENU.setStack(wasTrain ? ['main','train'] : (ONLINE && NET.on ? ['main','modes','friend','prep'] : ['main']));
   netStatus(NET.status||T('notConnected'));
   paintTacBadge();
 }
@@ -6485,7 +6488,7 @@ var MSCR={
     var lg=''; [['ru','RU'],['en','EN'],['id','ID']].forEach(function(o){ lg+='<span class="chip'+(LANG===o[0]?' on':'')+'" data-lang="'+o[0]+'">'+o[1]+'</span>'; });
     var qd=clubName(CLUBS[LAST.my])+' — '+clubName(CLUBS[LAST.op])+' · '+T(diffKey()).toLowerCase()+' · '+T('min'+LAST.min);
     return mHead('', '<div class="mlang mf mlast" data-adj="lang" data-ord="2">'+lg+'</div>', true)+
-      '<div class="mleft"><div class="mlist">'+mItem('quick',T('mQuick'),qd)+mItem('vsai',T('mVsAI'),T('mVsAID'))+mItem('friend',T('mFriend'),T('mFriendD'))+
+      '<div class="mleft"><div class="mlist">'+mItem('quick',T('mQuick'),qd)+mItem('modes',T('mModes'),T('mVsAI')+' · '+T('mFriend'))+
       mItem('train',T('mTrain'),T('mTrainD')+' · '+T('tMedalsP')+' '+tMedals()+' / 30')+
       mItem('shop',T('mShop'),T('mShopD'))+mItem('settings',T('mSettings'),T('mSettingsD'))+
       (EXT && EXT.ok ? mItem('ext',EXT.label) : '')+'</div></div>'+
@@ -6514,6 +6517,10 @@ var MSCR={
       return '<div class="tm'+(you?' you':'')+'">'+mJersey(CLUBS[c], you?'9':'17')+'<b>'+mEsc(clubName(CLUBS[c]))+'</b><i>'+mEsc(T(s?'mAway':'mHome'))+' · '+mEsc(sideWho(s))+'</i></div>'; };
     return mHead(T('mSetup'),'<span class="mpill">'+mEsc(ONLINE?T('mFriend'):T('mVsAI'))+'</span>')+
       '<div class="mleft"><div class="mprep"><div class="msum"><div class="row">'+tm(0)+'<div class="mvs">VS</div>'+tm(1)+'</div></div>'+opts+'</div></div>';
+  },
+  /* «Режим игры»: против компьютера и с другом */
+  modes:function(){
+    return mHead(T('mModes'))+'<div class="mleft"><div class="mlist">'+mItem('vsai',T('mVsAI'),T('mVsAID'))+mItem('friend',T('mFriend'),T('mFriendD'))+'</div></div>';
   },
   friend:function(){
     return mHead(T('mFriend'))+'<div class="mleft"><div class="mlist">'+mItem('create',T('mCreate'),T('mCreateD'),'','',' id="bHost"')+
@@ -7006,6 +7013,7 @@ var ACT={
   quick:function(){ ONLINE=false; netLeave(); selFromLast(); goStart(); },
   ctrl:function(){ MENU.dev=-1; MENU.go('ctrl'); },
   settings:function(){ MENU.go('settings'); },
+  modes:function(){ MENU.go('modes'); },
   vsai:function(){ ONLINE=false; netLeave(); selFromLast(); MENU.go('prep'); },
   friend:function(){ ONLINE=true; MENU.friendMode='create'; MENU.go('friend'); },
   create:function(){ netCreate(); },
@@ -7199,10 +7207,10 @@ MENU.onNet=function(ev){
   if(state!=='menu' || !ONLINE) return;
   var top=MENU.top();
   var inPrep=(top==='prep' || top==='setup');
-  if(NET.role==='guest' && NET.on && !inPrep){ MENU.stack=['main','friend','prep']; MENU.show(); return; }
+  if(NET.role==='guest' && NET.on && !inPrep){ MENU.stack=['main','modes','friend','prep']; MENU.show(); return; }
   if(NET.role==='host' && NET.on){
-    if(NET.peer){ netPrepSend(); if(!inPrep){ MENU.stack=['main','friend','prep']; MENU.show(); return; } }
-    else if(top!=='friend' && !inPrep){ MENU.stack=['main','friend']; MENU.show(); return; }
+    if(NET.peer){ netPrepSend(); if(!inPrep){ MENU.stack=['main','modes','friend','prep']; MENU.show(); return; } }
+    else if(top!=='friend' && !inPrep){ MENU.stack=['main','modes','friend']; MENU.show(); return; }
   }
   MENU.netPaint();
 };
@@ -7676,7 +7684,7 @@ function shareLink(code){
     /* приглашение: сразу «С другом» — «Назад» ведёт в меню, а не закрывает игру */
     ONLINE=true;
     codeEl.value=room.toUpperCase();
-    MENU.friendMode='joinf'; MENU.setStack(['main','friend']);
+    MENU.friendMode='joinf'; MENU.setStack(['main','modes','friend']);
     netConnect(srvEl.value.trim(), room.toUpperCase(), null);
   }
 })();
