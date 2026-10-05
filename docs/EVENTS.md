@@ -171,7 +171,7 @@ EV.emit('shot', { p: 3, t: 0, ... });                 // возвращает pa
 | `POST` | `/tg/webhook` | апдейт Telegram | вебхук бота, заголовок `X-Telegram-Bot-Api-Secret-Token` = секрет `TG_WEBHOOK_SECRET`, иначе `403`; раздел «Звёзды» |
 | `GET` | `/v1/admin/*` | — | страница разработчика, только чтение: `403` всем, кроме `ADMIN_IDS` (раздел «Страница разработчика») |
 | `POST` | `/v1/shop/coins` | `{ pack: 'c300', idem }` | `200 { pack, coins, stars, balance: { coins, stars }, repeat? }` · `402 { reason: 'stars', need, have }` · `422` (раздел «Монеты за звёзды») |
-| `POST` | `/v1/shop/noads` | `{ idem }` | «Без рекламы» за 150 звёзд навсегда: `200 { item: 'noads', stars, balance: { coins, stars }, inventory, repeat? }` · `402 { reason: 'stars', need, have }` · `409 { reason: 'owned' }` · `422`; тестовый бот — `403 test` (раздел «Реклама») |
+| `POST` | `/v1/shop/noads` | `{ idem }` | «Без рекламы» за 100 звёзд навсегда: `200 { item: 'noads', stars, balance: { coins, stars }, inventory, repeat? }` · `402 { reason: 'stars', need, have }` · `409 { reason: 'owned' }` · `422`; тестовый бот — `403 test` (раздел «Реклама») |
 | `GET` | `/v1/ad/reward?uid=[userId]&k=<секрет>` | — | Reward URL AdsGram — **без initData**, вызывает сервер AdsGram: `403` без секрета `ADSGRAM_REWARD_SECRET`, `200 { paid: true, coins, n, max }` или `200 { paid: false, reason: 'limit'\|'repeat' }` (раздел «Реклама») |
 | `POST` | `/v1/purchase` | `{ item: 'jersey_retro_01', idem: '<uuid>' }` | `200 { balance, inventory }` · `402` мало монет · `409` уже куплено (фаза магазина) |
 
@@ -468,8 +468,8 @@ IP).
   (`soundPause`), возврат приложения в это время звук не включает.
 - **Запасной вариант**, если кабинет AdsGram не даст включить Reward URL (AdsGram рекомендует его от 50 тыс. игроков в
   день): `POST /v1/ad/reward` с initData, тем же дневным лимитом и защитой от повторов — не сделан, по решению 05.10.
-- **«Без рекламы»** — Магазин, 150 звёзд навсегда (`NOADS` в `coins.js`, цена приходит в `/v1/profile` → `noadsPrice`):
-  `POST /v1/shop/noads { idem }`, одна транзакция `itemBuy` (звёзды −150 не ниже нуля, `ledger 'stars_item'`, строка
+- **«Без рекламы»** — Магазин, 100 звёзд навсегда (`NOADS` в `coins.js`, цена приходит в `/v1/profile` → `noadsPrice`):
+  `POST /v1/shop/noads { idem }`, одна транзакция `itemBuy` (звёзды −100 не ниже нуля, `ledger 'stars_item'`, строка
   `inventory 'noads'`). Отключает только видео после матча, видео за монеты остаётся. Флаг — на сервере (`inventory`
   в `/v1/profile`), в `localStorage['bvr_noads']` только копия.
 - **В кабинет AdsGram** (блок Reward 51932 → Reward URL):
