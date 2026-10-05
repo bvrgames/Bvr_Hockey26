@@ -218,6 +218,7 @@ function create(env){
       x:gdir*(GOAL_X-0.7), z:0, vx:0,vz:0, yaw:gdir>0?-Math.PI/2:Math.PI/2, spd:0,stride:0,down:0,boxed:0,num:30,name:NAMES[t][5]});
   }
   function reset(faceoff){
+    DQ=-1;
     players.length=0; makeTeam(0); makeTeam(1);
     puck.x=0;puck.z=0;puck.y=0.05;puck.vx=0;puck.vz=0;puck.vy=0;puck.owner=null;puck.free=0;
     HS[0]=mkHS(); HS[1]=mkHS(); FO.ph=0; FO.ctr=[null,null]; FO.tgt=[null,null];
@@ -389,8 +390,19 @@ function create(env){
     p.boxed=1; pen.push({team:p.team,t:len,full:len,p:p,major:!!major,reason:reason});
     if(HS[p.team].ctrl===p){ var alt=onIce(p.team)[0]; if(alt) HS[p.team].ctrl=alt; }
     emit('penalty',{p:pIdx(p), t:p.team, reason:reason, major:major?1:0, len:Math.round(len)});
+    /* удалены все полевые, остался один вратарь — дисквалификация: матч окончен, победа сопернику при любом счёте */
+    if(!onIce(p.team).length){ forfeit(p.team); return; }
     var dir=attackDir(p.team);
     whistle('penalty', -dir*20, puck.z>0?7:-7, p.team);
+  }
+  var DQ=-1;                  /* дисквалифицированная команда (-1 — нет) */
+  function forfeit(t){
+    DQ=t;
+    for(var pe=pen.length-1;pe>=0;pe--) releasePen(pe);
+    state='over'; stateT=99;
+    puck.vx=0; puck.vz=0; puck.vy=0; puck.owner=null;
+    emit('match:end',{score:score.slice(), reason:'dq', dq:t});
+    fx.over();
   }
   /* сколько осталось, с игрового времени (самое длинное удаление команды) */
   function penaltyLeft(t){
@@ -1820,7 +1832,8 @@ function create(env){
     LASTPASS:{enumerable:true, get:function(){ return LASTPASS; }, set:function(v){ LASTPASS=v; }},
     LASTRECV:{enumerable:true, get:function(){ return LASTRECV; }, set:function(v){ LASTRECV=v; }},
     LASTSHOT:{enumerable:true, get:function(){ return LASTSHOT; }, set:function(v){ LASTSHOT=v; }},
-    LASTSAVE:{enumerable:true, get:function(){ return LASTSAVE; }, set:function(v){ LASTSAVE=v; }}
+    LASTSAVE:{enumerable:true, get:function(){ return LASTSAVE; }, set:function(v){ LASTSAVE=v; }},
+    DQ:{enumerable:true, get:function(){ return DQ; }}
   });
   return api;
 }

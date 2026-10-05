@@ -79,6 +79,7 @@ export const DEF = {
   STAKE_GRACE: 900,        // a stake still locked 2 × len + this (s) after the start, with no result from the room → refund
   INVOICES_HOUR: 20,       // star invoices one player may open per hour
   ADMIN_CACHE: 60,         // the developer's overview is counted again at most this often (s)
+  DQ_FINE: 10,             // disqualified (every skater in the box, the goalie alone): no coins and this many taken, never below 0
   AD_REWARD_COINS: 20,     // a rewarded video (AdsGram, getAdReward below): coins per view, outside the match caps
   AD_REWARDS_DAY: 5,       // paid views per player per UTC day
   AD_REWARD_GAP: 10,       // a Reward URL call sooner than this (s) after the last paid one is the same view again
@@ -189,11 +190,15 @@ export function checkSummary(s, minLen = DEF.MIN_LEN) {
   if (!int(s.len) || s.len < minLen || s.len > 600) return 'len';
   if (!int(s.played) || !int(s.score && s.score[0]) || !int(s.score[1])) return 'format';
   const left = s.result === 'left';
+  // disqualification (dq: the team left with its goalie alone): the match ends at once, that team lost whatever the score
+  const dq = s.dq === undefined || s.dq === null ? -1 : s.dq;
+  if (dq !== -1 && dq !== 0 && dq !== 1) return 'dq';
+  if (dq !== -1 && !left && s.result !== (dq === s.team ? 'loss' : 'win')) return 'result';
   // a player who dropped and never came back sends the match as it was at that moment
-  if (!left && s.played < 0.9 * s.len) return 'played';
+  if (!left && dq === -1 && s.played < 0.9 * s.len) return 'played';
   if (!(s.endedAt - s.startedAt >= (s.played - 5) * 1000)) return 'time';
   const my = s.score[s.team], op = s.score[1 - s.team];
-  if (!left && s.result !== (my > op ? 'win' : my < op ? 'loss' : 'draw')) return 'result';
+  if (!left && dq === -1 && s.result !== (my > op ? 'win' : my < op ? 'loss' : 'draw')) return 'result';
   if (my + op > 20) return 'score';
   if (!Array.isArray(s.teams) || s.teams.length !== 2) return 'format';
   for (let t = 0; t < 2; t++) {
@@ -211,6 +216,7 @@ export function matchReward(s, conf = confFrom(null)) { return rewardParts(s, co
 // what is left of them under the per-match cap), total }
 export function rewardParts(s, conf = confFrom(null)) {
   if (s.result === 'left') return { base: 0, bonus: 0, total: 0 };
+  if (s.dq === s.team) { const f = -conf('DQ_FINE'); return { base: f, bonus: 0, total: f }; }   // disqualified: a fine
   const k = Math.max(0.4, Math.min(s.len, 300) / 180);
   const cap = Math.round(conf('AI_COIN_CAP_MATCH') * k);
   const base = Math.min(cap, Math.round((REWARD[s.result] || 0) * k));
@@ -236,6 +242,8 @@ export const STAKES = [0, 10, 25, 50, 100];
 // the room result → who takes the pot: 'host' | 'guest' | 'draw' | 'refund'
 export function stakeOutcome(r) {
   if (!r || !Array.isArray(r.score)) return 'refund';
+  if (r.dq === 0) return 'guest';          // a disqualified team loses the stake whatever the score
+  if (r.dq === 1) return 'host';
   const left = Array.isArray(r.left) ? r.left : [false, false];
   if (left[0] && left[1]) return 'refund';
   if (left[0]) return 'guest';
@@ -756,6 +764,7 @@ async function postMatch(request, d, user, now) {
     const checked = await d.roomResult(s.room.toUpperCase(), s.id);
     if (checked) {
       if (checked.len !== s.len || checked.score[0] !== s.score[0] || checked.score[1] !== s.score[1]) return json(422, { reason: 'mismatch' });
+      if ((checked.dq === 0 || checked.dq === 1 ? checked.dq : -1) !== (s.dq === 0 || s.dq === 1 ? s.dq : -1)) return json(422, { reason: 'mismatch' });
       duo = true;
     }
   }
@@ -763,18 +772,19 @@ async function postMatch(request, d, user, now) {
   const cap = conf(duo ? 'DUO_COIN_CAP_DAY' : 'AI_COIN_CAP_DAY');
   const earned = await store.coinsSince(uid, reason, dayStart(now));
   const parts = rewardParts(s, conf), want = parts.total;
-  const coins = Math.max(0, Math.min(want, cap - earned));
-  const verdict = s.result === 'left' ? 'left' : (coins < want ? 'capped' : (s.mode === 'online' && !duo ? 'unverified' : 'ok'));
+  // a fine (disqualification) takes what there is, never below zero; the caps are for what is earned
+  const coins = want < 0 ? -Math.min(-want, Math.max(0, await store.balance(uid))) : Math.max(0, Math.min(want, cap - earned));
+  const verdict = s.result === 'left' ? 'left' : want < 0 ? 'dq' : (coins < want ? 'capped' : (s.mode === 'online' && !duo ? 'unverified' : 'ok'));
   const my = s.score[s.team], op = s.score[1 - s.team];
   const r = await store.recordMatch({
     uid, name: user.name, id: s.id, mode: s.mode, role: s.role, team: s.team, len: s.len, played: s.played,
-    my, op, result: s.result, summary: JSON.stringify(s), coins, verdict, reason, now,
+    my, op, result: s.result, summary: JSON.stringify(s), coins, verdict, reason: coins < 0 ? 'dq_fine' : reason, now,
     win: s.result === 'win' ? 1 : 0, draw: s.result === 'draw' ? 1 : 0, online: s.mode === 'online' ? 1 : 0,
   });
   if (r === 'duplicate') return json(409, { reason: 'duplicate' });
   const balance = await store.balance(uid);
   return json(200, { accepted: true, id: s.id, coins, balance, verdict, kind: reason, day: { coins: earned + coins, cap },
-                     parts: { res: s.result, base: parts.base, bonus: parts.bonus }, stake });
+                     parts: { res: s.dq === s.team ? 'dq' : s.result, base: parts.base, bonus: parts.bonus }, stake });
 }
 
 async function getProfile(d, user, now) {

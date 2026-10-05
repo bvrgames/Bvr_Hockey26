@@ -697,7 +697,7 @@
   </div>
 </div>
 
-<script src="shared/sim.js?v=c3b94646f8"></script>
+<script src="shared/sim.js?v=2feecb2346"></script>
 <script>
 (function(){
 'use strict';
@@ -1366,7 +1366,7 @@ ru:{
   powerplay:'БОЛЬШИНСТВО', shorthand:'МЕНЬШИНСТВО',
   pause:'ПАУЗА', resume:'ПРОДОЛЖИТЬ', mainMenu:'ГЛАВНОЕ МЕНЮ',
   over:'МАТЧ ОКОНЧЕН', again:'ИГРАТЬ СНОВА',
-  draw:'НИЧЬЯ', winner:'ПОБЕДИЛА КОМАНДА', youWin:'ПОБЕДА', youLose:'ПОРАЖЕНИЕ',
+  draw:'НИЧЬЯ', winner:'ПОБЕДИЛА КОМАНДА', youWin:'ПОБЕДА', youLose:'ПОРАЖЕНИЕ', dq:'ДИСКВАЛИФИКАЦИЯ', dqSub:'удалены все полевые', rwDq:'Дисквалификация',
   tactic:'Тактика', tacStd:'Стандарт', tacAtt:'Атака', tacDef:'Оборона',
   padA1:'пас', padA2:'прессинг', padB1:'бросок', padB2:'отбор', padX1:'навес', padX2:'силовой', padY1:'в разрез', padY2:'вратарь',
   gamepad:'ГЕЙМПАД', connected:'подключён', kmh:'км/ч',
@@ -1460,7 +1460,7 @@ en:{
   powerplay:'POWER PLAY', shorthand:'SHORT-HANDED',
   pause:'PAUSED', resume:'RESUME', mainMenu:'MAIN MENU',
   over:'FULL TIME', again:'PLAY AGAIN',
-  draw:'DRAW', winner:'WINNER:', youWin:'YOU WIN', youLose:'YOU LOSE',
+  draw:'DRAW', winner:'WINNER:', youWin:'YOU WIN', youLose:'YOU LOSE', dq:'DISQUALIFIED', dqSub:'every skater in the box', rwDq:'Disqualified',
   tactic:'Tactics', tacStd:'Balanced', tacAtt:'Attack', tacDef:'Defence',
   padA1:'pass', padA2:'press', padB1:'shot', padB2:'poke', padX1:'lob', padX2:'check', padY1:'through', padY2:'goalie',
   gamepad:'GAMEPAD', connected:'connected', kmh:'km/h',
@@ -1556,7 +1556,7 @@ id:{
   powerplay:'UNGGUL PEMAIN', shorthand:'KURANG PEMAIN',
   pause:'JEDA', resume:'LANJUTKAN', mainMenu:'MENU UTAMA',
   over:'PERTANDINGAN SELESAI', again:'MAIN LAGI',
-  draw:'SERI', winner:'PEMENANG:', youWin:'KAMU MENANG', youLose:'KAMU KALAH',
+  draw:'SERI', winner:'PEMENANG:', youWin:'KAMU MENANG', youLose:'KAMU KALAH', dq:'DISKUALIFIKASI', dqSub:'semua pemain kena hukuman', rwDq:'Diskualifikasi',
   tactic:'Taktik', tacStd:'Seimbang', tacAtt:'Menyerang', tacDef:'Bertahan',
   padA1:'umpan', padA2:'tekan', padB1:'tembak', padB2:'rebut', padX1:'lambung', padX2:'benturan', padY1:'terobosan', padY2:'kiper',
   gamepad:'GAMEPAD', connected:'terhubung', kmh:'km/j',
@@ -2660,13 +2660,13 @@ reset(true);
 
 /* ---------- экран результата ---------- */
 function showResult(){
-  var d=score[0]===score[1];
-  setText('oTitle', T('over'));
+  var d=score[0]===score[1] && MDQ<0;
+  setText('oTitle', MDQ>=0 ? T('dq')+': '+clubAb(TEAM[MDQ]) : T('over'));
   setText('oScore', score[0]+' : '+score[1]);
   var w;
   if(d) w=T('draw');
   else {
-    var wi = score[0]>score[1] ? 0 : 1;
+    var wi = MDQ>=0 ? 1-MDQ : (score[0]>score[1] ? 0 : 1);     /* дисквалификация: победа сопернику при любом счёте */
     w = T('winner')+' '+T(CLUBS_KEY[TEAM[wi].id]);
     if(!NET.on || true){
       w += ' — ' + ((wi===HUMAN)?T('youWin'):T('youLose'));
@@ -7764,7 +7764,8 @@ EV.on('goal',    function(e){ SFX.whistle(); SFX.horn(); buzz([60,50,120],'goal'
 EV.on('stoppage',function(e){ SFX.whistle(); buzz(25); if(e.reason!=='penalty') flash(T(e.reason),'',1.3); });
 EV.on('match:start', function(){ SFX.whistle(); fxReset(); });
 EV.on('match:end',   function(e){
-  /* у хоста экран результата показывает симуляция, у гостя — пришедшее событие */
+  /* у хоста экран результата показывает симуляция, у гостя — пришедшее событие (дисквалификацию — до экрана итога) */
+  if(e.dq===0 || e.dq===1) MDQ=e.dq;
   if(e.remote){ state='over'; showResult(); }
   SFX.whistle();
   setTimeout(function(){ SFX.whistle(); },220);
@@ -7854,8 +7855,12 @@ function matchStart(id, clubA, clubB){
   statsReset();
   EV.emit('match:start',{id:id, mode:MATCH.mode, role:MATCH.role, team:HUMAN, len:MATCH.len, clubs:MATCH.clubs.slice(), difficulty:MATCH.difficulty});
 }
+/* дисквалифицированная команда последнего матча (-1 — нет): из события match:end — одинаково у хоста и гостя */
+var MDQ=-1;
+EV.on('match:start', function(){ MDQ=-1; });
 function buildSummary(sc){
   var me=MATCH.team, res = sc[me]>sc[1-me]?'win':(sc[me]<sc[1-me]?'loss':'draw');
+  if(MDQ>=0) res = MDQ===me ? 'loss' : 'win';
   /* обрывы связи в сетевом матче: self — сколько раз переподключался сам, opp — пропадал ли соперник,
      selfLeft / oppLeft — не вернулся за 30 с (у не вернувшегося result:'left', счёт — на момент обрыва) */
   var dc=(MATCH.mode==='online' && NET.dc && (NET.dc.self||NET.dc.selfLeft||NET.dc.opp)) ?
@@ -7867,12 +7872,14 @@ function buildSummary(sc){
           room:MATCH.mode==='online'?NET.code:null,  /* по коду комнаты Worker сверит счёт серверного матча с Durable Object */
           route:MATCH.mode==='online' && ROUTE.list.length ? ROUTE.list.slice() : null,
           clubs:MATCH.clubs.slice(), len:MATCH.len, played:Math.round(MATCH.played),
-          startedAt:MATCH.startedAt, endedAt:Date.now(), score:sc.slice(), result:res, disconnect:dc,
+          startedAt:MATCH.startedAt, endedAt:Date.now(), score:sc.slice(), result:res, disconnect:dc, dq:MDQ,
           teams:[STATS.teams[0], STATS.teams[1]], players:pl, faceoffs:STATS.faceoffs, events:STATS.events,
           test:!!(TEST.autostart||TEST.autopilot||TEST.seed)};
 }
 EV.on('match:end', function(e){
   if(MATCH.summary) return;          /* гость может получить match:end повторно */
+  MDQ=(e.dq===0 || e.dq===1) ? e.dq : -1;
+  if(MDQ>=0) flash(T('dq'), clubAb(TEAM[MDQ])+' — '+T('dqSub'), 2.4);
   MATCH.summary=buildSummary(e.score||score);
   EV.emit('match:summary', MATCH.summary);
 });
@@ -8149,7 +8156,7 @@ function rwFrom(res){ return Math.max(0, res.balance-rwTotal(res)); }
 function rwRows(res){
   var h='', p=res.parts||{};
   var row=function(k, v){ return '<div class="rw-r"><span class="rk">'+mEsc(k)+'</span>'+v+'</div>'; };
-  var lab={win:'rwWin', draw:'rwDraw', loss:'rwLoss', left:'rwLeft'}[p.res];
+  var lab={win:'rwWin', draw:'rwDraw', loss:'rwLoss', left:'rwLeft', dq:'rwDq'}[p.res];
   if(lab) h+=row(T(lab), curHtml('coin', (p.base>0?'+':'')+(p.base|0)));
   if(p.bonus>0) h+=row(T('rwBonus'), curHtml('coin', '+'+p.bonus));
   var st=res.stake;

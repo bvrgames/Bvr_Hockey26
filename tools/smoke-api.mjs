@@ -74,7 +74,7 @@ function summary(o = {}) {
       const u = U.get(m.uid) || { coins: 0, stars: 0, matches: 0, wins: 0, draws: 0, losses: 0, goals: 0, goals_against: 0, streak: 0, best_streak: 0, online: 0, inventory: [] };
       u.coins += m.coins; u.matches++; u.wins += m.win; u.draws += m.draw; u.losses += 1 - m.win - m.draw; u.goals += m.my; u.goals_against += m.op;
       u.streak = m.win ? u.streak + 1 : 0; u.best_streak = Math.max(u.best_streak, u.streak); u.online += m.online; U.set(m.uid, u);
-      if (m.coins > 0) Lg.push({ uid: m.uid, d: m.coins, reason: m.reason, at: m.now });
+      if (m.coins !== 0) Lg.push({ uid: m.uid, d: m.coins, reason: m.reason, at: m.now });
       return 'ok';
     },
     async balance(uid) { return (U.get(uid) || { coins: 0 }).coins; },
@@ -173,6 +173,25 @@ function summary(o = {}) {
   t = await staked(10);
   await stakeFinish(store, t.id, { score: [1, 0], left: [true, true] }, now);
   ok(!t.err && bal(H) === 135 && bal(G) === 30, `stake: both left → both back (${bal(H)}, ${bal(G)})`);
+  // ---- disqualification (every skater in the box, the goalie alone): own players, the bookkeeping above is untouched
+  {
+    const D1 = user(9101, 50), D2 = user(9102, 50), D3 = user(9103, 25), D4 = user(9104, 4), D5 = user(9105, 0);
+    // a stake: the disqualified host loses it although he leads 3:0
+    const td = await staked(10, [D1, D2]);
+    await stakeFinish(store, td.id, { score: [3, 0], left: [false, false], dq: 0 }, now);
+    ok(!td.err && bal(D1) === 40 && bal(D2) === 60, `dq: the disqualified host loses the stake despite 3:0 (${bal(D1)}, ${bal(D2)})`);
+    // the report of the disqualified side: a loss with the lead, early end — accepted, −10, verdict dq
+    const dqs = (o) => summary({ score: [3, 1], patch: { played: 70, startedAt: Date.now() - 90000, ...o } });
+    r = await go('POST', '/v1/match', ide(D3), dqs({ dq: 0, result: 'loss' }));
+    ok(r.status === 200 && r.j.coins === -10 && r.j.balance === 15 && r.j.verdict === 'dq' && r.j.parts.res === 'dq', `dq: −10 coins ${JSON.stringify(r.j)}`);
+    r = await go('POST', '/v1/match', ide(D4), dqs({ dq: 0, result: 'loss' }));
+    ok(r.status === 200 && r.j.coins === -4 && r.j.balance === 0, `dq: the fine never goes below zero ${JSON.stringify(r.j)}`);
+    // the computer was disqualified: a win for the player whatever the score
+    r = await go('POST', '/v1/match', ide(D5), summary({ score: [0, 2], patch: { played: 70, startedAt: Date.now() - 90000, dq: 1, result: 'win' } }));
+    ok(r.status === 200 && r.j.coins > 0 && r.j.parts.res === 'win', `dq: the rival disqualified → coins for a win ${JSON.stringify(r.j)}`);
+    // claiming a win while disqualified → 422
+    ok((await go('POST', '/v1/match', ide(D5), dqs({ dq: 0, result: 'win' }))).status === 422, 'dq: a win for the disqualified side → 422');
+  }
   // not enough coins: the offer, the confirmation, and a balance that dropped before the start
   t = await staked(10, [Poor, G]);
   ok(t.err === 'funds' && bal(Poor) === 5, `stake: the host without coins cannot offer (${t.err})`);

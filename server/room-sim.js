@@ -181,8 +181,9 @@ export class MatchRoom {
         S.step(1 / SIM_HZ);
         if (S.state === 'over' && !this.ended) {
           this.ended = true;
+          // dq: the team left with its goalie alone (every skater in the box) — it lost whatever the score
           if (this.onEnd) this.onEnd({ id: this.cfg.id, len: Math.round(this.cfg.min * 60), score: [S.score[0], S.score[1]],
-                                       left: [this.port[0].left, this.port[1].left] });
+                                       left: [this.port[0].left, this.port[1].left], dq: S.DQ });
         }
       }
       this.steps++; this.stat.steps++;
