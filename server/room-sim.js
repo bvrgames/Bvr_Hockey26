@@ -38,7 +38,7 @@ const NETWORKED = { faceoff: 1, pass: 1, 'pass:recv': 1, shot: 1, save: 1, post:
                     hit: 1, penalty: 1, stoppage: 1, poke: 1, pickup: 1, 'match:end': 1 };
 const STC = { play: 0, face: 1, goal: 2, replay: 3, over: 4, menu: 5 };
 const BTN = ['A', 'B', 'X', 'Y', 'LB'];
-const CLUBS_N = 4;                                  // index.html CLUBS.length
+const CLUBS_N = 16;                                 // index.html CLUBS.length (8 national teams × 2 kits)
 const r2 = (v) => Math.round(v * 100) / 100, r1 = (v) => Math.round(v * 10) / 10;
 
 function mkPort() {
