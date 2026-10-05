@@ -397,16 +397,16 @@ function summary(o = {}) {
     ok(r.j.paid && r.j.n === 1 && U.get(V.id).coins === 120, `ad reward: the next UTC day → paid again ${JSON.stringify(r.j)}`);
     const pv = await handleCoins(req('GET', '/v1/profile', initData(V, { authDate: t0 + 86400 })), { ...adeps(t0 + 86400 + 60) });
     const pj = await pv.json();
-    ok(pj.ad && pj.ad.n === 1 && pj.ad.max === 5 && pj.ad.coins === 20 && pj.noadsPrice === 100 && pj.day.coins === 0, `ad reward: the profile shows ad {n, max, coins}, outside the match cap ${JSON.stringify([pj.ad, pj.day, pj.noadsPrice])}`);
-    // «no ads» for 100 stars: 402 without stars, once, the same idem again is a repeat, a second purchase → 409
+    ok(pj.ad && pj.ad.n === 1 && pj.ad.max === 5 && pj.ad.coins === 20 && pj.noadsPrice === 999 && pj.day.coins === 0, `ad reward: the profile shows ad {n, max, coins}, outside the match cap ${JSON.stringify([pj.ad, pj.day, pj.noadsPrice])}`);
+    // «no ads» for 999 stars: 402 without stars, once, the same idem again is a repeat, a second purchase → 409
     const W = { id: 777000444, first_name: 'Buyer' }, iw = initData(W);
     const nb = (idem, idata = iw) => go('POST', '/v1/shop/noads', idata, { idem });
     user(W.id, 0);
     r = await nb('noads-idem-0001');
-    ok(r.status === 402 && r.j.need === 100, `noads: no stars → 402 ${JSON.stringify(r.j)}`);
-    U.get(W.id).stars = 200;
+    ok(r.status === 402 && r.j.need === 999, `noads: no stars → 402 ${JSON.stringify(r.j)}`);
+    U.get(W.id).stars = 1099;
     r = await nb('noads-idem-0001');
-    ok(r.status === 200 && r.j.balance.stars === 100 && r.j.inventory.includes('noads') && !r.j.repeat, `noads: bought, −100 stars ${JSON.stringify(r.j)}`);
+    ok(r.status === 200 && r.j.balance.stars === 100 && r.j.inventory.includes('noads') && !r.j.repeat, `noads: bought, −999 stars ${JSON.stringify(r.j)}`);
     r = await nb('noads-idem-0001');
     ok(r.status === 200 && r.j.repeat && U.get(W.id).stars === 100, `noads: the same idem → repeat, nothing taken ${JSON.stringify(r.j)}`);
     U.get(W.id).stars = 500;
@@ -891,21 +891,23 @@ try {
     ar = await adr();
     ok(ar.status === 200 && !ar.j.paid && ar.j.reason === 'repeat', `D1 ad reward: the same call at once → repeat ${JSON.stringify(ar.j)}`);
     let pp = (await call('GET', '/v1/profile', iy)).j;
-    ok(pp.coins === 20 && pp.ad.n === 1 && pp.ad.max === 5 && pp.day.coins === 0 && pp.noadsPrice === 100, `D1 ad reward: profile coins 20, ad.n 1, outside the match cap ${JSON.stringify([pp.coins, pp.ad, pp.day])}`);
+    ok(pp.coins === 20 && pp.ad.n === 1 && pp.ad.max === 5 && pp.day.coins === 0 && pp.noadsPrice === 999, `D1 ad reward: profile coins 20, ad.n 1, outside the match cap ${JSON.stringify([pp.coins, pp.ad, pp.day])}`);
     // «no ads»
     const nb = (idem) => call('POST', '/v1/shop/noads', iy, { idem });
     ok((await nb('noads-d1-0001')).status === 402, 'D1 noads: no stars → 402');
-    const oy = (await call('POST', '/v1/stars/invoice', iy, { pack: 's300' })).j.order;
-    await hookRawY({ update_id: 30, message: { message_id: 70, from: Y, chat: { id: Y.id, type: 'private' }, date: Math.floor(Date.now() / 1000),
-      successful_payment: { currency: 'XTR', total_amount: 250, invoice_payload: oy, telegram_payment_charge_id: 'stxNOADS' + Date.now(), provider_payment_charge_id: '' } } });
+    for (let k = 0; k < 4; k++) {   // 4 × 300 = 1200 stars, «no ads» costs 999
+      const oy = (await call('POST', '/v1/stars/invoice', iy, { pack: 's300' })).j.order;
+      await hookRawY({ update_id: 30 + k, message: { message_id: 70 + k, from: Y, chat: { id: Y.id, type: 'private' }, date: Math.floor(Date.now() / 1000),
+        successful_payment: { currency: 'XTR', total_amount: 250, invoice_payload: oy, telegram_payment_charge_id: 'stxNOADS' + k + '_' + Date.now(), provider_payment_charge_id: '' } } });
+    }
     let nr = await nb('noads-d1-0001');
-    ok(nr.status === 200 && nr.j.balance.stars === 200 && nr.j.inventory.includes('noads'), `D1 noads: bought, 300 → 200 stars ${JSON.stringify(nr.j)}`);
+    ok(nr.status === 200 && nr.j.balance.stars === 201 && nr.j.inventory.includes('noads'), `D1 noads: bought, 1200 → 201 stars ${JSON.stringify(nr.j)}`);
     nr = await nb('noads-d1-0001');
-    ok(nr.status === 200 && nr.j.repeat && nr.j.balance.stars === 200, `D1 noads: the same idem → repeat ${JSON.stringify(nr.j)}`);
+    ok(nr.status === 200 && nr.j.repeat && nr.j.balance.stars === 201, `D1 noads: the same idem → repeat ${JSON.stringify(nr.j)}`);
     nr = await nb('noads-d1-0002');
-    ok(nr.status === 409 && nr.j.balance.stars === 200, `D1 noads: owned → 409, nothing taken ${JSON.stringify(nr.j)}`);
+    ok(nr.status === 409 && nr.j.balance.stars === 201, `D1 noads: owned → 409, nothing taken ${JSON.stringify(nr.j)}`);
     pp = (await call('GET', '/v1/profile', iy)).j;
-    ok(pp.inventory.includes('noads') && pp.stars === 200, `D1 noads: in the profile ${JSON.stringify([pp.inventory, pp.stars])}`);
+    ok(pp.inventory.includes('noads') && pp.stars === 201, `D1 noads: in the profile ${JSON.stringify([pp.inventory, pp.stars])}`);
   }
 
   // the game itself: queue on start, profile, reward on the result screen

@@ -466,7 +466,7 @@ async function postShopCoins(request, d, user, now) {
 
 // «No ads» for stars, forever (the inventory item 'noads'): turns off only the video after a match; the rewarded video
 // for coins stays. One edit here — the client takes the price from /v1/profile (noadsPrice).
-export const NOADS = { id: 'noads', stars: 100 };
+export const NOADS = { id: 'noads', stars: 999 };
 // POST /v1/shop/noads { idem } → 200 { item, stars, balance: { coins, stars }, inventory, repeat? } · 402 { reason:
 // 'stars', need, have } · 409 { reason: 'owned' } · 422. One transaction (store.itemBuy).
 async function postShopNoads(request, d, user, now) {
