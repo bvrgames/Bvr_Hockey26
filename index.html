@@ -560,6 +560,12 @@
   .rw-fx{position:fixed;left:0;top:0;z-index:5;pointer-events:none;opacity:0;transition:transform .6s cubic-bezier(.45,0,.55,1),opacity .15s;will-change:transform}
   .rw-fy{display:block;transition:transform .6s cubic-bezier(.6,-0.35,.8,.6);will-change:transform}
   .rw-fx .ic{display:block;width:22px;height:22px}
+  /* «+20» над кнопкой видео за монеты */
+  .ad-plus{position:fixed;z-index:31;pointer-events:none;transform:translate(-50%,-100%);font:italic 800 26px/1 var(--msport);color:var(--mgold);
+    text-shadow:0 2px 10px rgba(0,0,0,.5),0 0 14px rgba(255,209,102,.5);animation:adPlus 1.3s ease-out forwards;white-space:nowrap}
+  .ad-plus .ic{width:.9em;height:.9em;vertical-align:-.12em}
+  @keyframes adPlus{0%{opacity:0;transform:translate(-50%,-60%) scale(.6)}15%{opacity:1;transform:translate(-50%,-100%) scale(1.15)}
+    30%{transform:translate(-50%,-100%) scale(1)}75%{opacity:1}100%{opacity:0;transform:translate(-50%,-190%) scale(1)}}
   #pfps{font:700 11px/1 system-ui;color:#8fe3a0}
 </style>
 
@@ -8204,6 +8210,40 @@ function adsReward(){
     ADS.rs='wait'; adsPaint(); adsRwPoll(n0, id, Date.now());
   });
 }
+/* монеты за видео пришли: над кнопкой всплывает «+20», монеты летят от неё к кошельку экрана итога, баланс растёт по мере
+   прилёта (как монеты за матч, rwPlay); не на экране итога или «Уменьшение движения» — сразу итог */
+function adsFly(from, to){
+  var wl=document.getElementById('oWal'), btn=document.getElementById('oAdRw'), lay=document.getElementById('overscr');
+  var quiet=false; try{ quiet=matchMedia('(prefers-reduced-motion: reduce)').matches; }catch(e){}
+  if(!wl || !btn || !lay || !resultShown()) return;
+  wl.style.visibility='';
+  if(quiet || typeof from!=='number' || !(to>from)){ rwWal(to); wl.classList.remove('pop'); void wl.offsetWidth; wl.classList.add('pop'); SFX.coin(1); return; }
+  rwWal(from);
+  var a=btn.getBoundingClientRect(), b=(wl.querySelector('.ic')||wl).getBoundingClientRect();
+  var pl=document.createElement('span'); pl.className='ad-plus'; pl.innerHTML=curHtml('coin', '+'+(to-from));
+  pl.style.left=(a.left+a.width/2)+'px'; pl.style.top=(a.top-4)+'px';
+  lay.appendChild(pl); setTimeout(function(){ if(pl.parentNode) pl.parentNode.removeChild(pl); }, 1400);
+  var x0=a.left+28, y0=a.top+a.height/2-11, dx=b.left+b.width/2-11-x0, dy=b.top+b.height/2-11-y0;
+  var N=6, got=0;
+  for(var i=0;i<N;i++) (function(i){
+    var o=document.createElement('span'); o.className='rw-fx';
+    o.innerHTML='<span class="rw-fy">'+icHtml('coin')+'</span>';
+    o.style.transform='translate('+x0+'px,'+y0+'px)';
+    lay.appendChild(o);
+    setTimeout(function(){
+      o.style.opacity='1';
+      o.style.transform='translate('+(x0+dx)+'px,'+y0+'px)';
+      o.firstChild.style.transform='translateY('+dy+'px) scale(.85)';
+      setTimeout(function(){
+        if(o.parentNode) o.parentNode.removeChild(o);
+        got++;
+        rwWal(got>=N ? to : from+Math.round((to-from)*got/N));
+        wl.classList.remove('pop'); void wl.offsetWidth; wl.classList.add('pop');
+        SFX.coin(got);
+      }, 620);
+    }, 250+i*80);
+  })(i);
+}
 /* монеты за видео: ждём, пока сервер их запишет (ad.n в /v1/profile вырос) */
 function adsRwPoll(n0, id, t0){
   fetch(STATS_API+'/v1/profile', {headers:apiHeaders()})
@@ -8212,10 +8252,9 @@ function adsRwPoll(n0, id, t0){
   .then(function(j){
     if(ADS.rsId!==id || ADS.rs!=='wait') return;
     if(j && j.ad && j.ad.n>n0){
+      var from=COINS;
       ADS.got=j.ad.coins|0; ADS.rs='done'; coinsSet(j.coins, j.stars); adsProfile(j);
-      var wl=document.getElementById('oWal');
-      if(wl && resultShown()){ wl.style.visibility=''; rwWal(COINS); wl.classList.remove('pop'); void wl.offsetWidth; wl.classList.add('pop'); }
-      SFX.coin(1);
+      adsFly(from, COINS);
       return;
     }
     if(Date.now()-t0>ADS_CFG.waitMs){ ADS.rs='later'; adsPaint(); setTimeout(profileFetch, 30000); return; }
