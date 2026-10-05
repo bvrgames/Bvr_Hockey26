@@ -167,6 +167,12 @@
 
   /* отладочные индикаторы (скорость, FPS, сетевые счётчики) видны только с ?debug */
   body:not(.debug) .dbg{display:none!important}
+  /* тестовый бот: кнопка DBG прячет / показывает панель отладки (выбор запоминается) */
+  body.dbgoff #netdbg{display:none!important}
+  #dbgTog{display:none;position:fixed;z-index:100;padding:4px 8px;border-radius:6px;font:700 11px/1 monospace;color:#7dff8a;
+    background:rgba(0,0,0,.72);box-shadow:inset 0 0 0 1px rgba(125,255,138,.6);cursor:pointer;-webkit-user-select:none;user-select:none}
+  body.preview #dbgTog{display:block}
+  body.dbgoff #dbgTog{color:rgba(125,255,138,.55);box-shadow:inset 0 0 0 1px rgba(125,255,138,.25)}
   /* FPS — настройка игрока (меню/пауза) или ?debug */
   body:not(.debug):not(.showfps) #fps{display:none!important}
   /* подсказки геймпада на экране матча — только когда геймпад подключён */
@@ -704,6 +710,7 @@
     <div style="width:min(260px,60vw);height:6px;border-radius:3px;background:rgba(255,255,255,.15);overflow:hidden">
       <div style="width:0%;height:100%;background:#8fd8ff;transition:width .2s"></div></div>
   </div>
+  <div id="dbgTog">DBG</div>
   <div id="netdbg" class="dbg" style="display:none;position:fixed;left:10px;top:10px;z-index:99;pointer-events:none;
        font:12px/1.45 monospace;font-weight:700;color:#7dff8a;background:rgba(0,0,0,.78);padding:6px 10px;
        border-radius:6px;white-space:pre;max-width:calc(100vw - 20px);overflow:hidden"></div>
@@ -800,6 +807,10 @@ var TEST=(function(){
   t.noRoute = q.has('noroute');      /* без выбора маршрута до комнаты (ROUTE) — для сравнений */
   /* ?debug — показать отладочные индикаторы (класс .dbg): скорость, FPS, сеть */
   if(t.debug) document.body.classList.add('debug');
+  if(t.preview){
+    document.body.classList.add('preview');
+    try{ if(localStorage.getItem('bvr_dbgoff')==='1') document.body.classList.add('dbgoff'); }catch(e){}
+  }
   if(t.seed){
     /* mulberry32 */
     var a=t.seed>>>0;
@@ -1260,7 +1271,11 @@ function layoutTop(){
   /* FPS: слева, где нет кнопок Telegram, табло и экранных кнопок */
   var fps=document.getElementById('fps');
   /* сетевая диагностика (?debug) — под табло, у левого края */
-  var nd=document.getElementById('netdbg'); if(nd){ nd.style.left=Math.round(SA.l+8)+'px'; nd.style.top=Math.round(Math.max(hudB+6, below+6))+'px'; }
+  var nd=document.getElementById('netdbg'), ndt=document.getElementById('dbgTog'), ndY=Math.round(Math.max(hudB+6, below+6));
+  /* в тестовом боте над панелью — кнопка DBG (спрятать / показать), панель ниже неё */
+  var ndB=document.body.classList.contains('preview') ? 26 : 0;
+  if(ndt){ ndt.style.left=Math.round(SA.l+8)+'px'; ndt.style.top=ndY+'px'; }
+  if(nd){ nd.style.left=Math.round(SA.l+8)+'px'; nd.style.top=(ndY+ndB)+'px'; }
   /* FPS — левый нижний угол, над полоской «домой» и правее выреза */
   fps.style.left=Math.round(SA.l+10)+'px'; fps.style.top='auto'; fps.style.right='auto'; fps.style.bottom=Math.round(SA.b+8)+'px';
 }
@@ -2522,6 +2537,15 @@ function mainText(){
   return 'main: frame p90 '+p90(MAINM.fr)+' ms · long>50 '+(MAINM.ltN===null?'—':MAINM.ltN+'/s')+' · loop lag p90 '+p90(MAINM.lag)+' ms';
 }
 if(TEST.debug) mainMeterStart();
+(function(b){ if(!b) return;
+  /* кнопка внутри #stage: касание не должно доходить до управления игроком */
+  ['touchstart','touchmove','touchend','pointerdown','mousedown'].forEach(function(n){ b.addEventListener(n, function(e){ e.stopPropagation(); }, {passive:true}); });
+  b.addEventListener('click', function(e){
+    e.stopPropagation();
+    var off=document.body.classList.toggle('dbgoff');
+    try{ localStorage.setItem('bvr_dbgoff', off?'1':'0'); }catch(err){}
+  });
+})(document.getElementById('dbgTog'));
 var NDG={pings:[],pingsMenu:[],opp:[],n:0,diag:null,stOff:null};
 function ndgPong(m){
   var now=performance.now(), r=now-m.k;
