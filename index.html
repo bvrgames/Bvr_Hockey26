@@ -512,7 +512,7 @@
   .mtc2 .ctop{width:100%;display:flex;align-items:center;justify-content:space-between;gap:6px;padding:5px 7px 5px 12px}
   .mtc2 .cpos{font:700 10px/1 system-ui;letter-spacing:.22em;text-transform:uppercase;color:var(--mdim)}
   .mtc2.on .cpos{color:#fff}
-  .mtc2 .cban{width:100%;padding:8px 12px 7px;background:linear-gradient(100deg,var(--tc2),var(--tc) 70%);font:italic 800 24px/1 var(--msport);
+  .mtc2 .cban{width:100%;padding:8px 12px 7px;background:var(--tc);font:italic 800 24px/1 var(--msport);
     text-transform:uppercase;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 2px 6px rgba(0,0,0,.45)}
   .mtc2 .cbody{flex:1;min-height:0;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center}
   .mtc2 .cface{flex:1;min-height:0;display:flex;align-items:center;justify-content:center}
@@ -526,6 +526,9 @@
   .mtc2 .cwho{display:flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;font:italic 800 13px/1 var(--msport);
     text-transform:uppercase;background:rgba(255,255,255,.08);color:var(--mdim)}
   .mtc2 .cwho.you{background:var(--tc);color:#fff;box-shadow:0 0 14px var(--tc)}
+  .mtc2.lt .cban{color:#14161c;text-shadow:none}
+  .mtc2.lt .cwho.you{color:#14161c}
+  .mtc2.lt .cwho.you svg{color:#fff}
   .mtc2 .sl-n{animation:mslN .22s ease-out}.mtc2 .sl-p{animation:mslP .22s ease-out}
   @keyframes mslN{from{transform:translateY(26px);opacity:0}}
   @keyframes mslP{from{transform:translateY(-26px);opacity:0}}
@@ -2086,17 +2089,17 @@ var MESH_GOAL=merge([
 ]);
 
 /* сборные: у каждой две формы — 0 яркая (основная), 1 запасная (белая или тёмная). Картинки формы и флаг —
-   ASSETS.kits[id+k] и ASSETS.kits[id+'-flag'] (tools/prep-kits.mjs). В матче форма — цвета: j свитер, p трусы и полоса
-   внизу, h шлем, номер и полосы на рукавах */
+   ASSETS.kits[id+k] и ASSETS.kits[id+'-flag'] (tools/prep-kits.mjs). c — цвет сборной (плашка и подсветка на экране
+   страны). В матче форма — цвета: j свитер, p трусы и полоса внизу, h шлем, номер и полосы на рукавах */
 var NATIONS=[
-  {id:'rus', k:[{j:'#d52b1e',p:'#1f4fa0',h:'#ffffff'},{j:'#f2f4f7',p:'#1f4fa0',h:'#d52b1e'}]},
-  {id:'can', k:[{j:'#d4202b',p:'#16171a',h:'#ffffff'},{j:'#1a1b1f',p:'#d4202b',h:'#d4202b'}]},
-  {id:'usa', k:[{j:'#14295c',p:'#c8102e',h:'#ffffff'},{j:'#f2f4f7',p:'#14295c',h:'#c8102e'}]},
-  {id:'swe', k:[{j:'#f5c400',p:'#1d3264',h:'#1d3264'},{j:'#1d3264',p:'#f5c400',h:'#f5c400'}]},
-  {id:'ger', k:[{j:'#e9b52c',p:'#16171a',h:'#d0202a'},{j:'#16171a',p:'#e9b52c',h:'#e9b52c'}]},
-  {id:'kaz', k:[{j:'#3fa3dc',p:'#e8c33a',h:'#ffffff'},{j:'#f2f4f7',p:'#3fa3dc',h:'#e8c33a'}]},
-  {id:'blr', k:[{j:'#1f7a45',p:'#c8202e',h:'#ffffff'},{j:'#f2f4f7',p:'#1f7a45',h:'#c8202e'}]},
-  {id:'urs', k:[{j:'#c41e24',p:'#f3d6d6',h:'#ffffff'},{j:'#f2f4f7',p:'#c41e24',h:'#c41e24'}]}
+  {id:'rus', c:'#d52b1e', k:[{j:'#d52b1e',p:'#1f4fa0',h:'#ffffff'},{j:'#f2f4f7',p:'#1f4fa0',h:'#d52b1e'}]},
+  {id:'can', c:'#d4202b', k:[{j:'#d4202b',p:'#16171a',h:'#ffffff'},{j:'#1a1b1f',p:'#d4202b',h:'#d4202b'}]},
+  {id:'usa', c:'#2456c8', k:[{j:'#14295c',p:'#c8102e',h:'#ffffff'},{j:'#f2f4f7',p:'#14295c',h:'#c8102e'}]},
+  {id:'swe', c:'#f5c400', k:[{j:'#f5c400',p:'#1d3264',h:'#1d3264'},{j:'#1d3264',p:'#f5c400',h:'#f5c400'}]},
+  {id:'ger', c:'#e9b52c', k:[{j:'#e9b52c',p:'#16171a',h:'#d0202a'},{j:'#16171a',p:'#e9b52c',h:'#e9b52c'}]},
+  {id:'kaz', c:'#3fa3dc', k:[{j:'#3fa3dc',p:'#e8c33a',h:'#ffffff'},{j:'#f2f4f7',p:'#3fa3dc',h:'#e8c33a'}]},
+  {id:'blr', c:'#1f7a45', k:[{j:'#1f7a45',p:'#c8202e',h:'#ffffff'},{j:'#f2f4f7',p:'#1f7a45',h:'#c8202e'}]},
+  {id:'urs', c:'#c41e24', k:[{j:'#c41e24',p:'#f3d6d6',h:'#ffffff'},{j:'#f2f4f7',p:'#c41e24',h:'#c41e24'}]}
 ];
 /* команда в выборе, сети и «последнем матче» — номер формы в CLUBS: страна*2 + форма */
 var CLUBS=[];
@@ -6485,6 +6488,8 @@ function mTcArrow(s, d){
   return '<div class="mtar '+(d<0?'up':'dn')+'" data-for="'+(s?'away':'home')+'" data-dir="'+d+'"><svg viewBox="0 0 48 18"><path d="'+(d<0?'M4 15 L24 3 L44 15':'M4 3 L24 15 L44 3')+'"/></svg></div>';
 }
 /* картинка формы (экран «Форма», итог подготовки) или флаг (экран «Страна»); нет картинок — форма рисуется по цветам */
+/* светлый цвет (жёлтый, белый): надписи на нём тёмные */
+function kitLight(h){ var v=function(i){ return parseInt(h.substr(1+i*2,2),16); }; return 0.299*v(0)+0.587*v(1)+0.114*v(2)>170; }
 function mKitImg(c, flag, num){
   var K=ASSETS.kits, u=K && K[c.id+(flag?'-flag':c.k)];
   return u ? '<img class="'+(flag?'cflag':'ckimg')+'" alt="" draggable="false" src="'+mEsc(u)+'">' : mJersey(c, num);
@@ -6497,8 +6502,8 @@ function kitPreload(){
 }
 function mTeamCard2(s, club, other, kits){
   var c=CLUBS[club], ed=sideEdit(s), you=s===mySide(), sl=MENU.slide && MENU.slide.s===s && Date.now()-MENU.slide.t<400 ? (MENU.slide.d>0?' sl-n':' sl-p') : '';
-  var flag=!kits;
-  return '<div class="mtcw'+(ed?'':' ro')+'" style="--tc:'+c.j+'"><div class="mtc2 mglass'+(ed?' mf':' ro')+'" data-adj="'+(s?'away':'home')+'" style="--tc:'+c.j+';--tc2:'+c.p+'">'+
+  var flag=!kits, col=flag ? NATIONS[c.n].c : c.j, lt=kitLight(col);
+  return '<div class="mtcw'+(ed?'':' ro')+'" style="--tc:'+col+'"><div class="mtc2 mglass'+(ed?' mf':' ro')+(lt?' lt':'')+'" data-adj="'+(s?'away':'home')+'" style="--tc:'+col+'">'+
     '<div class="ctop"><span class="cpos">'+mEsc(T(s?'mAway':'mHome'))+'</span>'+
     '<span class="cwho'+(you?' you':'')+'">'+(you?PAD_ICON:(ONLINE?'':CPU_ICON))+mEsc(sideWho(s))+'</span></div>'+
     '<div class="cban'+sl+'">'+mEsc(clubName(c))+'</div>'+
@@ -6509,8 +6514,14 @@ function diffKey(){ return DIFF==='easy'?'dEasy':(DIFF==='hard'?'dHard':'dNormal
 /* шаг по сборным на карточке s (одну страну могут взять обе команды): форма по стороне — у «Дома» яркая, у «Гостей»
    запасная; похожа на форму соперника — другая */
 function nextNation(cur, d, s, other){ var n=NATIONS.length, v=(CLUBS[cur].n+d+n)%n; return kitFit(v*2+(s?1:0), other); }
-/* другая форма той же сборной — если не похожа на форму соперника */
-function nextKit(cur, other){ return kitClash(cur^1, other) ? cur : cur^1; }
+/* другая форма той же сборной: похожа на форму соперника — соперник переходит в свою другую форму (против ИИ; с другом
+   чужую карточку не трогаем — тогда смены нет). Ответ — [моя, соперника] */
+function nextKit(cur, other){
+  var n=cur^1;
+  if(!kitClash(n, other)) return [n, other];
+  if(!ONLINE && !kitClash(n, other^1)) return [n, other^1];
+  return [cur, other];
+}
 
 /* ---------- экраны ---------- */
 var MSCR={
@@ -7095,8 +7106,8 @@ function prepRebuild(){ var t=MENU.top(); if(state==='menu' && (t==='prep' || t=
 /* команда на стороне s: на экране «Страна» d — шаг по сборным, на «Форме» — другая форма; гость отправляет свой выбор хосту */
 function sideStep(s, d){
   if(!sideEdit(s)) return;
-  var kits=MENU.top()==='kits', st=function(cur, other){ return kits ? nextKit(cur, other) : nextNation(cur, d, s, other); };
-  if(sideIsMy(s)) selMy=st(selMy, selOp); else selOp=st(selOp, selMy);
+  var my=sideIsMy(s), cur=my?selMy:selOp, other=my?selOp:selMy, r=MENU.top()==='kits' ? nextKit(cur, other) : [nextNation(cur, d, s, other), other];
+  if(my){ selMy=r[0]; selOp=r[1]; } else { selOp=r[0]; selMy=r[1]; }
   MENU.slide={s:s, d:d, t:Date.now()};
   if(ONLINE && NET.role==='guest'){ if(NET.on) netSend({t:'pick', c:selOp}); prepRebuild(); return; }
   prepChanged();

@@ -118,17 +118,17 @@ async function collect(g, tag) {
     s = await MS(page); ok(s.stack.join() === 'main,modes,prep,kits' && s.focus === 'home', `keyboard: Next → kits ${JSON.stringify(s)}`);
     await keys(page, ['ArrowDown']);                               // home: Canada red → black
     s = await MS(page); ok(s.sel.my === 3 && s.sel.op === 5, `keyboard: home kit ${JSON.stringify(s.sel)}`);
-    await keys(page, ['ArrowRight', 'ArrowDown']);                 // away: USA white → navy is too close to the black — stays white
-    s = await MS(page); ok(s.focus === 'away' && s.sel.my === 5 && s.sel.op === 3, `keyboard: a similar kit is skipped ${JSON.stringify(s)}`);
+    await keys(page, ['ArrowRight', 'ArrowDown']);                 // away: USA white → navy, too close to the black: Canada goes red
+    s = await MS(page); ok(s.focus === 'away' && s.sel.my === 4 && s.sel.op === 2, `keyboard: a similar kit flips the rival's ${JSON.stringify(s)}`);
     await keys(page, ['KeyQ', 'Enter']);                           // back home, Next: match settings
-    s = await MS(page); ok(s.stack.join() === 'main,modes,prep,kits,setup' && s.focus === 'diff' && s.sel.my === 3, `keyboard: Next ${JSON.stringify(s)}`);
+    s = await MS(page); ok(s.stack.join() === 'main,modes,prep,kits,setup' && s.focus === 'diff' && s.sel.my === 2, `keyboard: Next ${JSON.stringify(s)}`);
     await keys(page, ['ArrowDown', 'ArrowRight']);                 // length 3 → 5
     await keys(page, ['ArrowDown', 'ArrowRight']);                 // tactics: balanced → attack
-    s = await MS(page); ok(s.sel.my === 3 && s.sel.min === 5 && s.sel.tac === 1, `keyboard: setup values ${JSON.stringify(s.sel)}`);
+    s = await MS(page); ok(s.sel.my === 2 && s.sel.min === 5 && s.sel.tac === 1, `keyboard: setup values ${JSON.stringify(s.sel)}`);
     // the choice is saved at once: Back and in again — the same setup
     await keys(page, ['Escape']); s = await MS(page); ok(s.stack.join() === 'main,modes,prep,kits', `keyboard: Back from the settings ${JSON.stringify(s)}`);
     await keys(page, ['Escape', 'Escape']); await to(page, 'vsai');
-    s = await MS(page); ok(s.stack.join() === 'main,modes,prep' && s.sel.my === 3 && s.sel.op === 5 && s.sel.min === 5 && s.sel.tac === 1, `keyboard: the setup is not remembered ${JSON.stringify(s)}`);
+    s = await MS(page); ok(s.stack.join() === 'main,modes,prep' && s.sel.my === 2 && s.sel.op === 4 && s.sel.min === 5 && s.sel.tac === 1, `keyboard: the setup is not remembered ${JSON.stringify(s)}`);
     await keys(page, ['Enter']);
     await keys(page, ['Enter']);
     await to(page, 'tac', false);                                 // the screen keeps its focus
@@ -136,7 +136,7 @@ async function collect(g, tag) {
     await keys(page, ['Enter']);
     if (await inMatch(page, 'keyboard')) {
       const m = await page.evaluate('({min: __hk.menuState().matchMin, t0: __hk.team()[0].id, k0: __hk.team()[0].k, tac: __hk.tac()[__hk.human()], clock: __hk.clock()})');
-      ok(m.min === 5 && m.t0 === 'can' && m.k0 === 1 && m.tac === 1 && m.clock > 290, `keyboard: match settings ${JSON.stringify(m)}`);
+      ok(m.min === 5 && m.t0 === 'can' && m.k0 === 0 && m.tac === 1 && m.clock > 290, `keyboard: match settings ${JSON.stringify(m)}`);
       ok(await page.evaluate('window.__tgBack.visible'), 'BackButton hidden in a match against the AI (should open the pause)');
       await page.waitForTimeout(300);
       await keys(page, ['Escape']);
@@ -155,7 +155,7 @@ async function collect(g, tag) {
     await to(page, 'quick');
     if (await inMatch(page, 'quick match')) {
       const m = await page.evaluate('({min: __hk.menuState().matchMin, t0: __hk.team()[0].id, k0: __hk.team()[0].k})');
-      ok(m.min === 5 && m.t0 === 'can' && m.k0 === 1, `quick match should repeat the saved setup: ${JSON.stringify(m)}`);
+      ok(m.min === 5 && m.t0 === 'can' && m.k0 === 0, `quick match should repeat the saved setup: ${JSON.stringify(m)}`);
       // play it to the end: the result screen by keyboard, then the profile counts the match
       await page.evaluate('__hk.setClock(0.3)');
       await page.waitForFunction('__hk.menuState().layer==="result"', null, { timeout: 20000 }).catch(() => fails.push('keyboard: no result screen'));
