@@ -515,16 +515,21 @@
   .mtc2{--tc:#888;--tc2:#444;position:relative;display:flex;flex-direction:column;align-items:center;min-height:0;padding:0 0 9px;border-radius:16px;overflow:hidden;
     touch-action:none;-webkit-user-select:none;user-select:none;opacity:.72;transition:box-shadow .2s,opacity .2s,transform .2s}
   .mtc2.on{opacity:1;transform:translateY(-2px);box-shadow:0 0 0 3px var(--tc),0 0 28px var(--tc),0 12px 30px rgba(0,0,0,.4)}
-  .mtc2 .cpos{width:100%;padding:6px 0 4px;font:700 10px/1 system-ui;letter-spacing:.22em;text-transform:uppercase;color:var(--mdim);text-align:center}
+  .mtc2 .ctop{width:100%;display:flex;align-items:center;justify-content:space-between;gap:6px;padding:5px 7px 5px 12px}
+  .mtc2 .cpos{font:700 10px/1 system-ui;letter-spacing:.22em;text-transform:uppercase;color:var(--mdim)}
   .mtc2.on .cpos{color:#fff}
   .mtc2 .cban{width:100%;padding:8px 12px 7px;background:linear-gradient(100deg,var(--tc2),var(--tc) 70%);font:italic 800 24px/1 var(--msport);
     text-transform:uppercase;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 2px 6px rgba(0,0,0,.45)}
   .mtc2 .cbody{flex:1;min-height:0;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center}
   .mtc2 .cface{flex:1;min-height:0;display:flex;align-items:center;justify-content:center}
-  .mtc2 .cface svg{height:100%;max-height:118px;width:auto;filter:drop-shadow(0 8px 12px rgba(0,0,0,.5))}
+  .mtc2 .cface svg,.mtc2 .cface .ckimg{height:100%;max-height:118px;width:auto;filter:drop-shadow(0 8px 12px rgba(0,0,0,.5))}
+  .mtc2 .cface .ckimg{max-height:150px;object-fit:contain;-webkit-user-drag:none;pointer-events:none}
+  .mtc2 .cbody{padding:6px 0}
+  .mtc2 .cface .cflag{height:100%;max-height:96px;width:auto;max-width:80%;height:auto;aspect-ratio:3/2;object-fit:cover;border-radius:7px;pointer-events:none;
+    box-shadow:0 0 0 1px rgba(255,255,255,.25),0 8px 18px rgba(0,0,0,.5)}
   .mtc2 .ckit{font:700 11px/1 system-ui;color:var(--mdim);letter-spacing:.04em}
   .mtc2 .ckit b{color:#f2f7ff;font-weight:700}
-  .mtc2 .cwho{display:flex;align-items:center;gap:7px;margin-top:7px;padding:5px 12px;border-radius:999px;font:italic 800 14px/1 var(--msport);
+  .mtc2 .cwho{display:flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;font:italic 800 13px/1 var(--msport);
     text-transform:uppercase;background:rgba(255,255,255,.08);color:var(--mdim)}
   .mtc2 .cwho.you{background:var(--tc);color:#fff;box-shadow:0 0 14px var(--tc)}
   .mtc2 .sl-n{animation:mslN .22s ease-out}.mtc2 .sl-p{animation:mslP .22s ease-out}
@@ -536,11 +541,11 @@
   .msum{display:flex;flex-direction:column;align-items:center;gap:8px}
   .msum .row{display:flex;align-items:center;gap:10px}
   .msum .tm{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:min(120px,16vw)}
-  .msum .tm svg{width:min(84px,11vw);height:auto;filter:drop-shadow(0 6px 10px rgba(0,0,0,.45))}
+  .msum .tm svg,.msum .tm img{width:min(84px,11vw);height:auto;filter:drop-shadow(0 6px 10px rgba(0,0,0,.45))}
   .msum .tm b{font:italic 800 16px/1 var(--msport);text-transform:uppercase;white-space:nowrap}
   .msum .tm i{font:700 9px/1 system-ui;font-style:normal;letter-spacing:.14em;white-space:nowrap;text-transform:uppercase;color:var(--mdim)}
   .msum .tm.you i{color:var(--mgold)}
-  @media (max-height:380px){ .mtc2 .cban{font-size:19px;padding:6px 10px 5px} .mtc2 .cface svg{max-height:92px} .mtc2 .cwho{margin-top:5px;font-size:12px} .mtmid{gap:9px} }
+  @media (max-height:380px){ .mtc2 .cban{font-size:19px;padding:6px 10px 5px} .mtc2 .cface svg{max-height:92px} .mtc2 .cwho{font-size:12px} .mtmid{gap:9px} }
   .mopts{display:flex;flex-direction:column;gap:4px}
   /* низкий экран (iPhone 390 px, Android 360 px): строки настроек плотнее, иначе 7 строк уходят под заголовок */
   @media (max-height:430px){ .mopts{gap:2px} .mopts .mrow{min-height:30px;padding-top:3px;padding-bottom:3px} }
@@ -1382,8 +1387,8 @@ ru:{
   join:'ВОЙТИ', host:'СОЗДАТЬ', codeHint:'КОД', notConnected:'не подключено',
   connecting:'подключение…', waiting:'ждём соперника…', peerIn:'соперник подключён',
   peerOut:'соперник отключился', roomFull:'комната занята', netErr:'нет связи',
-  red:'КРАСНЫЕ', blue:'СИНИЕ', yellow:'ЖЁЛТЫЕ', green:'ЗЕЛЁНЫЕ',
-  abRed:'КРС', abBlue:'СИН', abYellow:'ЖЛТ', abGreen:'ЗЕЛ',
+  n_rus:'РОССИЯ', n_can:'КАНАДА', n_usa:'США', n_swe:'ШВЕЦИЯ', n_ger:'ГЕРМАНИЯ', n_kaz:'КАЗАХСТАН', n_blr:'БЕЛАРУСЬ', n_urs:'СССР',
+  ab_rus:'РОС', ab_can:'КАН', ab_usa:'США', ab_swe:'ШВЕ', ab_ger:'ГЕР', ab_kaz:'КАЗ', ab_blr:'БЕЛ', ab_urs:'СССР',
   match:'МАТЧ', goal:'ГОЛ!', ourGoal:'наша шайба', theirGoal:'пропустили',
   save:'СЕЙВ', hit:'СИЛОВОЙ!', penalty:'УДАЛЕНИЕ', penaltySub:'атака игрока без шайбы',
   pr_trip:'ПОДНОЖКА', pr_slash:'УДАР КЛЮШКОЙ', pr_hold:'ЗАДЕРЖКА КЛЮШКОЙ', pr_back:'АТАКА СЗАДИ', pr_board:'ТОЛЧОК НА БОРТ', pr_interference:'БЛОКИРОВКА',
@@ -1406,7 +1411,7 @@ ru:{
   mModes:'Режим игры',
   mVsAI:'Против компьютера', mVsAID:'Ты и твоя команда против ИИ · 3 уровня сложности',
   mFriend:'С другом', mFriendD:'Приглашение в чат Telegram · матч считает сервер',
-  mPrep:'Подготовка матча', mTeams:'Выбор команд', mHome:'Дома', mAway:'Гости', mYou:'Ты', mCpu:'Компьютер', mPal:'Друг', mKit:'Форма', mKit1:'основная', mNext:'Далее', mSetup:'Настройки матча', mTeamK:'Команда', mCardK:'Карточка', mSideK:'Сторона', mMy:'Твоя команда', mOpp:'Соперник', mLen:'Длина матча', mTac:'Тактика',
+  mPrep:'Подготовка матча', mTeams:'Выбор команд', mHome:'Дома', mAway:'Гости', mYou:'Ты', mCpu:'Компьютер', mPal:'Друг', mKit:'Форма', mKit1:'основная', mKit2:'запасная', mKits:'Выбор формы', mNext:'Далее', mSetup:'Настройки матча', mTeamK:'Команда', mCardK:'Карточка', mSideK:'Сторона', mMy:'Твоя команда', mOpp:'Соперник', mLen:'Длина матча', mTac:'Тактика',
   mCreate:'Создать комнату', mCreateD:'Код и ссылка-приглашение для друга', mJoin:'Войти по коду', mJoinD:'Код из приглашения друга',
   mRoom:'Комната', mInvite:'Отправить приглашение', mJoinBtn:'Войти',
   mRoomNote:'Друг откроет игру по ссылке и сразу попадёт в комнату. Пропала связь — вернём в тот же матч.',
@@ -1477,8 +1482,8 @@ en:{
   join:'JOIN', host:'CREATE', codeHint:'CODE', notConnected:'not connected',
   connecting:'connecting…', waiting:'waiting for opponent…', peerIn:'opponent connected',
   peerOut:'opponent left', roomFull:'room is full', netErr:'no connection',
-  red:'RED', blue:'BLUE', yellow:'YELLOW', green:'GREEN',
-  abRed:'RED', abBlue:'BLU', abYellow:'YEL', abGreen:'GRN',
+  n_rus:'RUSSIA', n_can:'CANADA', n_usa:'USA', n_swe:'SWEDEN', n_ger:'GERMANY', n_kaz:'KAZAKHSTAN', n_blr:'BELARUS', n_urs:'USSR',
+  ab_rus:'RUS', ab_can:'CAN', ab_usa:'USA', ab_swe:'SWE', ab_ger:'GER', ab_kaz:'KAZ', ab_blr:'BLR', ab_urs:'URS',
   match:'MATCH', goal:'GOAL!', ourGoal:'we scored', theirGoal:'conceded',
   save:'SAVE', hit:'BIG HIT!', penalty:'PENALTY', penaltySub:'hit on a player without the puck',
   pr_trip:'TRIPPING', pr_slash:'SLASHING', pr_hold:'HOOKING', pr_back:'CHECKING FROM BEHIND', pr_board:'BOARDING', pr_interference:'INTERFERENCE',
@@ -1501,7 +1506,7 @@ en:{
   mModes:'Game modes',
   mVsAI:'Vs computer', mVsAID:'You and your team against the AI · 3 difficulty levels',
   mFriend:'With a friend', mFriendD:'Invite in a Telegram chat · the server runs the match',
-  mPrep:'Match setup', mTeams:'Team select', mHome:'Home', mAway:'Away', mYou:'You', mCpu:'CPU', mPal:'Friend', mKit:'Kit', mKit1:'primary', mNext:'Next', mSetup:'Match settings', mTeamK:'Team', mCardK:'Card', mSideK:'Side', mMy:'Your team', mOpp:'Opponent', mLen:'Match length', mTac:'Tactics',
+  mPrep:'Match setup', mTeams:'Team select', mHome:'Home', mAway:'Away', mYou:'You', mCpu:'CPU', mPal:'Friend', mKit:'Kit', mKit1:'primary', mKit2:'alternate', mKits:'Kit select', mNext:'Next', mSetup:'Match settings', mTeamK:'Team', mCardK:'Card', mSideK:'Side', mMy:'Your team', mOpp:'Opponent', mLen:'Match length', mTac:'Tactics',
   mCreate:'Create a room', mCreateD:'Code and invite link for a friend', mJoin:'Join with a code', mJoinD:"Code from your friend's invite",
   mRoom:'Room', mInvite:'Send invite', mJoinBtn:'Join',
   mRoomNote:'Your friend opens the game from the link and lands in the room. Lost connection? You return to the same match.',
@@ -1573,8 +1578,8 @@ id:{
   join:'GABUNG', host:'BUAT', codeHint:'KODE', notConnected:'belum terhubung',
   connecting:'menghubungkan…', waiting:'menunggu lawan…', peerIn:'lawan terhubung',
   peerOut:'lawan keluar', roomFull:'ruangan penuh', netErr:'tidak ada koneksi',
-  red:'MERAH', blue:'BIRU', yellow:'KUNING', green:'HIJAU',
-  abRed:'MRH', abBlue:'BIR', abYellow:'KNG', abGreen:'HJU',
+  n_rus:'RUSIA', n_can:'KANADA', n_usa:'AMERIKA', n_swe:'SWEDIA', n_ger:'JERMAN', n_kaz:'KAZAKHSTAN', n_blr:'BELARUS', n_urs:'UNI SOVIET',
+  ab_rus:'RUS', ab_can:'KAN', ab_usa:'USA', ab_swe:'SWE', ab_ger:'JER', ab_kaz:'KAZ', ab_blr:'BLR', ab_urs:'URS',
   match:'LAGA', goal:'GOL!', ourGoal:'kita mencetak gol', theirGoal:'kebobolan',
   save:'PENYELAMATAN', hit:'BENTURAN KERAS!', penalty:'PENALTI',
   pr_trip:'MENJEGAL', pr_slash:'MEMUKUL DENGAN STIK', pr_hold:'MENAHAN DENGAN STIK', pr_back:'MENYERANG DARI BELAKANG', pr_board:'MENDORONG KE PAPAN', pr_interference:'MENGHALANGI',
@@ -1598,7 +1603,7 @@ id:{
   mModes:'Mode permainan',
   mVsAI:'Lawan komputer', mVsAID:'Kamu dan timmu melawan AI · 3 tingkat kesulitan',
   mFriend:'Dengan teman', mFriendD:'Undang di chat Telegram · server menjalankan laga',
-  mPrep:'Persiapan laga', mTeams:'Pilih tim', mHome:'Kandang', mAway:'Tandang', mYou:'Kamu', mCpu:'Komputer', mPal:'Teman', mKit:'Seragam', mKit1:'utama', mNext:'Lanjut', mSetup:'Pengaturan laga', mTeamK:'Tim', mCardK:'Kartu', mSideK:'Sisi', mMy:'Timmu', mOpp:'Lawan', mLen:'Durasi laga', mTac:'Taktik',
+  mPrep:'Persiapan laga', mTeams:'Pilih tim', mHome:'Kandang', mAway:'Tandang', mYou:'Kamu', mCpu:'Komputer', mPal:'Teman', mKit:'Seragam', mKit1:'utama', mKit2:'cadangan', mKits:'Pilih seragam', mNext:'Lanjut', mSetup:'Pengaturan laga', mTeamK:'Tim', mCardK:'Kartu', mSideK:'Sisi', mMy:'Timmu', mOpp:'Lawan', mLen:'Durasi laga', mTac:'Taktik',
   mCreate:'Buat ruang', mCreateD:'Kode dan tautan undangan untuk teman', mJoin:'Masuk dengan kode', mJoinD:'Kode dari undangan teman',
   mRoom:'Ruang', mInvite:'Kirim undangan', mJoinBtn:'Masuk',
   mRoomNote:'Temanmu membuka game dari tautan dan langsung masuk ruang. Koneksi putus? Kamu kembali ke laga yang sama.',
@@ -2095,16 +2100,32 @@ var MESH_GOAL=merge([
   part(box(0.06,1.12,1.80,'#ced3db',{y0:0.04}),-0.74,0,0)
 ]);
 
-var CLUBS=[
-  {id:'red',    j:'#c8354a', p:'#8d2233', h:'#e8eaee'},
-  {id:'blue',   j:'#2b62c8', p:'#1c3f86', h:'#e8eaee'},
-  {id:'yellow', j:'#e0a92a', p:'#9c7412', h:'#2a2a30'},
-  {id:'green',  j:'#1f7a52', p:'#14513a', h:'#e8eaee'}
+/* сборные: у каждой две формы — 0 яркая (основная), 1 запасная (белая или тёмная). Картинки формы и флаг —
+   ASSETS.kits[id+k] и ASSETS.kits[id+'-flag'] (tools/prep-kits.mjs). В матче форма — цвета: j свитер, p трусы и полоса
+   внизу, h шлем, номер и полосы на рукавах */
+var NATIONS=[
+  {id:'rus', k:[{j:'#d52b1e',p:'#1f4fa0',h:'#ffffff'},{j:'#f2f4f7',p:'#1f4fa0',h:'#d52b1e'}]},
+  {id:'can', k:[{j:'#d4202b',p:'#16171a',h:'#ffffff'},{j:'#1a1b1f',p:'#d4202b',h:'#d4202b'}]},
+  {id:'usa', k:[{j:'#14295c',p:'#c8102e',h:'#ffffff'},{j:'#f2f4f7',p:'#14295c',h:'#c8102e'}]},
+  {id:'swe', k:[{j:'#f5c400',p:'#1d3264',h:'#1d3264'},{j:'#1d3264',p:'#f5c400',h:'#f5c400'}]},
+  {id:'ger', k:[{j:'#e9b52c',p:'#16171a',h:'#d0202a'},{j:'#16171a',p:'#e9b52c',h:'#e9b52c'}]},
+  {id:'kaz', k:[{j:'#3fa3dc',p:'#e8c33a',h:'#ffffff'},{j:'#f2f4f7',p:'#3fa3dc',h:'#e8c33a'}]},
+  {id:'blr', k:[{j:'#1f7a45',p:'#c8202e',h:'#ffffff'},{j:'#f2f4f7',p:'#1f7a45',h:'#c8202e'}]},
+  {id:'urs', k:[{j:'#c41e24',p:'#f3d6d6',h:'#ffffff'},{j:'#f2f4f7',p:'#c41e24',h:'#c41e24'}]}
 ];
-var CLUBS_KEY={red:'red',blue:'blue',yellow:'yellow',green:'green'};
-var CLUBS_AB ={red:'abRed',blue:'abBlue',yellow:'abYellow',green:'abGreen'};
-function clubName(c){ return T(CLUBS_KEY[c.id]); }
-function clubAb(c){ return T(CLUBS_AB[c.id]); }
+/* команда в выборе, сети и «последнем матче» — номер формы в CLUBS: страна*2 + форма */
+var CLUBS=[];
+NATIONS.forEach(function(nt, n){ nt.k.forEach(function(c, k){ CLUBS.push({id:nt.id, n:n, k:k, j:c.j, p:c.p, h:c.h}); }); });
+function clubName(c){ return T('n_'+c.id); }
+function clubAb(c){ return T('ab_'+c.id); }
+/* похожие формы (две красные, две белые, тёмно-синяя и чёрная) на льду не различить — такие вместе не выходят */
+function kitClash(a, b){
+  var x=CLUBS[a], y=CLUBS[b]; if(!x || !y) return false;
+  var d=function(h, i){ return parseInt(h.substr(1+i*2,2),16); };
+  return Math.hypot(d(x.j,0)-d(y.j,0), d(x.j,1)-d(y.j,1), d(x.j,2)-d(y.j,2))<110;
+}
+/* форма i рядом с формой other: похожа — другая форма той же сборной (если та подходит) */
+function kitFit(i, other){ return kitClash(i, other) && !kitClash(i^1, other) ? i^1 : i; }
 var TEAM=[CLUBS[0],CLUBS[3]];
 var MESH_SK=[], MESH_GK=[];
 function buildTeamMeshes(){
@@ -2697,7 +2718,7 @@ function showResult(){
   if(d) w=T('draw');
   else {
     var wi = MDQ>=0 ? 1-MDQ : (score[0]>score[1] ? 0 : 1);     /* дисквалификация: победа сопернику при любом счёте */
-    w = T('winner')+' '+T(CLUBS_KEY[TEAM[wi].id]);
+    w = T('winner')+' '+clubName(TEAM[wi]);
     if(!NET.on || true){
       w += ' — ' + ((wi===HUMAN)?T('youWin'):T('youLose'));
     }
@@ -5443,12 +5464,12 @@ function netConnect(url, code, cb, re){
     else if(m.t==='full'){ if(re){ netGiveUp(); return; } NET.on=false; netStatus(T('roomFull')); }
     /* выбор хоста на экране подготовки (гость видит его до старта); команду гостя хост берёт из 'pick' */
     else if(m.t==='prep' && NET.role==='guest'){
-      if(CLUBS[m.a] && CLUBS[m.b] && m.a!==m.b){ selMy=m.a|0; selOp=m.b|0; }
+      if(CLUBS[m.a] && CLUBS[m.b] && !kitClash(m.a, m.b)){ selMy=m.a|0; selOp=m.b|0; NET.prep={a:selMy, b:selOp}; }
       if(MIN_OPTS.indexOf(m.min)>=0) selMin=m.min;
       prepRebuild();
     }
     else if(m.t==='pick' && NET.role==='host'){
-      var pc=m.c|0; if(CLUBS[pc] && pc!==selMy && m.c===pc) selOp=pc;
+      var pc=m.c|0; if(CLUBS[pc] && !kitClash(pc, selMy) && m.c===pc) selOp=pc;
       prepChanged();      /* ответ гостю — общий выбор (если взял занятую — вернётся прежняя) */
     }
     else if(m.t==='fb'){ netSrvFallback(m.k, true); }
@@ -5474,10 +5495,16 @@ function netConnect(url, code, cb, re){
       if(m.id && m.id===MATCH.id && netInMatch()) return;
       /* матч начал другой, а модели ещё качаются: играем, экран загрузки — пока их нет */
       if(!PLAYERS.done && !PLAYERS.failed){ loadingShow(true); playersReady(function(){ loadingShow(false); }); }
-      TEAM[0]=CLUBS[m.a]; TEAM[1]=CLUBS[m.b];
+      /* формы: у хоста — свой выбор, у гостя — последний общий выбор из 'prep'. Комната до деплоя Worker'а со
+         сборными (server/room-sim.js CLUBS_N) обрезает номер формы до 0..3 — cfg берём, только если выбора нет
+         (гость вернулся в идущий матч после перезагрузки) */
+      var ca=m.a|0, cb=m.b|0;
+      if(NET.role==='host'){ ca=selMy; cb=selOp; } else if(NET.prep){ ca=NET.prep.a; cb=NET.prep.b; }
+      if(!CLUBS[ca] || !CLUBS[cb]){ ca=0; cb=3; }
+      TEAM[0]=CLUBS[ca]; TEAM[1]=CLUBS[cb];
       buildTeamMeshes();
       MATCH_MIN=m.min; clock=MATCH_MIN*60;
-      selMy=m.a; selOp=m.b; if(MIN_OPTS.indexOf(m.min)>=0) selMin=m.min;
+      selMy=ca; selOp=cb; if(MIN_OPTS.indexOf(m.min)>=0) selMin=m.min;
       score[0]=0; score[1]=0; pen.length=0;
       document.getElementById('s1').textContent='0';
       document.getElementById('s2').textContent='0';
@@ -6393,7 +6420,7 @@ var LAST={my:0, op:3, min:3, tac:0, side:0};
 function lastApply(v){
   var o=null; try{ o=JSON.parse(v); }catch(e){}
   if(!o) return false;
-  if(CLUBS[o.my] && CLUBS[o.op] && o.my!==o.op){ LAST.my=o.my|0; LAST.op=o.op|0; }
+  if(CLUBS[o.my] && CLUBS[o.op] && !kitClash(o.my, o.op)){ LAST.my=o.my|0; LAST.op=o.op|0; }
   if(MIN_OPTS.indexOf(o.min)>=0) LAST.min=o.min;
   if(o.tac===0||o.tac===1||o.tac===2) LAST.tac=o.tac;
   if(o.side===0||o.side===1) LAST.side=o.side;
@@ -6481,16 +6508,33 @@ var CPU_ICON='<svg viewBox="0 0 22 16" width="22" height="16"><rect x="1.5" y="1
 function mTcArrow(s, d){
   return '<div class="mtar '+(d<0?'up':'dn')+'" data-for="'+(s?'away':'home')+'" data-dir="'+d+'"><svg viewBox="0 0 48 18"><path d="'+(d<0?'M4 15 L24 3 L44 15':'M4 3 L24 15 L44 3')+'"/></svg></div>';
 }
-function mTeamCard2(s, club, other){
+/* картинка формы (экран «Форма», итог подготовки) или флаг (экран «Страна»); нет картинок — форма рисуется по цветам */
+function mKitImg(c, flag, num){
+  var K=ASSETS.kits, u=K && K[c.id+(flag?'-flag':c.k)];
+  return u ? '<img class="'+(flag?'cflag':'ckimg')+'" alt="" draggable="false" src="'+mEsc(u)+'">' : mJersey(c, num);
+}
+/* картинки всех сборных — заранее, с входа в выбор: листание без пустых кадров */
+var KITPRE=null;
+function kitPreload(){
+  if(KITPRE || !ASSETS.kits) return; KITPRE=[];
+  for(var k in ASSETS.kits){ var im=new Image(); im.src=ASSETS.kits[k]; KITPRE.push(im); }
+}
+function mTeamCard2(s, club, other, kits){
   var c=CLUBS[club], ed=sideEdit(s), you=s===mySide(), sl=MENU.slide && MENU.slide.s===s && Date.now()-MENU.slide.t<400 ? (MENU.slide.d>0?' sl-n':' sl-p') : '';
+  var flag=!kits;
   return '<div class="mtcw'+(ed?'':' ro')+'" style="--tc:'+c.j+'"><div class="mtc2 mglass'+(ed?' mf':' ro')+'" data-adj="'+(s?'away':'home')+'" style="--tc:'+c.j+';--tc2:'+c.p+'">'+
-    '<div class="cpos">'+mEsc(T(s?'mAway':'mHome'))+'</div><div class="cban'+sl+'">'+mEsc(clubName(c))+'</div>'+
-    '<div class="cbody"><div class="cface'+sl+'">'+mJersey(c, you?'9':'17')+'</div></div>'+
-    '<div class="ckit">'+mEsc(T('mKit'))+' · <b>'+mEsc(T('mKit1'))+'</b></div>'+
-    '<div class="cwho'+(you?' you':'')+'">'+(you?PAD_ICON:(ONLINE?'':CPU_ICON))+mEsc(sideWho(s))+'</div></div>'+mTcArrow(s,-1)+mTcArrow(s,1)+'</div>';
+    '<div class="ctop"><span class="cpos">'+mEsc(T(s?'mAway':'mHome'))+'</span>'+
+    '<span class="cwho'+(you?' you':'')+'">'+(you?PAD_ICON:(ONLINE?'':CPU_ICON))+mEsc(sideWho(s))+'</span></div>'+
+    '<div class="cban'+sl+'">'+mEsc(clubName(c))+'</div>'+
+    '<div class="cbody"><div class="cface'+(flag?' fl':'')+sl+'">'+mKitImg(c, flag, you?'9':'17')+'</div></div>'+
+    (flag ? '' : '<div class="ckit">'+mEsc(T('mKit'))+' · <b>'+mEsc(T(c.k?'mKit2':'mKit1'))+'</b></div>')+'</div>'+mTcArrow(s,-1)+mTcArrow(s,1)+'</div>';
 }
 function diffKey(){ return DIFF==='easy'?'dEasy':(DIFF==='hard'?'dHard':'dNormal'); }
-function nextClub(cur, d, other){ var n=CLUBS.length, v=cur; do{ v=(v+d+n)%n; }while(v===other); return v; }
+/* шаг по сборным на карточке s (одну страну могут взять обе команды): форма по стороне — у «Дома» яркая, у «Гостей»
+   запасная; похожа на форму соперника — другая */
+function nextNation(cur, d, s, other){ var n=NATIONS.length, v=(CLUBS[cur].n+d+n)%n; return kitFit(v*2+(s?1:0), other); }
+/* другая форма той же сборной — если не похожа на форму соперника */
+function nextKit(cur, other){ return kitClash(cur^1, other) ? cur : cur^1; }
 
 /* ---------- экраны ---------- */
 var MSCR={
@@ -6509,14 +6553,16 @@ var MSCR={
   },
   /* экран 1 — выбор команд: две карточки (слева «Дома», справа «Гости»), между ними «Далее».
      Против ИИ игрок играет за карточку, которую выбрал (касание, свайп, ← →): «Ты» переезжает к ней */
-  prep:function(){
+  prep:function(kits){
     var home=sideClub(0), away=sideClub(1);
-    return mHead(T('mTeams'),'<span class="mpill">'+mEsc(ONLINE?T('mFriend'):T('mVsAI'))+'</span>')+
-      '<div class="mleft"><div class="mtsel">'+mTeamCard2(0, home, away)+
+    return mHead(T(kits?'mKits':'mTeams'),'<span class="mpill">'+mEsc(ONLINE?T('mFriend'):T('mVsAI'))+'</span>')+
+      '<div class="mleft"><div class="mtsel">'+mTeamCard2(0, home, away, kits)+
       '<div class="mtmid"><div class="mvs">VS</div><button class="mbtn mnext" data-act="next">'+mEsc(T('mNext'))+' ›</button></div>'+
-      mTeamCard2(1, away, home)+'</div></div>';
+      mTeamCard2(1, away, home, kits)+'</div></div>';
   },
-  /* экран 2 — настройки матча: длина, сложность, тактика, ставка, «Начать матч» */
+  /* экран 2 — форма: те же карточки, вместо флага — форма сборной (две: основная и запасная) */
+  kits:function(){ return MSCR.prep(true); },
+  /* экран 3 — настройки матча: длина, сложность, тактика, ставка, «Начать матч» */
   setup:function(){
     var guest=ONLINE && NET.role==='guest';
     var opts='<div class="mopts">'+(ONLINE?'':mRow('diff',T('diff'),mArr(T(diffKey()))))+mRow('min',T('mLen'),mArr(T('min'+selMin)),guest?'ro':'')+
@@ -6524,7 +6570,7 @@ var MSCR={
       mRow('tac',T('mTac'),mArr(T(TACNAME[selTac])))+(ONLINE?'<div class="mwait" data-paint="prepSt"></div>':'')+'</div>'+
       '<button class="mbtn mf mgo" id="go" data-act="go"></button>';
     var tm=function(s){ var c=sideClub(s), you=s===mySide();
-      return '<div class="tm'+(you?' you':'')+'">'+mJersey(CLUBS[c], you?'9':'17')+'<b>'+mEsc(clubName(CLUBS[c]))+'</b><i>'+mEsc(T(s?'mAway':'mHome'))+' · '+mEsc(sideWho(s))+'</i></div>'; };
+      return '<div class="tm'+(you?' you':'')+'">'+mKitImg(CLUBS[c], false, you?'9':'17')+'<b>'+mEsc(clubName(CLUBS[c]))+'</b><i>'+mEsc(T(s?'mAway':'mHome'))+' · '+mEsc(sideWho(s))+'</i></div>'; };
     return mHead(T('mSetup'),'<span class="mpill">'+mEsc(ONLINE?T('mFriend'):T('mVsAI'))+'</span>')+
       '<div class="mleft"><div class="mprep"><div class="msum"><div class="row">'+tm(0)+'<div class="mvs">VS</div>'+tm(1)+'</div></div>'+opts+'</div></div>';
   },
@@ -6837,7 +6883,7 @@ MENU.setFocus=function(i, L){
 MENU.onFocus=function(id){
   var s=MENU.sec[id]; if(!s) return;
   if(id==='train'){ var fl=MENU.focusedEl('train'); if(fl && fl.getAttribute('data-act')==='lstart') return; }
-  if(id==='prep' && !ONLINE){ var fe=MENU.focusedEl('prep'); if(fe) setSide(fe.getAttribute('data-adj')==='away'?1:0); return; }
+  if((id==='prep' || id==='kits') && !ONLINE){ var fe=MENU.focusedEl(id); if(fe) setSide(fe.getAttribute('data-adj')==='away'?1:0); return; }
   if(id==='friend'){ var a=MENU.focusedAct('friend'); if(a==='create'||a==='joinf'){ if(a!==MENU.friendMode){ MENU.friendMode=a; MENU.paintParts(s); MENU.refocus(); } } }
   else MENU.paintParts(s);
 };
@@ -6854,7 +6900,7 @@ MENU.move=function(d){
 };
 /* стрелки / стик / крестовина: вверх-вниз — пункт, влево-вправо — значение. На выборе команд (как в NHL) наоборот:
    вверх-вниз листают команду в активной карточке, влево-вправо — карточку */
-MENU.teamsOn=function(){ return MENU.layer()==='menu' && MENU.top()==='prep'; };
+MENU.teamsOn=function(){ var t=MENU.top(); return MENU.layer()==='menu' && (t==='prep' || t==='kits'); };
 MENU.dir=function(k){
   if(MENU.teamsOn()){ if(k==='u'||k==='d') MENU.adj(k==='u'?-1:1); else MENU.move(k==='l'?-1:1); return; }
   if(k==='u') MENU.move(-1); else if(k==='d') MENU.move(1); else MENU.adj(k==='l'?-1:1);
@@ -6925,7 +6971,7 @@ MENU.show=function(noBuild){
 MENU.paintHints=function(){
   var top=MENU.top(), v=MENU.via, h='';
   function hint(pad, key, txt){ return '<span class="mh">'+(v==='pad'?pad:key)+mEsc(T(txt))+'</span>'; }
-  if(v!=='touch' && top==='prep'){
+  if(v!=='touch' && (top==='prep' || top==='kits')){
     h+=hint(mg('▲▼'), mk('↑ ↓'), 'mTeamK')+hint(mg('◀▶'), mk('← →'), 'mCardK');
     h+=hint(mg('A'), mk('Enter'), 'mNext')+hint(mg('B'), mk('Esc'), 'mBack');
   }
@@ -7024,8 +7070,8 @@ var ACT={
   ctrl:function(){ MENU.dev=-1; MENU.go('ctrl'); },
   settings:function(){ MENU.go('settings'); },
   modes:function(){ MENU.go('modes'); },
-  vsai:function(){ ONLINE=false; netLeave(); selFromLast(); MENU.foc.prep=selSide; MENU.go('prep'); },
-  friend:function(){ ONLINE=true; MENU.friendMode='create'; MENU.go('friend'); },
+  vsai:function(){ ONLINE=false; netLeave(); selFromLast(); kitPreload(); MENU.foc.prep=selSide; MENU.go('prep'); },
+  friend:function(){ ONLINE=true; kitPreload(); MENU.friendMode='create'; MENU.go('friend'); },
   create:function(){ netCreate(); },
   joinf:function(){
     MENU.friendMode='joinf'; MENU.paintParts(MENU.sec.friend); MENU.refocus();
@@ -7034,7 +7080,7 @@ var ACT={
   join:function(){ netJoin(); },
   invite:function(){ if(NET.code) shareLink(NET.code); },
   go:function(){ goStart(); },
-  next:function(){ MENU.go('setup'); },
+  next:function(){ if(MENU.top()==='prep'){ MENU.foc.kits=MENU.foc.prep||0; MENU.go('kits'); } else MENU.go('setup'); },
   topic:function(){},
   noop:function(){},
   train:function(){ trainLoad(); MENU.trainTab=0; MENU.go('train'); },
@@ -7069,11 +7115,12 @@ function barVal(ev, el, cur, d){
 function mPick(ev, attr){ var t=ev && ev.target && ev.target.closest && ev.target.closest('['+attr+']'); return t ? t.getAttribute(attr) : null; }
 /* выбор против ИИ запоминается сразу (не только при старте): в следующий раз экран откроется с ним же */
 function prepChanged(){ if(!ONLINE) lastSave(); prepRebuild(); netPrepSend(); }
-function prepRebuild(){ var t=MENU.top(); if(state==='menu' && (t==='prep' || t==='setup')){ MENU.build(t); MENU.refocus(); } }
-/* команда на стороне s: d — шаг по списку (занятую соперником пропускаем); гость отправляет свой выбор хосту */
+function prepRebuild(){ var t=MENU.top(); if(state==='menu' && (t==='prep' || t==='kits' || t==='setup')){ MENU.build(t); MENU.refocus(); } }
+/* команда на стороне s: на экране «Страна» d — шаг по сборным, на «Форме» — другая форма; гость отправляет свой выбор хосту */
 function sideStep(s, d){
   if(!sideEdit(s)) return;
-  if(sideIsMy(s)) selMy=nextClub(selMy, d, selOp); else selOp=nextClub(selOp, d, selMy);
+  var kits=MENU.top()==='kits', st=function(cur, other){ return kits ? nextKit(cur, other) : nextNation(cur, d, s, other); };
+  if(sideIsMy(s)) selMy=st(selMy, selOp); else selOp=st(selOp, selMy);
   MENU.slide={s:s, d:d, t:Date.now()};
   if(ONLINE && NET.role==='guest'){ if(NET.on) netSend({t:'pick', c:selOp}); prepRebuild(); return; }
   prepChanged();
@@ -7168,7 +7215,7 @@ function mPointer(e){ _mPtr=(e.pointerType==='mouse') ? 'key' : 'touch'; }
 var _mSw=null, _mSwClick=false;
 function mTcEl(e){
   var c=e.target.closest && e.target.closest('.mtc2.mf, .mtar'); if(!c || !c.classList.contains('mtar')) return c;
-  return MENU.sec.prep && MENU.sec.prep.querySelector('.mtc2.mf[data-adj="'+c.getAttribute('data-for')+'"]');
+  var sc=MENU.sec[MENU.top()]; return sc && sc.querySelector('.mtc2.mf[data-adj="'+c.getAttribute('data-for')+'"]');
 }
 function mSwDown(e){ _mSwClick=false; var c=mTcEl(e); _mSw=c ? {a:c.getAttribute('data-adj'), y:e.clientY, x:e.clientX, n:0} : null; }
 function mSwMove(e){
@@ -7176,7 +7223,7 @@ function mSwMove(e){
   var dy=e.clientY-_mSw.y, dx=e.clientX-_mSw.x;
   if(Math.abs(dy)<40 || Math.abs(dy)<Math.abs(dx)*1.3) return;
   _mSw.y=e.clientY; _mSw.n++;
-  var el=MENU.sec.prep && MENU.sec.prep.querySelector('[data-adj="'+_mSw.a+'"]'); if(!el) return;
+  var sc=MENU.sec[MENU.top()], el=sc && sc.querySelector('[data-adj="'+_mSw.a+'"]'); if(!el) return;
   MENU.setVia('touch');
   var it=MENU.items('menu'), i=it.indexOf(el); if(i>=0) MENU.setFocus(i, 'menu');
   MENU.adjEl(el, dy<0 ? 1 : -1, null);
@@ -7216,13 +7263,13 @@ function goPaint(){
 }
 MENU.netPaint=function(){
   var top=MENU.top(), s=MENU.sec[top]; if(!s) return;
-  if(top==='friend' || top==='prep' || top==='setup'){ MENU.paintParts(s); MENU.refocus(); }
+  if(top==='friend' || top==='prep' || top==='kits' || top==='setup'){ MENU.paintParts(s); MENU.refocus(); }
 };
 /* события комнаты: гость сразу видит подготовку матча, хост — когда друг пришёл */
 MENU.onNet=function(ev){
   if(state!=='menu' || !ONLINE) return;
   var top=MENU.top();
-  var inPrep=(top==='prep' || top==='setup');
+  var inPrep=(top==='prep' || top==='kits' || top==='setup');
   if(NET.role==='guest' && NET.on && !inPrep){ MENU.stack=['main','modes','friend','prep']; MENU.show(); return; }
   if(NET.role==='host' && NET.on){
     if(NET.peer){ netPrepSend(); if(!inPrep){ MENU.stack=['main','modes','friend','prep']; MENU.show(); return; } }
@@ -7233,6 +7280,7 @@ MENU.onNet=function(ev){
 /* хост показывает гостю свой выбор (релей пересылает неизвестные сообщения как есть) */
 function netPrepSend(){ if(ONLINE && NET.on && NET.role==='host' && NET.peer) netSend({t:'prep', a:selMy, b:selOp, min:selMin}); }
 function netLeave(){
+  NET.prep=null;
   if(NET.ws){ var w=NET.ws; NET.ws=null; try{ w.close(); }catch(e){} }
   if(NET.rc){ clearTimeout(NET.rc.timer); NET.rc=null; }
   clearTimeout(NET.srvT);
@@ -7597,7 +7645,7 @@ function menu3dStop(){
     '<input id="rcode" maxlength="6" autocapitalize="characters" autocorrect="off" spellcheck="false" enterkeyhint="go">'+
     '<div id="netst"></div><div id="netlink"></div>';
   MENU.hold={srv:document.getElementById('srv'), rcode:document.getElementById('rcode'), netst:document.getElementById('netst'), netlink:document.getElementById('netlink')};
-  for(var id in MSCR){ var s=document.createElement('section'); s.className='mscr'+(id==='prep'||id==='setup'||id==='shop'||id==='stars'||id==='ext'?' wide':''); s.setAttribute('data-s',id); box.appendChild(s); MENU.sec[id]=s; }
+  for(var id in MSCR){ var s=document.createElement('section'); s.className='mscr'+(id==='prep'||id==='kits'||id==='setup'||id==='shop'||id==='stars'||id==='ext'?' wide':''); s.setAttribute('data-s',id); box.appendChild(s); MENU.sec[id]=s; }
   ['start','pausescr','overscr'].forEach(function(i){ var el=document.getElementById(i); el.addEventListener('click', mClick); el.addEventListener('pointerdown', mPointer); });
   (function(st){ st.addEventListener('pointerdown', mSwDown); st.addEventListener('pointermove', mSwMove);
     st.addEventListener('pointerup', mSwUp); st.addEventListener('pointercancel', mSwUp); })(document.getElementById('start'));
@@ -8644,6 +8692,7 @@ window.__hk={hs:function(){return HS;},net:function(){return NET;},setCam:functi
   rush:function(t,v){gkRush[t]=v;}, pause:function(){togglePause();},
   paused:function(){return PAUSED;}, team:function(){return TEAM;},
   gkColors:function(){return [TEAM[0].j,TEAM[1].j];},
+  kitFit:function(i,o){ return kitFit(i,o); }, kitClash:function(a,b){ return kitClash(a,b); },
   setClock:function(v){clock=v;},
   err:function(){return INITERR;},
   port:function(){return PORTRAIT;}, human:function(){return HUMAN;}, ad:function(){return attackDir(HUMAN);},
