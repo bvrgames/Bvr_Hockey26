@@ -6131,7 +6131,7 @@ if(!glInit()){
     T('noWebgl')+'</div>';
 }
 BOOT.glMs=Math.round(performance.now()-_glT);
-var last=performance.now(), fT=0,fN=0, lastOwnsUI=null, lastLangUI=null;
+var last=performance.now(), fT=0,fN=0, fRT=0, lastOwnsUI=null, lastLangUI=null;
 var powEl=document.getElementById('power'), powI=powEl.firstElementChild;
 var legEl=document.getElementById('legend');
 
@@ -6143,9 +6143,9 @@ function frame(now){
   var raw=now-last;
   if(raw>0 && raw<250) RT.ms = RT.ms>0 ? RT.ms*0.9+raw*0.1 : raw;    /* реальное время кадра (вкладка в фоне — пропуск) */
   if(PERF.on && raw>0 && raw<250){ PERF.iv+=raw; PERF.ivN++; }
-  if(raw>0 && raw<1000) mainFrame(raw);
+  if(raw>0 && raw<1000){ mainFrame(raw); fRT+=raw/1000; }
   var dt=Math.min(0.042,(now-last)/1000); last=now;
-  if(!TEST.frozen) frameStep(dt);
+  if(!TEST.frozen) frameStep(dt); else fRT=0;     /* заморожено (__hk.freeze): это время в FPS не идёт */
   requestAnimationFrame(frame);
 }
 var _uiMenu=null, _uiPad=null;
@@ -6223,9 +6223,12 @@ function frameStepInner(dt){
   /* вход/выход из меню — кнопка «на весь экран»; геймпад — его подсказки */
   if((state==='menu')!==_uiMenu){ _uiMenu=(state==='menu'); fsHintSync(); }
   if(padConnected!==_uiPad){ _uiPad=padConnected; document.body.classList.toggle('pad', padConnected); }
+  /* FPS — кадры за реальное время (fRT, из frame): dt игры обрезан до 42 мс, и по нему при тормозах (< 24 кадров в
+     секунду) счётчик завышал. На экране 90/120 Гц быстрый телефон честно показывает 90/120. __hk.step (замороженная
+     игра) реального времени не даёт — тогда по dt */
   fT+=dt; fN++;
   if(fT>0.5){
-    var f=Math.round(fN/fT);
+    var f=Math.round(fN/(fRT>0.25 ? fRT : fT)); fRT=0;
     fpsAvg=fpsAvg*0.6+f*0.4;
     if(PERF.on) PERF.roll=true;
     layoutTop(); netBanner();
