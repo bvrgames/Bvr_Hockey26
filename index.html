@@ -386,8 +386,7 @@
   #start [data-coins].pop{transform:scale(1.15)}
   /* Магазин: монеты за звёзды */
   .mshh{margin:2px 0 5px;font:italic 800 14px/1 var(--msport);text-transform:uppercase;color:var(--mgold);letter-spacing:.03em}
-  .mshcg{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px 8px}   /* колонки — как у «Скоро» ниже */
-  .mshcg>.mshh{margin:2px 0 0}
+  .mshcg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;max-width:560px}
   .mshc{display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:14px}
   .mshc>.ic{width:30px;height:30px}
   .mshc b{font:italic 800 24px/1 var(--msport);color:#fff}
@@ -403,9 +402,24 @@
   .mshopg.sm .mshop svg{width:28px}
   .mshopg.sm .mshop b{font-size:13px}
   .mshopg.sm .mshop .soon{position:static;margin-left:auto}
-  /* Магазин: «Без рекламы» за звёзды — четвёртая колонка ряда монет, как карточка пакета (значок и цена) */
-  .mshc.na>.ic{padding:5px;border-radius:50%;box-sizing:border-box;color:#3b4557;background:radial-gradient(circle at 35% 30%,#fff,#c3ccd8 60%,#8d97a6);
-    box-shadow:inset 0 -2px 0 rgba(0,0,0,.18),0 0 0 1px rgba(255,255,255,.35)}   /* серебряный кружок, как у монеты */
+  /* Магазин: «Без рекламы» за звёзды — широкая карточка над монетами (во всю ширину ряда), золотая подсветка */
+  .mshna{position:relative;flex:none;display:flex;align-items:center;gap:12px;max-width:560px;margin:0 0 6px;padding:5px 10px 5px 7px;border-radius:14px;
+    overflow:hidden;background:linear-gradient(100deg,rgba(255,209,102,.20),rgba(240,169,46,.08) 55%,rgba(255,255,255,.04));
+    box-shadow:0 0 0 1.5px rgba(255,209,102,.75),0 0 18px rgba(255,209,102,.35);animation:mnaGlow 2.4s ease-in-out infinite}
+  .mshna::after{content:'';position:absolute;inset:0;pointer-events:none;background:linear-gradient(105deg,transparent 35%,rgba(255,255,255,.22) 50%,transparent 65%);
+    transform:translateX(-100%);animation:mnaShine 3.6s ease-in-out infinite}
+  .mshna>.ic{flex:none;width:32px;height:32px;padding:6px;border-radius:50%;box-sizing:border-box;color:#3b4557;
+    background:radial-gradient(circle at 35% 30%,#fff,#c3ccd8 60%,#8d97a6);box-shadow:inset 0 -2px 0 rgba(0,0,0,.18),0 0 0 1px rgba(255,255,255,.35)}
+  .mshna b{font:italic 800 21px/1 var(--msport);color:#fff;text-transform:uppercase;letter-spacing:.01em}
+  .mshna .pr{margin-left:auto;padding:5px 11px;border-radius:999px;font:italic 800 16px/1 var(--msport);color:#241703;background:linear-gradient(180deg,var(--mgold),var(--mgold2));
+    box-shadow:0 3px 12px rgba(240,169,46,.4)}
+  .mshna.sel,.mshna.on{box-shadow:0 0 0 2.5px var(--mgold),0 0 24px rgba(255,209,102,.55)}
+  .mshna.own{animation:none;background:rgba(255,255,255,.05);box-shadow:0 0 0 1px rgba(255,255,255,.18)}
+  .mshna.own::after{display:none}
+  .mshna.own .pr{background:rgba(90,208,127,.18);color:#5ad07f;box-shadow:none}
+  @keyframes mnaGlow{0%,100%{box-shadow:0 0 0 1.5px rgba(255,209,102,.75),0 0 14px rgba(255,209,102,.25)}50%{box-shadow:0 0 0 1.5px rgba(255,209,102,1),0 0 26px rgba(255,209,102,.55)}}
+  @keyframes mnaShine{0%,55%{transform:translateX(-100%)}85%,100%{transform:translateX(100%)}}
+  @media (prefers-reduced-motion:reduce){.mshna,.mshna::after{animation:none}.mshna::after{display:none}}
   /* итог: видео за монеты (AdsGram) */
   #oAdRw{display:flex;align-items:center;gap:7px}
   #oAdRw .ic{width:.95em;height:.95em}
@@ -6563,12 +6577,13 @@ var MSCR={
         c+='<div class="mshc mglass mf'+(SH && SH.pack===p.id && SH.st?' sel':'')+'" data-act="cbuy" data-pack="'+mEsc(p.id)+'">'+icHtml('coin')+'<b>'+(p.coins|0)+'</b>'+
           '<span class="pr">'+curHtml('star', p.stars|0)+'</span></div>';
       });
-      var na=adsShopHtml();   /* «Без рекламы» — четвёртой колонкой, со своим заголовком */
-      c='<div class="mshcg"><div class="mshh" style="grid-column:span 3">'+mEsc(T('shCoins'))+'</div>'+(na ? '<div class="mshh">'+mEsc(T('shNoAds'))+'</div>' : '')+
-        c+na+'</div><div class="mshq" data-paint="shQ"></div><div class="mshh">'+mEsc(T('shSoonL'))+'</div>';
+      /* пока открыт вопрос о покупке, «Скоро» не показываем — иначе на низком экране не влезает */
+      var q=!!(SH && SH.st);
+      c=adsShopHtml()+'<div class="mshh">'+mEsc(T('shCoins'))+'</div><div class="mshcg">'+c+'</div><div class="mshq" data-paint="shQ"></div>'+(q ? '' : '<div class="mshh">'+mEsc(T('shSoonL'))+'</div>');
+      if(q) h='';
     }
     return mHead(T('mShop'), '<span class="mpill mwal">'+walletHtml()+'</span>')+
-      '<div class="mleft">'+c+'<div class="mshopg'+(cs?' sm':'')+'">'+h+'</div>'+(cs?'':'<div class="mnote dim" style="margin-top:8px">'+
+      '<div class="mleft">'+c+(h ? '<div class="mshopg'+(cs?' sm':'')+'">'+h+'</div>' : '')+(cs?'':'<div class="mnote dim" style="margin-top:8px">'+
       mEsc(T(COINS===null?'shSoon':'shEarn')).replace('{c}', icHtml('coin'))+'</div>')+'</div>';
   },
   ctrl:function(){
@@ -8356,10 +8371,10 @@ function adsNoadsSet(v){ ADS.noads=!!v; try{ localStorage.setItem('bvr_noads', v
 function adsShopHtml(){
   if(typeof ADS==='undefined' || !ADS || !(ADS.price || ADS.noads)) return '';
   var sel=SH && SH.pack==='noads' && SH.st ? ' sel' : '';
-  return '<div class="mshc na mglass mf'+sel+'" data-act="'+(ADS.noads?'noop':'cbuy')+'" data-pack="noads" aria-label="'+mEsc(T('shNoAds'))+'">'+
+  return '<div class="mshc mshna mf'+(ADS.noads?' own':'')+sel+'" data-act="'+(ADS.noads?'noop':'cbuy')+'" data-pack="noads">'+
     '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="3" fill="none" stroke="currentColor" stroke-width="2"/>'+
-    '<path d="M10.2 9.4v5.2l4.4-2.6z" fill="currentColor"/><path d="M4.5 19.5l15-15" stroke="#ff8a7a" stroke-width="2.4" stroke-linecap="round"/></svg>'+
-    '<span class="pr">'+(ADS.noads ? mEsc(T('shOwned')) : curHtml('star', ADS.price|0))+'</span></div>';
+    '<path d="M10.2 9.4v5.2l4.4-2.6z" fill="currentColor"/><path d="M4.5 19.5l15-15" stroke="#e5484d" stroke-width="2.4" stroke-linecap="round"/></svg>'+
+    '<b>'+mEsc(T('shNoAds'))+'</b><span class="pr">'+(ADS.noads ? mEsc(T('shOwned')) : curHtml('star', ADS.price|0))+'</span></div>';
 }
 /* покупка «Без рекламы»: POST /v1/shop/noads {idem}; 409 — уже куплено (тоже успех), 402 — не хватает звёзд */
 function adsNoadsBuy(idem){
@@ -8634,7 +8649,7 @@ window.__hk={hs:function(){return HS;},net:function(){return NET;},setCam:functi
   /* пополнение звёзд (tools/smoke-api.mjs, stars-shots.mjs): состояние покупки, пакеты, видна ли кнопка */
   /* закрытый экран: есть ли пункт меню и загружен ли модуль (tools/smoke-api.mjs, dev-shots.mjs) */
   ext:function(){ return {ok:EXT.ok, mod:!!EXT.mod, st:EXT.st, n:EXT.n, item:document.querySelectorAll('#start [data-act="ext"]').length}; },
-  sh:function(){ return {st:SH.st, pack:SH.pack, idem:SH.idem, packs:CPACKS, ok:coinShopOK(), cards:document.querySelectorAll('#start section[data-s="shop"] .mshcg .mshc:not(.na)').length,
+  sh:function(){ return {st:SH.st, pack:SH.pack, idem:SH.idem, packs:CPACKS, ok:coinShopOK(), cards:document.querySelectorAll('#start section[data-s="shop"] .mshcg .mshc').length,
     fly:document.querySelectorAll('.rw-fx').length, text:(document.querySelector('#start [data-paint="shQ"]')||{}).textContent||''}; },
   invite:function(code, host){ return inviteLink(code, host); }, build:function(){ return BUILD; }, ndg:function(){ return NDG; },
   sb:function(){ return {st:SB.st, order:SB.order, got:SB.got, packs:PACKS, ok:starsBuyOK(), btn:document.querySelectorAll('#start .mtopup').length,
