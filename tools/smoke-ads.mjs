@@ -2,7 +2,7 @@
 // (Playwright routes). Checks: the SDK is set up only in Telegram (outside — nothing; an automated browser without the
 // fake SDK — 'off', never the real script), both block ids from ADS_CFG; the video after a match only on leaving the
 // result screen («Main menu» / «Again»), after every `every`-th finished match against the computer from the player's
-// `from`-th one (shipped: 1 and 1; the rules are checked with 2 and 2) and 3 minutes after the last one; never in
+// `from`-th one (shipped: 2 and 2, the same in the checks below) and 3 minutes after the last one; never in
 // training, in a match with a friend, with «No ads»; the game's
 // sound is paused during the video and back after it; an SDK error, a video that never answers, an SDK that throws —
 // the game goes on at once; the rewarded video: the button on the result screen, the coins only from the server
@@ -114,10 +114,10 @@ try {
     const g = await open(), { page } = g;
     ok(await waitFor(page, () => __hk.ads().st === 'ok', null, 8000), 'the SDK is ready after the menu');
     await waitFor(page, () => __hk.ads().rw !== null, null, 8000);
-    // the shipped setting (AdsGram moderation, 05.10): a video after every match, the very first one too
-    let a = await ads(page, { n: 0, t: 0, prof: 0 });
+    // the shipped setting: never after the player's very first match (for the AdsGram moderation it was 1 and 1)
+    let a = await ads(page, { n: 5, t: 0, prof: 0 });
     await finish(page);
-    ok((await ads(page)).due, `shipped ADS_CFG: the player's first finished match → the video is due`);
+    ok(!(await ads(page)).due, `shipped ADS_CFG: the player's first finished match → no video`);
     await page.evaluate(() => __hk.result(null));
     // the rules below: every 2nd match, not after the player's first one
     a = await ads(page, { n: 0, t: 0, prof: 10, cfg: { every: 2, from: 2 } });
