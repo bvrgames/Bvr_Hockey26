@@ -697,7 +697,7 @@
   </div>
 </div>
 
-<script src="shared/sim.js?v=19f32ffd5e"></script>
+<script src="shared/sim.js?v=c3b94646f8"></script>
 <script>
 (function(){
 'use strict';
@@ -5087,7 +5087,8 @@ function animTick(p, dt){
     a.t=cl.dur-0.001;
     if(!(p._actT>0) && p.down<=0){
       a.pc=a.c; a.pt=a.t; a.mix=1;
-      a.c=animPick(p); if(!M.clips[a.c]) a.c='ready';
+      /* из «бабочки» вратарь встаёт отдельным клипом */
+      a.c = (a.pc==='butterfly_down' && M.clips.butterfly_up) ? 'butterfly_up' : animPick(p); if(!M.clips[a.c]) a.c='ready';
       a.t=0;
     }
   }
@@ -7738,7 +7739,26 @@ EV.on('penalty', function(e){
   flash(T('penalty')+': '+T('pr_'+e.reason)+' — '+(e.major?'5:00':'2:00'), '', 2.2);
 });
 EV.on('post',    function(){ SFX.post(); buzz(30,'hard'); fxKick('m',7,12); fxPost(); });
-EV.on('save',    function(e){ SFX.save(); if(e.kind==='line') flash(T('save'),'',0.7); });
+EV.on('save',    function(e){ SFX.save(); if(e.kind==='line') flash(T('save'),'',0.7); gkAnimSave(e); });
+/* вратарь (анимации из модели, раньше не включались). Только по событиям, без Math.random: случайные числа клиента
+   входят в матч (balance). Высокий бросок — ловушка, сбоку — щиток, по центру — «бабочка»; накрыл — лёг на шайбу. */
+function gkAnimSave(e){
+  var g=players[e.g]; if(!g || !g.goalie) return;
+  if(e.cover){ playAction(g,'freeze_puck',1.1); return; }
+  if(e.kind==='line'){
+    if((e.y||0)>0.55) playAction(g,'save_glove_high',0.7);
+    else if(Math.abs(e.z||0)>0.4) playAction(g,'save_pad_c',0.65);
+    else playAction(g,'butterfly_down',0.6);
+  } else if(e.shot) playAction(g,'butterfly_down',0.6);
+}
+/* бросок с близкой дистанции — вратарь заранее садится «бабочкой» */
+EV.on('shot', function(e){
+  var p=players[e.p]; if(!p) return;
+  for(var i=0;i<players.length;i++){ var g=players[i];
+    if(!g.goalie || g.team===p.team) continue;
+    if(Math.hypot(g.x-p.x, g.z-p.z)<9 && !(g._actT>0)) playAction(g,'butterfly_down',0.6);
+  }
+});
 EV.on('goal',    function(e){ SFX.whistle(); SFX.horn(); buzz([60,50,120],'goal'); fxGoal(e.t);
                               flash(T('goal'), e.t===HUMAN?T('ourGoal'):T('theirGoal'), 1.4); });
 EV.on('stoppage',function(e){ SFX.whistle(); buzz(25); if(e.reason!=='penalty') flash(T(e.reason),'',1.3); });
