@@ -2095,27 +2095,28 @@ var MESH_GOAL=merge([
 
 /* сборные: у каждой две формы — 0 яркая (основная), 1 запасная (белая или тёмная). Картинки формы и флаг —
    ASSETS.kits[id+k] и ASSETS.kits[id+'-flag'] (tools/prep-kits.mjs). c — цвет сборной (плашка и подсветка на экране
-   страны). В матче форма — цвета: j свитер, p трусы и полоса внизу, h шлем, номер и полосы на рукавах */
+   страны). В матче форма — цвета: j свитер, p трусы и полоса внизу, h шлем, номер и полосы на рукавах; f — цвет формы
+   для правила «одинаковые цвета вместе не выходят» (kitClash) */
 var NATIONS=[
-  {id:'rus', c:'#d52b1e', k:[{j:'#d52b1e',p:'#1f4fa0',h:'#ffffff'},{j:'#f2f4f7',p:'#1f4fa0',h:'#d52b1e'}]},
-  {id:'can', c:'#d4202b', k:[{j:'#d4202b',p:'#16171a',h:'#ffffff'},{j:'#1a1b1f',p:'#d4202b',h:'#d4202b'}]},
-  {id:'usa', c:'#2456c8', k:[{j:'#14295c',p:'#c8102e',h:'#ffffff'},{j:'#f2f4f7',p:'#14295c',h:'#c8102e'}]},
-  {id:'swe', c:'#f5c400', k:[{j:'#f5c400',p:'#1d3264',h:'#1d3264'},{j:'#1d3264',p:'#f5c400',h:'#f5c400'}]},
-  {id:'ger', c:'#e9b52c', k:[{j:'#e9b52c',p:'#16171a',h:'#d0202a'},{j:'#16171a',p:'#e9b52c',h:'#e9b52c'}]},
-  {id:'kaz', c:'#3fa3dc', k:[{j:'#3fa3dc',p:'#e8c33a',h:'#ffffff'},{j:'#f2f4f7',p:'#3fa3dc',h:'#e8c33a'}]},
-  {id:'blr', c:'#1f7a45', k:[{j:'#1f7a45',p:'#c8202e',h:'#ffffff'},{j:'#f2f4f7',p:'#1f7a45',h:'#c8202e'}]},
-  {id:'urs', c:'#c41e24', k:[{j:'#c41e24',p:'#f3d6d6',h:'#ffffff'},{j:'#f2f4f7',p:'#c41e24',h:'#c41e24'}]}
+  {id:'rus', c:'#d52b1e', k:[{j:'#d52b1e',p:'#1f4fa0',h:'#ffffff',f:'red'},{j:'#f2f4f7',p:'#1f4fa0',h:'#d52b1e',f:'white'}]},
+  {id:'can', c:'#d4202b', k:[{j:'#d4202b',p:'#16171a',h:'#ffffff',f:'red'},{j:'#1a1b1f',p:'#d4202b',h:'#d4202b',f:'black'}]},
+  {id:'usa', c:'#2456c8', k:[{j:'#14295c',p:'#c8102e',h:'#ffffff',f:'blue'},{j:'#f2f4f7',p:'#14295c',h:'#c8102e',f:'white'}]},
+  {id:'swe', c:'#f5c400', k:[{j:'#f5c400',p:'#1d3264',h:'#1d3264',f:'yellow'},{j:'#1d3264',p:'#f5c400',h:'#f5c400',f:'blue'}]},
+  {id:'ger', c:'#e9b52c', k:[{j:'#e9b52c',p:'#16171a',h:'#d0202a',f:'yellow'},{j:'#16171a',p:'#e9b52c',h:'#e9b52c',f:'black'}]},
+  {id:'kaz', c:'#3fa3dc', k:[{j:'#3fa3dc',p:'#e8c33a',h:'#ffffff',f:'sky'},{j:'#f2f4f7',p:'#3fa3dc',h:'#e8c33a',f:'white'}]},
+  {id:'blr', c:'#1f7a45', k:[{j:'#1f7a45',p:'#c8202e',h:'#ffffff',f:'green'},{j:'#f2f4f7',p:'#1f7a45',h:'#c8202e',f:'white'}]},
+  {id:'urs', c:'#c41e24', k:[{j:'#c41e24',p:'#f3d6d6',h:'#ffffff',f:'red'},{j:'#f2f4f7',p:'#c41e24',h:'#c41e24',f:'white'}]}
 ];
 /* команда в выборе, сети и «последнем матче» — номер формы в CLUBS: страна*2 + форма */
 var CLUBS=[];
-NATIONS.forEach(function(nt, n){ nt.k.forEach(function(c, k){ CLUBS.push({id:nt.id, n:n, k:k, j:c.j, p:c.p, h:c.h}); }); });
+NATIONS.forEach(function(nt, n){ nt.k.forEach(function(c, k){ CLUBS.push({id:nt.id, n:n, k:k, j:c.j, p:c.p, h:c.h, f:c.f}); }); });
 function clubName(c){ return T('n_'+c.id); }
 function clubAb(c){ return T('ab_'+c.id); }
-/* похожие формы (две красные, две белые, тёмно-синяя и чёрная) на льду не различить — такие вместе не выходят */
+/* одинаковый цвет формы (f: красный, белый, чёрный, синий, голубой, жёлтый, зелёный) вместе не выходит: красная с
+   красной, белая с белой; разные цвета — можно (чёрная с зелёной, синяя с чёрной, голубая с синей) */
 function kitClash(a, b){
   var x=CLUBS[a], y=CLUBS[b]; if(!x || !y) return false;
-  var d=function(h, i){ return parseInt(h.substr(1+i*2,2),16); };
-  return Math.hypot(d(x.j,0)-d(y.j,0), d(x.j,1)-d(y.j,1), d(x.j,2)-d(y.j,2))<110;
+  return x.f===y.f;
 }
 /* форма i рядом с формой other: похожа — другая форма той же сборной (если та подходит) */
 function kitFit(i, other){ return kitClash(i, other) && !kitClash(i^1, other) ? i^1 : i; }
