@@ -39,7 +39,7 @@ export function d1Store(db) {
                       online = online + ?, updated_at = ? WHERE user_id = ?`)
           .bind(m.name, m.coins, m.win, m.draw, 1 - m.win - m.draw, m.my, m.op, m.win, m.win, m.online, m.now, m.uid),
       ];
-      if (m.coins > 0) {
+      if (m.coins !== 0) {          // a disqualification fine is negative (reason dq_fine)
         q.push(db.prepare(`INSERT INTO ledger (user_id, delta, reason, ref, balance_after, created_at)
                            VALUES (?, ?, ?, ?, (SELECT coins FROM users WHERE user_id = ?), ?)`).bind(m.uid, m.coins, m.reason, m.id, m.uid, m.now));
       }

@@ -137,7 +137,7 @@ export class Room {
     list.push({ ...r, at: Date.now() });
     await this.state.storage.put('results', list.slice(-RESULTS_KEEP));
     // one line per server match in `wrangler tail` (the owner's logs only): the result the stats API will compare with
-    console.log('result saved', JSON.stringify({ id: r.id, len: r.len, score: r.score, left: r.left, kept: Math.min(list.length, RESULTS_KEEP) }));
+    console.log('result saved', JSON.stringify({ id: r.id, len: r.len, score: r.score, left: r.left, dq: r.dq, kept: Math.min(list.length, RESULTS_KEEP) }));
   }
 
   // ---- stakes (server mode). The rules are in coins.js (StakeRoom, stakeFinish); here only the Cloudflare side: who is
