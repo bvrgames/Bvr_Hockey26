@@ -380,7 +380,8 @@
   #start [data-coins].pop{transform:scale(1.15)}
   /* Магазин: монеты за звёзды */
   .mshh{margin:2px 0 5px;font:italic 800 14px/1 var(--msport);text-transform:uppercase;color:var(--mgold);letter-spacing:.03em}
-  .mshcg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;max-width:560px}
+  .mshcg{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px 8px}   /* колонки — как у «Скоро» ниже */
+  .mshcg>.mshh{margin:2px 0 0}
   .mshc{display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:14px}
   .mshc>.ic{width:30px;height:30px}
   .mshc b{font:italic 800 24px/1 var(--msport);color:#fff}
@@ -396,11 +397,9 @@
   .mshopg.sm .mshop svg{width:28px}
   .mshopg.sm .mshop b{font-size:13px}
   .mshopg.sm .mshop .soon{position:static;margin-left:auto}
-  /* Магазин: «Без рекламы» за звёзды */
-  .mshna{display:flex;align-items:center;gap:12px;max-width:560px}
-  .mshna .mshc{flex:0 0 auto}
-  .mshna .mshc b{font-size:17px;text-transform:uppercase}
-  .mshna>i{font:600 11.5px/1.3 system-ui;font-style:normal;color:var(--mdim)}
+  /* Магазин: «Без рекламы» за звёзды — четвёртая колонка ряда монет, как карточка пакета (значок и цена) */
+  .mshc.na>.ic{padding:5px;border-radius:50%;box-sizing:border-box;color:#3b4557;background:radial-gradient(circle at 35% 30%,#fff,#c3ccd8 60%,#8d97a6);
+    box-shadow:inset 0 -2px 0 rgba(0,0,0,.18),0 0 0 1px rgba(255,255,255,.35)}   /* серебряный кружок, как у монеты */
   /* итог: видео за монеты (AdsGram) */
   #oAdRw{display:flex;align-items:center;gap:7px}
   #oAdRw .ic{width:.95em;height:.95em}
@@ -1349,7 +1348,7 @@ ru:{
   mDevD:'Ещё игры — @bvr_games_bot',
   mProfile:'Профиль', mShop:'Магазин', mShopD:'Форма, клюшки, празднования — за монеты', mPlayer:'Игрок',
   pMatches:'Матчи', pWins:'Победы', pDraws:'Ничьи', pLosses:'Поражения', pGoals:'Голы', pBest:'Лучшая серия',
-  pOnline:'С друзьями', pCoins:'Монеты', pStars:'Звёзды', mTopup:'Пополнить', sbTitle:'Пополнить звёзды', sbNote:'Звёзды — для оформления (лёд, форма), отключения рекламы и обмена на монеты в Магазине. В ставках не участвуют.', shCoins:'Монеты', shAsk:'Купить {c} за {s}?', shBuy:'Купить', shCancel:'Отмена', shNo:'Не хватает звёзд: нужно {s}, у тебя {h}', shTop:'Пополнить звёзды', shBusy:'Покупаем…', shDone:'Куплено: {c}', shErr:'Не получилось купить. Попробуй ещё раз.', shSoonL:'Скоро', shNoAds:'Без рекламы', shNoAdsD:'Навсегда: без видео после матча. Видео за монеты остаётся.', shNoAdsAsk:'Отключить рекламу навсегда за {s}?', shNoAdsDone:'Реклама отключена', shOwned:'Куплено', adRw:'Видео: {c}', adRwWait:'Ждём подтверждения…', adRwDone:'За видео: {c}', adRwLater:'Монеты за видео начислятся позже', adRwFail:'Видео не загрузилось', adRwTest:'Тест: за видео монет нет', sbFor:'за {n} Telegram Stars', sbLoad:'Загружаем пакеты…', sbMake:'Создаём счёт…', sbOpen:'Оплати в окне Telegram', sbWait:'Оплата прошла — ждём подтверждения…', sbDone:'Зачислено: {v}', sbCancel:'Оплата отменена — ничего не списано.', sbFail:'Оплата не прошла — ничего не списано.', sbLater:'Оплата прошла, звёзды появятся чуть позже.', sbErr:'Не получилось создать счёт. Попробуй ещё раз.', rwTotal:'Итого', rwCap:'Дневной лимит монет набран', rwWait:'Начисляем монеты…', rwLater:'Монеты начислятся позже', rwWin:'Победа', rwDraw:'Ничья', rwLoss:'Поражение', rwLeft:'Вышел из матча', rwBonus:'Голы и передачи', pNone:'Сыграй первый матч — здесь появится статистика.',
+  pOnline:'С друзьями', pCoins:'Монеты', pStars:'Звёзды', mTopup:'Пополнить', sbTitle:'Пополнить звёзды', sbNote:'Звёзды — для оформления (лёд, форма), отключения рекламы и обмена на монеты в Магазине. В ставках не участвуют.', shCoins:'Монеты', shAsk:'Купить {c} за {s}?', shBuy:'Купить', shCancel:'Отмена', shNo:'Не хватает звёзд: нужно {s}, у тебя {h}', shTop:'Пополнить звёзды', shBusy:'Покупаем…', shDone:'Куплено: {c}', shErr:'Не получилось купить. Попробуй ещё раз.', shSoonL:'Скоро', shNoAds:'Без рекламы', shNoAdsAsk:'Отключить рекламу навсегда за {s}?', shNoAdsDone:'Реклама отключена', shOwned:'Куплено', adRw:'Видео: {c}', adRwWait:'Ждём подтверждения…', adRwDone:'За видео: {c}', adRwLater:'Монеты за видео начислятся позже', adRwFail:'Видео не загрузилось', adRwTest:'Тест: за видео монет нет', sbFor:'за {n} Telegram Stars', sbLoad:'Загружаем пакеты…', sbMake:'Создаём счёт…', sbOpen:'Оплати в окне Telegram', sbWait:'Оплата прошла — ждём подтверждения…', sbDone:'Зачислено: {v}', sbCancel:'Оплата отменена — ничего не списано.', sbFail:'Оплата не прошла — ничего не списано.', sbLater:'Оплата прошла, звёзды появятся чуть позже.', sbErr:'Не получилось создать счёт. Попробуй ещё раз.', rwTotal:'Итого', rwCap:'Дневной лимит монет набран', rwWait:'Начисляем монеты…', rwLater:'Монеты начислятся позже', rwWin:'Победа', rwDraw:'Ничья', rwLoss:'Поражение', rwLeft:'Вышел из матча', rwBonus:'Голы и передачи', pNone:'Сыграй первый матч — здесь появится статистика.',
   pStatsNote:'Статистика хранится в твоём Telegram и переезжает с тобой на другие устройства.',
   shKits:'Форма команд', shKitsD:'Ретро, зимняя, ночная', shSticks:'Клюшки', shSticksD:'Цвет обмотки и крюка',
   shGoal:'Празднование гола', shGoalD:'Сирена, салют, камера', shIce:'Лёд арены', shIceD:'Рисунок в центральном круге',
@@ -1443,7 +1442,7 @@ en:{
   mDevD:'More games — @bvr_games_bot',
   mProfile:'Profile', mShop:'Shop', mShopD:'Kits, sticks, celebrations — for coins', mPlayer:'Player',
   pMatches:'Matches', pWins:'Wins', pDraws:'Draws', pLosses:'Losses', pGoals:'Goals', pBest:'Best streak',
-  pOnline:'With friends', pCoins:'Coins', pStars:'Stars', mTopup:'Top up', sbTitle:'Top up stars', sbNote:'Stars are for looks (ice, kits), turning off ads and coins in the Shop. They are never staked.', shCoins:'Coins', shAsk:'Buy {c} for {s}?', shBuy:'Buy', shCancel:'Cancel', shNo:'Not enough stars: you need {s}, you have {h}', shTop:'Top up stars', shBusy:'Buying…', shDone:'Bought: {c}', shErr:'Could not buy. Try again.', shSoonL:'Soon', shNoAds:'No ads', shNoAdsD:'Forever: no video after a match. Videos for coins stay.', shNoAdsAsk:'Turn off ads forever for {s}?', shNoAdsDone:'Ads are off', shOwned:'Owned', adRw:'Video: {c}', adRwWait:'Waiting for confirmation…', adRwDone:'For the video: {c}', adRwLater:'Coins for the video will arrive later', adRwFail:'The video did not load', adRwTest:'Test: no coins for videos', sbFor:'for {n} Telegram Stars', sbLoad:'Loading packs…', sbMake:'Creating the invoice…', sbOpen:'Pay in the Telegram window', sbWait:'Paid — waiting for confirmation…', sbDone:'Added: {v}', sbCancel:'Payment cancelled — nothing was charged.', sbFail:'Payment failed — nothing was charged.', sbLater:'Paid — your stars will arrive a little later.', sbErr:'Could not create the invoice. Try again.', rwTotal:'Total', rwCap:'Daily coin limit reached', rwWait:'Counting coins…', rwLater:'Coins will arrive later', rwWin:'Win', rwDraw:'Draw', rwLoss:'Loss', rwLeft:'Left the match', rwBonus:'Goals and assists', pNone:'Play your first match — your stats will show up here.',
+  pOnline:'With friends', pCoins:'Coins', pStars:'Stars', mTopup:'Top up', sbTitle:'Top up stars', sbNote:'Stars are for looks (ice, kits), turning off ads and coins in the Shop. They are never staked.', shCoins:'Coins', shAsk:'Buy {c} for {s}?', shBuy:'Buy', shCancel:'Cancel', shNo:'Not enough stars: you need {s}, you have {h}', shTop:'Top up stars', shBusy:'Buying…', shDone:'Bought: {c}', shErr:'Could not buy. Try again.', shSoonL:'Soon', shNoAds:'No ads', shNoAdsAsk:'Turn off ads forever for {s}?', shNoAdsDone:'Ads are off', shOwned:'Owned', adRw:'Video: {c}', adRwWait:'Waiting for confirmation…', adRwDone:'For the video: {c}', adRwLater:'Coins for the video will arrive later', adRwFail:'The video did not load', adRwTest:'Test: no coins for videos', sbFor:'for {n} Telegram Stars', sbLoad:'Loading packs…', sbMake:'Creating the invoice…', sbOpen:'Pay in the Telegram window', sbWait:'Paid — waiting for confirmation…', sbDone:'Added: {v}', sbCancel:'Payment cancelled — nothing was charged.', sbFail:'Payment failed — nothing was charged.', sbLater:'Paid — your stars will arrive a little later.', sbErr:'Could not create the invoice. Try again.', rwTotal:'Total', rwCap:'Daily coin limit reached', rwWait:'Counting coins…', rwLater:'Coins will arrive later', rwWin:'Win', rwDraw:'Draw', rwLoss:'Loss', rwLeft:'Left the match', rwBonus:'Goals and assists', pNone:'Play your first match — your stats will show up here.',
   pStatsNote:'Your stats live in your Telegram account and follow you to other devices.',
   shKits:'Team kits', shKitsD:'Retro, winter, night', shSticks:'Sticks', shSticksD:'Tape and blade colours',
   shGoal:'Goal celebration', shGoalD:'Horn, fireworks, camera', shIce:'Arena ice', shIceD:'Centre circle art',
@@ -1539,7 +1538,7 @@ id:{
   mDevD:'Game lainnya — @bvr_games_bot',
   mProfile:'Profil', mShop:'Toko', mShopD:'Seragam, tongkat, selebrasi — dengan koin', mPlayer:'Pemain',
   pMatches:'Laga', pWins:'Menang', pDraws:'Seri', pLosses:'Kalah', pGoals:'Gol', pBest:'Rekor beruntun',
-  pOnline:'Dengan teman', pCoins:'Koin', pStars:'Bintang', mTopup:'Isi ulang', sbTitle:'Isi ulang bintang', sbNote:'Bintang untuk tampilan (es, seragam), mematikan iklan dan ditukar ke koin di Toko. Tidak dipakai untuk taruhan.', shCoins:'Koin', shAsk:'Beli {c} seharga {s}?', shBuy:'Beli', shCancel:'Batal', shNo:'Bintang kurang: perlu {s}, kamu punya {h}', shTop:'Isi ulang bintang', shBusy:'Membeli…', shDone:'Terbeli: {c}', shErr:'Gagal membeli. Coba lagi.', shSoonL:'Segera', shNoAds:'Tanpa iklan', shNoAdsD:'Selamanya: tanpa video setelah laga. Video untuk koin tetap ada.', shNoAdsAsk:'Matikan iklan selamanya seharga {s}?', shNoAdsDone:'Iklan dimatikan', shOwned:'Dimiliki', adRw:'Video: {c}', adRwWait:'Menunggu konfirmasi…', adRwDone:'Dari video: {c}', adRwLater:'Koin dari video masuk nanti', adRwFail:'Video gagal dimuat', adRwTest:'Tes: video tanpa koin', sbFor:'seharga {n} Telegram Stars', sbLoad:'Memuat paket…', sbMake:'Membuat tagihan…', sbOpen:'Bayar di jendela Telegram', sbWait:'Sudah dibayar — menunggu konfirmasi…', sbDone:'Masuk: {v}', sbCancel:'Pembayaran dibatalkan — tidak ada yang ditagih.', sbFail:'Pembayaran gagal — tidak ada yang ditagih.', sbLater:'Sudah dibayar — bintang akan masuk sebentar lagi.', sbErr:'Gagal membuat tagihan. Coba lagi.', rwTotal:'Total', rwCap:'Batas koin harian tercapai', rwWait:'Menghitung koin…', rwLater:'Koin akan masuk nanti', rwWin:'Menang', rwDraw:'Seri', rwLoss:'Kalah', rwLeft:'Keluar dari laga', rwBonus:'Gol dan assist', pNone:'Mainkan laga pertamamu — statistik akan muncul di sini.',
+  pOnline:'Dengan teman', pCoins:'Koin', pStars:'Bintang', mTopup:'Isi ulang', sbTitle:'Isi ulang bintang', sbNote:'Bintang untuk tampilan (es, seragam), mematikan iklan dan ditukar ke koin di Toko. Tidak dipakai untuk taruhan.', shCoins:'Koin', shAsk:'Beli {c} seharga {s}?', shBuy:'Beli', shCancel:'Batal', shNo:'Bintang kurang: perlu {s}, kamu punya {h}', shTop:'Isi ulang bintang', shBusy:'Membeli…', shDone:'Terbeli: {c}', shErr:'Gagal membeli. Coba lagi.', shSoonL:'Segera', shNoAds:'Tanpa iklan', shNoAdsAsk:'Matikan iklan selamanya seharga {s}?', shNoAdsDone:'Iklan dimatikan', shOwned:'Dimiliki', adRw:'Video: {c}', adRwWait:'Menunggu konfirmasi…', adRwDone:'Dari video: {c}', adRwLater:'Koin dari video masuk nanti', adRwFail:'Video gagal dimuat', adRwTest:'Tes: video tanpa koin', sbFor:'seharga {n} Telegram Stars', sbLoad:'Memuat paket…', sbMake:'Membuat tagihan…', sbOpen:'Bayar di jendela Telegram', sbWait:'Sudah dibayar — menunggu konfirmasi…', sbDone:'Masuk: {v}', sbCancel:'Pembayaran dibatalkan — tidak ada yang ditagih.', sbFail:'Pembayaran gagal — tidak ada yang ditagih.', sbLater:'Sudah dibayar — bintang akan masuk sebentar lagi.', sbErr:'Gagal membuat tagihan. Coba lagi.', rwTotal:'Total', rwCap:'Batas koin harian tercapai', rwWait:'Menghitung koin…', rwLater:'Koin akan masuk nanti', rwWin:'Menang', rwDraw:'Seri', rwLoss:'Kalah', rwLeft:'Keluar dari laga', rwBonus:'Gol dan assist', pNone:'Mainkan laga pertamamu — statistik akan muncul di sini.',
   pStatsNote:'Statistikmu tersimpan di akun Telegram dan ikut ke perangkat lain.',
   shKits:'Seragam tim', shKitsD:'Retro, musim dingin, malam', shSticks:'Tongkat', shSticksD:'Warna lakban dan bilah',
   shGoal:'Selebrasi gol', shGoalD:'Sirene, kembang api, kamera', shIce:'Es arena', shIceD:'Gambar di lingkaran tengah',
@@ -6402,7 +6401,9 @@ var MSCR={
         c+='<div class="mshc mglass mf'+(SH && SH.pack===p.id && SH.st?' sel':'')+'" data-act="cbuy" data-pack="'+mEsc(p.id)+'">'+icHtml('coin')+'<b>'+(p.coins|0)+'</b>'+
           '<span class="pr">'+curHtml('star', p.stars|0)+'</span></div>';
       });
-      c='<div class="mshh">'+mEsc(T('shCoins'))+'</div><div class="mshcg">'+c+'</div>'+adsShopHtml()+'<div class="mshq" data-paint="shQ"></div><div class="mshh">'+mEsc(T('shSoonL'))+'</div>';
+      var na=adsShopHtml();   /* «Без рекламы» — четвёртой колонкой, со своим заголовком */
+      c='<div class="mshcg"><div class="mshh" style="grid-column:span 3">'+mEsc(T('shCoins'))+'</div>'+(na ? '<div class="mshh">'+mEsc(T('shNoAds'))+'</div>' : '')+
+        c+na+'</div><div class="mshq" data-paint="shQ"></div><div class="mshh">'+mEsc(T('shSoonL'))+'</div>';
     }
     return mHead(T('mShop'), '<span class="mpill mwal">'+walletHtml()+'</span>')+
       '<div class="mleft">'+c+'<div class="mshopg'+(cs?' sm':'')+'">'+h+'</div>'+(cs?'':'<div class="mnote dim" style="margin-top:8px">'+
@@ -8123,10 +8124,10 @@ function adsNoadsSet(v){ ADS.noads=!!v; try{ localStorage.setItem('bvr_noads', v
 function adsShopHtml(){
   if(typeof ADS==='undefined' || !ADS || !(ADS.price || ADS.noads)) return '';
   var sel=SH && SH.pack==='noads' && SH.st ? ' sel' : '';
-  return '<div class="mshh">'+mEsc(T('shNoAds'))+'</div><div class="mshna"><div class="mshc mglass mf'+sel+'" data-act="'+(ADS.noads?'noop':'cbuy')+'" data-pack="noads">'+
+  return '<div class="mshc na mglass mf'+sel+'" data-act="'+(ADS.noads?'noop':'cbuy')+'" data-pack="noads" aria-label="'+mEsc(T('shNoAds'))+'">'+
     '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="3" fill="none" stroke="currentColor" stroke-width="2"/>'+
     '<path d="M10.2 9.4v5.2l4.4-2.6z" fill="currentColor"/><path d="M4.5 19.5l15-15" stroke="#ff8a7a" stroke-width="2.4" stroke-linecap="round"/></svg>'+
-    '<b>'+mEsc(T('shNoAds'))+'</b><span class="pr">'+(ADS.noads ? mEsc(T('shOwned')) : curHtml('star', ADS.price|0))+'</span></div><i>'+mEsc(T('shNoAdsD'))+'</i></div>';
+    '<span class="pr">'+(ADS.noads ? mEsc(T('shOwned')) : curHtml('star', ADS.price|0))+'</span></div>';
 }
 /* покупка «Без рекламы»: POST /v1/shop/noads {idem}; 409 — уже куплено (тоже успех), 402 — не хватает звёзд */
 function adsNoadsBuy(idem){
@@ -8399,7 +8400,7 @@ window.__hk={hs:function(){return HS;},net:function(){return NET;},setCam:functi
   /* пополнение звёзд (tools/smoke-api.mjs, stars-shots.mjs): состояние покупки, пакеты, видна ли кнопка */
   /* закрытый экран: есть ли пункт меню и загружен ли модуль (tools/smoke-api.mjs, dev-shots.mjs) */
   ext:function(){ return {ok:EXT.ok, mod:!!EXT.mod, st:EXT.st, n:EXT.n, item:document.querySelectorAll('#start [data-act="ext"]').length}; },
-  sh:function(){ return {st:SH.st, pack:SH.pack, idem:SH.idem, packs:CPACKS, ok:coinShopOK(), cards:document.querySelectorAll('#start section[data-s="shop"] .mshcg .mshc').length,
+  sh:function(){ return {st:SH.st, pack:SH.pack, idem:SH.idem, packs:CPACKS, ok:coinShopOK(), cards:document.querySelectorAll('#start section[data-s="shop"] .mshcg .mshc:not(.na)').length,
     fly:document.querySelectorAll('.rw-fx').length, text:(document.querySelector('#start [data-paint="shQ"]')||{}).textContent||''}; },
   invite:function(code, host){ return inviteLink(code, host); }, build:function(){ return BUILD; }, ndg:function(){ return NDG; },
   sb:function(){ return {st:SB.st, order:SB.order, got:SB.got, packs:PACKS, ok:starsBuyOK(), btn:document.querySelectorAll('#start .mtopup').length,
