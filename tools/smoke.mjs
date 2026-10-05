@@ -49,7 +49,9 @@ for (const name of browsers) {
       if (i >= 2) minFps = Math.min(minFps, s.fps);   // the first seconds include shader warm-up
     }
     const real = await page.evaluate('__hk.snap()');
-    if (!(boot.clock - real.clock > REAL * 0.5)) fails.push(`clock barely moved in real time (${boot.clock} → ${real.clock}) — fps too low?`);
+    // the clock stands on faceoffs (the camera zoom, the referee holds the puck 1–3 s) and after goals: 40 % of real time is
+    // enough to tell it runs; fps itself is checked below (min fps)
+    if (!(boot.clock - real.clock > REAL * 0.4)) fails.push(`clock barely moved in real time (${boot.clock} → ${real.clock}) — fps too low?`);
     if (path < 5) fails.push(`puck hardly moved (${path.toFixed(1)} m in ${REAL} s)`);
     await page.screenshot({ path: `shots/smoke-${name}.png` });
 
