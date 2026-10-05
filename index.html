@@ -2937,8 +2937,59 @@ function sim(dt){
 /* смена игрока (по умолчанию — своего) */
 function switchPlayer(team){ SIM.switchPlayer(team===undefined?HUMAN:team); }
 
+/* ============================================================
+   ВБРАСЫВАНИЕ КАК В ТРАНСЛЯЦИИ (только картинка, shared/sim.js не тронут)
+   Камера плавно наезжает на точку, центры пригибаются (клюшка на льду), судья держит шайбу над точкой и после
+   падения откатывается назад. Судья — модель полевого без клюшки (кость stick сжата в точку), свободный слот поз.
+   Math.random здесь не берём: случайные числа клиента входят в матч (balance, бэклог в CLAUDE.md).
+   ============================================================ */
+var FOV={k:0, x:0, z:0, on:false, t:0, ref:null, clip:'stickhandle', lean:0.5, dip:-0.2,   /* поза центров: наклон, просадка */
+         y:7.6, pitch:0.82,                    /* камера на вбрасывании: высота, наклон (взгляд круче, чем в игре) */
+         kitRef:new Float32Array([0.92,0.92,0.94, 0.10,0.10,0.11, 0.08,0.08,0.09])};   /* свитер, кант, трусы */
+function fovRef(){
+  return FOV.ref || (FOV.ref={x:0, z:0, yaw:-Math.PI/2, spd:0, vx:0, vz:0, goalie:false, team:0, down:0, boxed:0, stride:0,
+                              _an:{c:'ready', t:0, pc:null, pt:0, mix:0}, _row:-1, isRef:true});
+}
+function fovTick(dt){
+  var fo=state==='face' && !TRAIN.on, ph=fo ? faceInfo().ph : 0;
+  if(fo){ FOV.x=puck.x; FOV.z=puck.z; }
+  /* наезд — за ~1.5 с, как в трансляции; после падения шайбы — назад за ~0.6 с */
+  FOV.k+=((fo?1:0)-FOV.k)*Math.min(1, dt*(fo?1.5:3.4));
+  var R=fovRef();
+  if(fo && ph>0 && ph<3){
+    /* судья за точкой (с дальней от камеры стороны — не закрывает падение шайбы), лицом к камере */
+    R.x=FOV.x; R.z=FOV.z+0.6; R.yaw=-Math.PI/2; R.spd=0; R._back=false; FOV.on=true; FOV.t=1.4; R._crT=0.15;
+  } else if(FOV.on){
+    FOV.t-=dt;
+    if(FOV.t<=0) FOV.on=false;
+    else {                                       /* шайба упала: откатывается спиной от точки */
+      var v=clamp((FOV.z+4.2-R.z)*3, 0, 3.2);
+      R.z+=v*dt; R.spd=v; R._back=v>0.4;
+    }
+  }
+  /* центры на точке пригибаются: клюшка на льду, пока судья держит шайбу */
+  if(fo && ph>0 && ph<3){
+    for(var t=0;t<2;t++){
+      var c=null, cd=1.8;
+      for(var i=0;i<players.length;i++){ var p=players[i];
+        if(p.team!==t || p.goalie || p.boxed) continue;
+        var d=Math.hypot(p.x-FOV.x, p.z-FOV.z); if(d<cd){ cd=d; c=p; } }
+      /* клип подменяет animTick ПОСЛЕ animPick: выбор клипа (в нём Math.random) идёт как раньше — матч тот же */
+      if(c){ c._foT=0.12; c._crT=0.15; }
+    }
+  }
+}
+/* кость клюшки судьи — в точку: модель полевого без клюшки */
+function fovNoStick(M, row){
+  if(FOV.sb===undefined) FOV.sb=M.names.indexOf('stick');
+  if(FOV.sb<0) return;
+  var a=M.slice[row], o=FOV.sb*16;
+  for(var i=0;i<15;i++) a[o+i]=0;
+  a[o+15]=1;
+}
+
 function camUpdate(dt){
-  if(CAMLOCK || MENU3D.on) return;
+  if(CAMLOCK || MENU3D.on){ cam.fk=0; return; }
 
   // Determine focus target
   var carrier = puck.owner;
@@ -3040,6 +3091,16 @@ function camUpdate(dt){
     cam.z = lerp(cam.z, targetZ, Math.min(1, dt * 5.0));
   }
 
+  /* вбрасывание: камера для кадра — между игровой и наездом на точку (сама игровая камера ведётся как обычно) */
+  fovTick(dt);
+  var fk=FOV.k*FOV.k*(3-2*FOV.k);
+  cam.fk=PORTRAIT ? 0 : fk;
+  if(cam.fk>0.001){
+    var fd=FOV.y/Math.tan(FOV.pitch);
+    cam.rx=lerp(cam.x, FOV.x, fk); cam.ry=lerp(cam.y, FOV.y, fk);
+    cam.rz=lerp(cam.z, FOV.z-fd, fk); cam.rp=lerp(cam.pitch, FOV.pitch, fk);
+  }
+
   fxUpdate(dt);
 }
 
@@ -3088,15 +3149,16 @@ var MV=m4(), MP=m4(), MVP=m4(), MTMP=m4();
 
 /* вид: точно повторяет старую proj() — рыскание вокруг Y, затем тангаж */
 function buildView(o){
+  var fz=cam.fk>0.001, CX=fz?cam.rx:cam.x, CY=fz?cam.ry:cam.y, CZ=fz?cam.rz:cam.z, PI_=fz?cam.rp:cam.pitch;
   var cy=Math.cos(cam.yaw), sy=Math.sin(cam.yaw);
-  var cp=Math.cos(cam.pitch), sp=Math.sin(cam.pitch);
+  var cp=Math.cos(PI_), sp=Math.sin(PI_);
   /* строки матрицы поворота */
   var r00=cy,        r01=0,   r02=-sy;
   var r10=sp*sy,     r11=cp,  r12=sp*cy;
   var r20=-cp*sy,    r21=sp,  r22=-cp*cy;   /* GL смотрит в -Z */
-  var tx=-(r00*cam.x+r01*cam.y+r02*cam.z);
-  var ty=-(r10*cam.x+r11*cam.y+r12*cam.z);
-  var tz=-(r20*cam.x+r21*cam.y+r22*cam.z);
+  var tx=-(r00*CX+r01*CY+r02*CZ);
+  var ty=-(r10*CX+r11*CY+r12*CZ);
+  var tz=-(r20*CX+r21*CY+r22*CZ);
   o[0]=r00; o[1]=r10; o[2]=r20; o[3]=0;
   o[4]=r01; o[5]=r11; o[6]=r21; o[7]=0;
   o[8]=r02; o[9]=r12; o[10]=r22;o[11]=0;
@@ -4425,6 +4487,8 @@ function render(){
       skinPosePlayer(pp, r, RDT);
       if(pp.goalie) rg++; else rs++;
     }
+    var RF=fovRef(); RF._row=-1;
+    if(FOV.on && rs<HD.m.skater.rows){ RF._row=rs; skinPosePlayer(RF, rs, RDT); fovNoStick(HD.m.skater, rs); }
   }
   else { for(var pj=0;pj<players.length;pj++) players[pj]._row=-1; }
   pfAdd('pose',_tp);
@@ -4602,6 +4666,7 @@ function drawCasters(){
   drawAt(GEO.lm[offWarn===0?1:0],  BLUE_X,0, RW-1.35,-Math.PI/2,{mat:'player',boost:0.10});
   drawAt(GEO.lm[offWarn===1?1:0], -BLUE_X,0,-(RW-1.35),Math.PI/2,{mat:'player',boost:0.10});
 
+  if(FOV.on && HD.ok && FOV.ref && FOV.ref._row>=0 && !RSKIP.players) skinDraw(FOV.ref, FOV.ref._row, null, {kit:FOV.kitRef});
   for(i=0;i<players.length;i++){
     p=players[i]; if(p.boxed) continue;
     var yaw=p.yaw+Math.PI/2;
@@ -5006,6 +5071,7 @@ function animTick(p, dt){
   var a=p._an;
   if(p._actT>0){ p._actT-=dt; if(p._actT<=0) p._act=null; }
   var want=animPick(p);
+  if(p._foT>0){ p._foT-=dt; want=FOV.clip; }          /* вбрасывание: центр в стойке (FOV) */
   if(!M.clips[want]) want='ready';
   /* play() не перезапускает уже играющий клип — иначе дёргается каждый кадр */
   if(want!==a.c){
@@ -5118,7 +5184,9 @@ function sprTick(p, dt){
   var fx=Math.cos(p.yaw), fz=Math.sin(p.yaw), lx=fz, lz=-fx;
   var aF=V.ax*fx+V.az*fz, aL=V.ax*lx+V.az*lz;
   var calm = p.down>0 || state!=='play';
-  var leanT = calm?0:clamp(aF*0.026, -0.17, 0.20);
+  /* вбрасывание: центры и судья пригнуты (FOV, _crT — сколько ещё держать) */
+  var crouch = p._crT>0; if(crouch) p._crT-=dt;
+  var leanT = crouch ? FOV.lean : (calm?0:clamp(aF*0.026, -0.17, 0.20));
   var bankT = calm?0:clamp(aL*0.020, -0.15, 0.15);
   var P=_sprPose;
   P.lean=sprA(S,SP_LEAN, leanT, 2.1, 0.55, dt);
@@ -5133,7 +5201,7 @@ function sprTick(p, dt){
   if(lv>=3){
     if(V.kick>0){ V.kick-=dt; if(V.kick<=0){ S[SP_STICK+1]+=3.2; V.kick=-1; } }   /* клюшка «отдаёт» после замаха */
     P.stick=sprA(S,SP_STICK, 0, 5.5, 0.16, dt);
-    P.dip=sprA(S,SP_DIP, 0, 3.2, 0.45, dt);
+    P.dip=sprA(S,SP_DIP, crouch?FOV.dip:0, 3.2, 0.45, dt);
   }
   return P;
 }
@@ -5189,9 +5257,12 @@ function skinDraw(p, row, teamCol, opt){
   gl.uniformMatrix4fv(U.uBones,false,M.slice[row]);
   /* три слота: свитер, кант, трусы */
   var T=HD.team, c=teamCol;
+  if(opt.kit) T.set(opt.kit);                    /* своя форма (судья) */
+  else {
   T[0]=c[0];       T[1]=c[1];       T[2]=c[2];
   T[3]=c[0]*0.34+0.10; T[4]=c[1]*0.34+0.10; T[5]=c[2]*0.34+0.10;
   T[6]=c[0]*0.30+0.05; T[7]=c[1]*0.30+0.05; T[8]=c[2]*0.30+0.05;
+  }
   gl.uniform3fv(U.uTeam,T);
   var mt=MAT[p.goalie?'goalie':'player']||MAT.player;
   gl.uniform1f(U.uUseTex,0);
@@ -8480,6 +8551,8 @@ window.__hk={hs:function(){return HS;},net:function(){return NET;},setCam:functi
   lt:function(p){lastTouch=p;}, pz:function(){return prevZone;},
   lang:function(c){ setLang(c); },
   /* меню: menu('prep') — открыть экран; menuState() — слой, стек, фокус; music() — состояние музыки */
+  /* вбрасывание как в трансляции: fov({clip, y, pitch}) — подстройка, fov() — состояние (камера k, судья, фаза) */
+  fov:function(o){ if(o) for(var k in o) FOV[k]=o[k]; return {k:+FOV.k.toFixed(2), ref:FOV.on, ph:faceInfo().ph, clip:FOV.clip, y:FOV.y, pitch:FOV.pitch, lean:FOV.lean, dip:FOV.dip}; },
   menu:function(id, tab){ if(tab!==undefined) MENU.trainTab=tab; if(id==='main') MENU.setStack(['main']); else MENU.go(id); },
   menuState:function(){ var L=MENU.layer(), it=MENU.items(L), f=it[Math.min(MENU.foc[MENU.key(L)]||0, it.length-1)];
     return {layer:L, stack:MENU.stack.slice(), focus:f?(f.getAttribute('data-act')||f.getAttribute('data-adj')||f.id):null, n:it.length,
