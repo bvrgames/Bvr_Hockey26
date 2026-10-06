@@ -304,6 +304,10 @@ async function collect(g, tag) {
     ok((m.session === 'none' || m.session === 'playback') && m.ac === 'running', `audio session / context after the tap ${JSON.stringify(m)}`);
     console.log(`note: audio session ${m.session}, AudioContext ${m.ac}`);
     ok(!m.blocked && m.playing && /^assets\/dist\/music-|\/assets\/dist\/music-/.test(m.src.replace(/^https?:\/\/[^/]+\//, '')), `after the first tap the music should play ${JSON.stringify(m)}`);
+    // match sounds: every recording (assets/dist/sfx-*.m4a) decodes, the crowd plays the recording instead of the synth
+    let s = null;
+    for (let i = 0; i < 40; i++) { s = await page.evaluate('__hk.sfx()'); if (s.want && s.ready.length === s.want && s.crowd) break; await page.waitForTimeout(200); }
+    ok(s.want >= 12 && s.ready.length === s.want && !Object.keys(s.err).length && s.crowd && !s.synthCrowd, `match sounds should load from the recordings ${JSON.stringify(s)}`);
     await page.evaluate('__hk.start()');
     if (await inMatch(page, 'music fade')) {
       await page.waitForTimeout(1300);

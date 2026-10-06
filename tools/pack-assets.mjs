@@ -12,6 +12,9 @@
 //   assets/dist/<name>.<hash>.png
 //   assets/src/music/*.mp3    menu music (title = file name, artist BvR) → assets/dist/music-<hash>.m4a, AAC 96 kbit/s via
 //                             macOS afconvert; the hash is of the source + encoder settings, so --check never re-encodes
+//   assets/src/sfx/*.wav      match sounds (tools/prep-sfx.mjs cuts them from CC0 recordings, THIRD_PARTY.md) →
+//                             assets/dist/sfx-<name>.<hash>.m4a with the music's encoder, window.ASSETS.sfx[name]; a loop's
+//                             window [start, end] in s → window.ASSETS.sfxLoop[name] (prep-sfx appends LOOP_TAIL s after it)
 //   assets/src/fonts/*.woff2  menu font (Fira Sans Extra Condensed 800 italic, OFL) → assets/dist/font-lat|font-cyr.<hash>.woff2
 //   assets/src/kits/*.webp    kit fronts and flags for the team select (made by tools/prep-kits.mjs from the designer's
 //                             sheets) → assets/dist/kit-<name>.<hash>.webp, window.ASSETS.kits[name]
@@ -32,6 +35,7 @@ import { createHash } from 'node:crypto';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = join(ROOT, 'assets', 'src'), DIST = join(ROOT, 'assets', 'dist'), HTML = join(ROOT, 'index.html');
 const IMAGES = ['env', 'ads', 'logo'];
+const SFX = join(SRC, 'sfx'), LOOP_TAIL = 1;   // = tools/prep-sfx.mjs LOOP_TAIL
 const MUSIC = join(SRC, 'music'), FONTS = join(SRC, 'fonts'), ICONS = join(SRC, 'icons'), KITS = join(SRC, 'kits');
 // the drawing's own bounds (getBBox in Chromium) instead of the artboard: the icon is exactly as tall as the text it
 // stands next to; both share the artboard's rows 55.4…870.2. Measure again when the art changes.
@@ -141,6 +145,18 @@ function build() {
     music.push({ n: f.replace(/\.mp3$/i, '').normalize('NFC'), u: `assets/dist/music-${h}.m4a`, src });
   }
   manifest.music = music.map((m) => ({ n: m.n, u: m.u }));
+  // match sounds: same encoder and hashing as the music; names ending in _loop loop inside [LOOP_TAIL/2, len - LOOP_TAIL/2]
+  const sfx = existsSync(SFX) ? readdirSync(SFX).filter((f) => /\.wav$/.test(f)).sort() : [];
+  for (const f of sfx) {
+    const src = join(SFX, f), buf = readFileSync(src), n = f.replace(/\.wav$/, ''), h = hash(Buffer.concat([buf, Buffer.from('|' + AAC.join(' '))]));
+    const u = `assets/dist/sfx-${n}.${h}.m4a`;
+    music.push({ n: 'sfx ' + n, u, src });
+    (manifest.sfx = manifest.sfx || {})[n] = u;
+    if (/_loop$/.test(n)) {
+      const len = (buf.length - 44) / 2 / 44100;   // prep-sfx writes 44.1 kHz mono 16 bit with a 44-byte header
+      (manifest.sfxLoop = manifest.sfxLoop || {})[n] = [LOOP_TAIL / 2, +(len - LOOP_TAIL / 2).toFixed(4)];
+    }
+  }
   return { files, manifest, music, dist };
 }
 
@@ -180,7 +196,7 @@ function htmlWith(html, manifest) {
 
 if (args.includes('--extract')) extract();
 const { files, manifest, music, dist } = build();
-const allPaths = Object.values(dist).concat(manifest.music.map((m) => m.u));
+const allPaths = Object.values(dist).concat(music.map((m) => m.u));
 const html = readFileSync(HTML, 'utf8'), want = htmlWith(html, manifest);
 if (args.includes('--check')) {
   const bad = [];

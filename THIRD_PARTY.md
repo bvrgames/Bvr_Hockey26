@@ -39,3 +39,27 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+## Match sounds — CC0 (public domain), no attribution required
+
+The match sounds are cut from the recordings below by `tools/prep-sfx.mjs` (cut points, trim, loudness, crossfade
+loop) into `assets/src/sfx/*.wav`, then encoded by `npm run assets` to `assets/dist/sfx-*.m4a`. All sources are
+released under **Creative Commons Zero 1.0** (https://creativecommons.org/publicdomain/zero/1.0/) — free to use,
+modify and ship commercially without credit. The authors are listed here anyway, as thanks.
+
+| sound | file | source | author | license |
+|---|---|---|---|---|
+| stick — stick on the puck (pass, pickup, poke) | `stick.wav` | [Ice Hockey Practice round](https://freesound.org/s/416981/) (Freesound 416981), 15.16–15.30 s | simonlabelle | CC0 |
+| shot_wrist — wrist shot | `shot_wrist.wav` | [Ice Hockey Practice round](https://freesound.org/s/416981/) (Freesound 416981), 87.67–88.05 s | simonlabelle | CC0 |
+| shot_slap — slap shot | `shot_slap.wav` | [Ice Hockey Practice round](https://freesound.org/s/416981/) (Freesound 416981), 209.01–209.52 s | simonlabelle | CC0 |
+| hit — body check into the boards | `hit.wav` | [Hockey - Huge Body Check Hit Into Boards](https://freesound.org/s/161996/) (Freesound 161996), 4.74–5.55 s | producerdan | CC0 |
+| save — puck into the goalie's pad | `save.wav` | [Impact Sounds](https://kenney.nl/assets/impact-sounds), `impactPunch_medium_001.ogg` | Kenney (kenney.nl) | CC0 |
+| post — puck off the post | `post.wav` | [Impact Sounds](https://kenney.nl/assets/impact-sounds), `impactMetal_light_003.ogg` | Kenney (kenney.nl) | CC0 |
+| whistle — referee's whistle | `whistle.wav` | [Referee whistle sound.wav](https://freesound.org/s/538422/) (Freesound 538422) | Rosa-Orenes256 | CC0 |
+| horn — arena goal horn | `horn.wav` | [Hockey arena goal horn with crowd applause](https://freesound.org/s/702099/) (Freesound 702099), 3.35–7.30 s | SEF7 | CC0 |
+| coin — coin chime | `coin.wav` | [GAMEMisc_Designed, Coin, Pick-Up, Tonal, High Pitched, Digital_15](https://freesound.org/s/830033/) (Freesound 830033), 0–0.7 s | JW_Audio | CC0 |
+| ui — menu click | `ui.wav` | [UI Audio](https://kenney.nl/assets/ui-audio), `click5.ogg` | Kenney (kenney.nl) | CC0 |
+| swap — player switch whoosh | `swap.wav` | [Swishes Sound Pack](https://opengameart.org/content/swishes-sound-pack), `swish-11.wav` | artisticdude (OpenGameArt) | CC0 |
+| crowd_loop — arena crowd, seamless loop | `crowd_loop.wav` | [Rogers Arena - NHL game atmosphere](https://freesound.org/s/706497/) (Freesound 706497), 33.0–43.5 s | SEF7 | CC0 |
+
+Freesound files were taken from the site's HQ mp3 previews (the CC0 license covers the sound, not the file format).
