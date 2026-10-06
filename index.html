@@ -1080,7 +1080,10 @@ function viewSize(){
   var vv=window.visualViewport;
   var w=vv?vv.width:window.innerWidth, h=vv?vv.height:window.innerHeight;
   var tg=(typeof TG!=='undefined')?TG:null;
-  if(tg && tg.viewportStableHeight>0) h=Math.max(h, tg.viewportStableHeight);
+  /* стабильная высота Telegram — только если она не больше окна: на Android после поворота она бывает устаревшей
+     (высота из вертикали) — тогда кнопки управления считались по высокому экрану (самые большие) и уезжали вниз
+     до следующей перестройки (06.10, Redmi 13) */
+  if(tg && tg.viewportStableHeight>0 && tg.viewportStableHeight<=window.innerHeight+2) h=Math.max(h, tg.viewportStableHeight);
   return [Math.max(320,Math.round(w)), Math.max(240,Math.round(h))];
 }
 function isDesktopTG(){
@@ -2460,6 +2463,12 @@ function mainMeterStart(){
   setInterval(function(){ MAINM.ltN=MAINM.ltOn ? MAINM.lt : null; MAINM.lt=0; }, 1000);
 }
 function mainFrame(ms){ if(!TEST.debug) return; MAINM.fr.push(ms); if(MAINM.fr.length>60) MAINM.fr.shift(); }
+/* раскладка (панель отладки): окно, по которому считаны кнопки, и что сообщают браузер и Telegram */
+function layText(){
+  var vv=window.visualViewport, tg=(typeof TG!=='undefined')?TG:null;
+  return 'layout '+VW+'×'+VH+' R '+Math.round(PAD_R)+' · inner '+innerWidth+'×'+innerHeight+(vv?' · vv '+Math.round(vv.width)+'×'+Math.round(vv.height):'')+
+    (tg?' · tg '+Math.round(tg.viewportHeight||0)+'/'+Math.round(tg.viewportStableHeight||0):'');
+}
 function mainText(){
   var p90=function(a){ if(!a.length) return '—'; var v=a.slice().sort(function(x,y){return x-y;}); return Math.round(v[Math.floor(v.length*0.9)]); };
   return 'main: frame p90 '+p90(MAINM.fr)+' ms · long>50 '+(MAINM.ltN===null?'—':MAINM.ltN+'/s')+' · loop lag p90 '+p90(MAINM.lag)+' ms';
@@ -2561,7 +2570,7 @@ setInterval(function(){
     'RTT→opp  '+f(po)+'\n'+
     'snap '+NETDBG.sRate.toFixed(1)+'/s · input '+NETDBG.iRate.toFixed(1)+'/s · interp D '+Math.round(NETV.D*1000)+' ms · rtt(ack) '+Math.round(NETV.rtt||0)+' ms\n'+
     'server clock Δ '+(NDG.stOff===null?'—':(NDG.stOff>0?'+':'')+NDG.stOff+' ms')+'\n'+
-    mainText()+
+    mainText()+'\n'+layText()+
     (PERF.on && PERF.out ? '\n'+pfText() : '');
 },1000);
 
