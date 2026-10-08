@@ -652,8 +652,12 @@
   .fhl::before{content:'';width:8px;height:8px;border-radius:50%;background:#e8384f;animation:rwPulse .8s ease-in-out infinite alternate}
   .fhl i{font-style:normal;color:var(--mgold)}
   #overscr.fin #oReward{margin:0 0 2px;font-size:14px}
-  #overscr.fin #oReward .rw-rows,#overscr.fin #oReward .rw-note{display:none}
-  #overscr.fin #oReward .rw-tot{margin-top:0;justify-content:center;gap:12px;font-size:24px}
+  /* за что начислено — компактно, итог крупно */
+  #overscr.fin #oReward .rw-rows{gap:1px;padding-top:4px}
+  #overscr.fin #oReward .rw-r{font-size:13px}
+  #overscr.fin #oReward .rw-r .rk{font-size:11px}
+  #overscr.fin #oReward .rw-note{font-size:10px}
+  #overscr.fin #oReward .rw-tot{margin-top:3px;font-size:20px}
   #oWal{align-self:center;margin:0 0 2px}
   #overscr:not(.fin) #oWal{display:none}
   @keyframes ftInL{from{opacity:0;transform:translateX(-40px)}to{opacity:1;transform:none}}
