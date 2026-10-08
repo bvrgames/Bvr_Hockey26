@@ -90,7 +90,8 @@ try {
   // a 15-second match must end with match:end for both (the clock stands during faceoffs: ~5 s each on top)
   H.send({ t: 'cfg', a: 1, b: 2, min: 0.25, id: 'fedcba9876543210fedcba98' });
   const tEnd = Date.now();
-  while (!(H.ev.some((e) => e.n === 'match:end') && G.ev.some((e) => e.n === 'match:end')) && Date.now() - tEnd < 60000) await wait(200);
+  // goals in it stop the clock for every faceoff (5–7 s each): 0:2 took 71 s on main — wait up to 120 s
+  while (!(H.ev.some((e) => e.n === 'match:end') && G.ev.some((e) => e.n === 'match:end')) && Date.now() - tEnd < 120000) await wait(200);
   ok(H.ev.some((e) => e.n === 'match:end') && G.ev.some((e) => e.n === 'match:end'), 'no match:end after the 15 s match');
   const lastD = G.snaps[G.snaps.length - 1].m.d;
   ok(lastD[6] === 4 && lastD[5] === 0, `final snapshot state ${lastD[6]} clock ${lastD[5]}`);
