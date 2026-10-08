@@ -34,7 +34,7 @@ import BVRSim from '../shared/sim.mjs';
 export const SIM_HZ = 60, SNAP_EVERY = 2;          // 60 Hz simulation, snapshot every 2nd step = 30 Hz
 export const SNAP_HZ_OK = [15, 20, 30, 60];          // snapshot rates a match may ask for (cfg.hz): whole steps apart
 export const AWAY_MS = 2000, GONE_MS = 30000;
-const NETWORKED = { faceoff: 1, pass: 1, 'pass:recv': 1, shot: 1, save: 1, post: 1, goal: 1,
+const NETWORKED = { faceoff: 1, pass: 1, 'pass:recv': 1, shot: 1, save: 1, post: 1, goal: 1, slip: 1,
                     hit: 1, penalty: 1, stoppage: 1, poke: 1, pickup: 1, 'match:end': 1 };
 const STC = { play: 0, face: 1, goal: 2, replay: 3, over: 4, menu: 5 };
 const BTN = ['A', 'B', 'X', 'Y', 'LB'];

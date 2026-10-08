@@ -55,7 +55,7 @@ function create(env){
   /* адресат паса партнёра (и выигранного вбрасывания), пока шайба свободна и летит: он разворачивается к ней клюшкой
      и принимает и коньком / телом — раньше шайба, пришедшая в спину или в бок, проезжала мимо стоящего игрока */
   function recvOf(p){
-    return !!(LASTPASS && LASTPASS.to===p && LASTPASS.from.team===p.team && !puck.owner && SIMT-LASTPASS.t<2 && !p.goalie);
+    return !!(LASTPASS && LASTPASS.to===p && LASTPASS.from.team===p.team && !puck.owner && SIMT-LASTPASS.t<RECV_CFG.run && !p.goalie);
   }
 
   /* кем управляет ввод (см. setControl) */
@@ -123,6 +123,15 @@ function create(env){
     otPow:0.7,                /* сила броска в одно касание не меньше (0..1) */
     otHold:0.4,               /* держал B и при приёме — бросок в одно касание, если отпустил за столько, с */
     otSave:0.40               /* шанс сейва в створе у броска в одно касание (у обычного 0.55): вратарь не успел за пасом */
+  };
+  /* адресат своего паса, пока шайба летит (recvOf): рвётся к ней, а не встаёт в расчётной точке; управление к нему не
+     уходит, пока пас в пути; у живого с отпущенным стиком — едет к шайбе сам. Редко на выходе один на один
+     (впереди ни одного полевого соперника) — поскальзывается при приёме паса: падает, шайба катится дальше.
+     У ИИ против ИИ такой приём редок (≈0.02 за матч); у живого, который выводит партнёра пасом в разрез, — чаще */
+  var RECV_CFG={
+    run:2.2,                  /* сколько после паса адресат рвётся за шайбой, с (было 1.6 — дальний пас не успевал) */
+    slip:0.12,                /* шанс поскользнуться при приёме паса на выходе один на один (≈ раз в 3–4 матча) */
+    slipDown:1.1              /* сколько лежит, с */
   };
   var matchLen=5*60;          /* длина матча, с (задают клиент и комната вместе с clock) — от неё длина удалений */
   /* вбрасывание: ph 0 нет, 1 расстановка, 2 судья держит шайбу, 3 шайба упала — окно нажатий */
@@ -527,11 +536,25 @@ function create(env){
         LASTRECV={from:LASTPASS.from, to:p, t:SIMT};
         p._recvT=SIMT; p._recvLead=!!LASTPASS.lead;
         emit('pass:recv',{p:pIdx(p), t:p.team, from:pIdx(LASTPASS.from), aimed:LASTPASS.to===p?1:0, lead:LASTPASS.lead?1:0});
+        if(breakaway(p) && R()<RECV_CFG.slip){ slip(p); LASTPASS=null; return; }
       } else e.intercept=1;
     }
     LASTPASS=null;
     if(prev && prev.team!==p.team) e.turnover=1;
     emit('pickup',e);
+  }
+  /* выход один на один: на чужой половине, впереди (ближе к воротам соперника) ни одного полевого соперника */
+  function breakaway(p){
+    var dir=attackDir(p.team); if(p.x*dir<0) return false;
+    var fo=teamOf(1-p.team);
+    for(var i=0;i<fo.length;i++) if(fo[i].down<=0 && fo[i].x*dir>p.x*dir-0.5) return false;
+    return true;
+  }
+  /* поскользнулся: падает, шайба уходит с его скоростью; подбор этого кадра — без владельца */
+  function slip(p){
+    p.down=RECV_CFG.slipDown;
+    puck.owner=null; puck.free=0.45; puck.vx=p.vx*0.7; puck.vz=p.vz*0.7; puck.vy=0;
+    emit('slip',{p:pIdx(p), t:p.team, x:r2(p.x), z:r2(p.z)});
   }
   /* гол: автор — последний коснувшийся из забившей команды, передача — кто отдал ему пас */
   function goalEvent(team, z){
@@ -1046,7 +1069,7 @@ function create(env){
     if(!hs.goalieCtl){
       if(puck.owner && puck.owner.team===team && !puck.owner.goalie){
         if(hs.ctrl!==puck.owner) hs.ctrl=puck.owner;
-      } else if(!puck.owner && LASTPASS && LASTPASS.lead && LASTPASS.from.team===team && LASTPASS.to && LASTPASS.to!==hs.ctrl && SIMT-LASTPASS.t<1.6){
+      } else if(!puck.owner && LASTPASS && LASTPASS.lead && LASTPASS.from.team===team && LASTPASS.to && LASTPASS.to!==hs.ctrl && SIMT-LASTPASS.t<RECV_CFG.run){
         /* пас в разрез летит партнёру: он рвётся за шайбой сам, управление перейдёт к нему при приёме */
       } else {
         hs.autoT-=dt;
@@ -1205,6 +1228,11 @@ function create(env){
       if(PR.d<PLAYER_CFG.pressRange){ maxs=PLAYER_CFG.pressMaxSpeed; accel=PLAYER_CFG.pressAccel; }
     }
     if(inp2.RT){ maxs=PLAYER_CFG.sprintMaxSpeed; accel=PLAYER_CFG.sprintAccel; }
+    /* адресат своего паса, стик отпущен (управление перешло к нему, а игрок не успел взяться): едет к шайбе сам */
+    if(!PR.on && Math.hypot(inp2.mx, inp2.mz)<0.2 && recvOf(p)){
+      var ip=interceptPt(p), rx=(ip?ip[0]:puck.x+puck.vx*0.4)-p.x, rz=(ip?ip[1]:puck.z+puck.vz*0.4)-p.z, rL=Math.hypot(rx,rz)||1;
+      if(rL>0.6){ ax=rx/rL; az=rz/rL; maxs=PLAYER_CFG.sprintMaxSpeed; accel=PLAYER_CFG.sprintAccel; }
+    }
     if(puck.owner===p){ maxs*=PLAYER_CFG.puckSpeedMul; }
     return [ax,az,maxs,accel];
   }
@@ -1693,10 +1721,12 @@ function create(env){
         }
         /* адресат паса идёт навстречу шайбе, а не ждёт её на месте */
         var LVp=aiLevel(p.team);
-        if(!carrier && LASTPASS && LASTPASS.to===p && LASTPASS.from.team===p.team && SIMT-LASTPASS.t<1.6 && LVp.meet>0){
+        if(!carrier && LASTPASS && LASTPASS.to===p && LASTPASS.from.team===p.team && SIMT-LASTPASS.t<RECV_CFG.run && LVp.meet>0){
           if(LASTPASS.lead){
-            /* пас в разрез: рывок в точку встречи; успевает перехватить раньше — туда */
-            var ip=interceptPt(p); tx=ip?ip[0]:LASTPASS.x; tz=ip?ip[1]:LASTPASS.z; runner=true;
+            /* пас в разрез: рывок в точку встречи; успевает перехватить раньше — туда. Шайба уже прошла точку встречи
+               (расчёт разошёлся) — вдогонку за ней, а не стоять в точке */
+            var ip=interceptPt(p), past=(LASTPASS.x-puck.x)*puck.vx+(LASTPASS.z-puck.z)*puck.vz<0;
+            tx=ip?ip[0]:(past?puck.x+puck.vx*0.5:LASTPASS.x); tz=ip?ip[1]:(past?puck.z+puck.vz*0.5:LASTPASS.z); runner=true;
             /* шайба ещё не в зоне — у синей ждём её, иначе офсайд */
             if(puck.x*p.dir<BLUE_X && tx*p.dir>BLUE_X-0.4 && p.x*p.dir<BLUE_X) tx=Math.min(tx*p.dir, Math.max(p.x*p.dir, BLUE_X-0.4))*p.dir;
           } else { tx=lerp(tx, puck.x+puck.vx*0.22, LVp.meet); tz=lerp(tz, puck.z+puck.vz*0.22, LVp.meet); }
@@ -1801,6 +1831,7 @@ function create(env){
   api.PEN_CFG=PEN_CFG;
   api.FACE_CFG=FACE_CFG;
   api.SHOT_CFG=SHOT_CFG;
+  api.RECV_CFG=RECV_CFG;
   api.FO=FO;
   api.clearOnePenalty=clearOnePenalty;
   api.aimInput=aimInput;
