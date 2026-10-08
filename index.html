@@ -182,6 +182,7 @@
   #start.overgame{background:rgba(4,9,18,.8)}
   #start.m3d{background:transparent}
   /* под прозрачным меню — только арена: табло, кнопки, пауза, подсказки матча скрыты */
+  body.fin #hud,body.fin #hud2,body.fin #pad,body.fin #stick,body.fin #tacbadge,body.fin #legend,body.fin #topbar,body.fin #fps,body.fin #power,
   body.m3d #hud,body.m3d #hud2,body.m3d #pad,body.m3d #stick,body.m3d #tacbadge,body.m3d #legend,body.m3d #topbar,body.m3d #fps,body.m3d #power{visibility:hidden}
   #start .mbg{transition:opacity 1.2s}
   #start.m3d .mbg{opacity:.62}
@@ -594,6 +595,84 @@
   .mres{align-items:center;text-align:center;padding:16px 20px}
   #oScore{font:italic 800 clamp(40px,14vh,60px)/1 var(--msport);letter-spacing:.04em}
   #oWinner{font:italic 800 16px/1.2 var(--msport);color:var(--mgold);text-transform:uppercase}
+  /* итог матча (finPaint): сверху команды и счёт, ниже статистика | кнопки и монеты | три звезды. Только transform /
+     opacity в анимациях. В уроке (showTrainResult) — прежний экран: класса fin нет */
+  .fband,.fstats,.fstars{display:none}
+  #overscr.fin{background:linear-gradient(180deg,rgba(4,9,18,.72),rgba(4,9,18,.5) 45%,rgba(4,9,18,.78))}
+  #overscr.fin .mscr{grid-template-columns:minmax(0,1.3fr) minmax(178px,.85fr) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);
+    grid-template-areas:"band band band" "stats left stars";gap:8px 14px;padding-top:calc(var(--mt) - 6px)}
+  #overscr.fin .mhead,#overscr.fin .mright{display:none}
+  #overscr.fin .fband{grid-area:band;display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:12px}
+  #overscr.fin .fstats{grid-area:stats;align-self:center;max-height:100%;display:flex;flex-direction:column;justify-content:center;gap:1px;padding:6px 12px;min-height:0;overflow:hidden}
+  #overscr.fin .fstars{grid-area:stars;align-self:center;max-height:100%;display:flex;flex-direction:column;justify-content:center;gap:4px;padding:6px 10px;min-height:0;overflow:hidden}
+  #overscr.fin .mleft{justify-content:center;gap:4px}
+  #overscr.fin .mleft .mlist .mi{font-size:clamp(15px,4.6vh,19px)}
+  @media (max-width:700px){ #overscr.fin .mscr{grid-template-columns:minmax(0,1.3fr) minmax(170px,1fr);grid-template-areas:"band band" "stats left"} #overscr.fin .fstars{display:none} }
+  .ft{display:flex;align-items:center;gap:10px;min-width:0;animation:ftInL .55s cubic-bezier(.2,.9,.25,1.15) both}
+  .ft.r{flex-direction:row-reverse;text-align:right;animation-name:ftInR}
+  .ft .fl{position:relative;flex:none;width:clamp(48px,15vh,64px);aspect-ratio:3/2;border-radius:7px;overflow:hidden;
+    box-shadow:0 0 0 2px rgba(255,255,255,.18),0 6px 18px rgba(0,0,0,.45)}
+  .ft .fl img,.ft .fl svg{width:100%;height:100%;object-fit:cover;display:block}
+  .ft.w .fl{box-shadow:0 0 0 2px var(--mgold),0 0 22px rgba(255,209,102,.55);animation:ftGlow 1.6s ease-in-out .9s infinite alternate}
+  .ft .fi{display:flex;flex-direction:column;gap:3px;min-width:0}
+  .ft .fn{font:italic 800 clamp(16px,5.4vh,22px)/1 var(--msport);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ft .fw{font:italic 800 11px/1 var(--msport);letter-spacing:.06em;text-transform:uppercase;color:var(--mdim)}
+  .ft .fb{align-self:flex-start;font:italic 800 13px/1 var(--msport);letter-spacing:.08em;text-transform:uppercase;padding:4px 9px;border-radius:5px;
+    background:rgba(255,255,255,.1);color:var(--mdim);opacity:0;animation:fbIn .45s ease-out .55s forwards}
+  .ft.r .fb{align-self:flex-end}
+  .ft.w .fb{position:relative;overflow:hidden;color:#1b1203;background:linear-gradient(180deg,#ffe08a,var(--mgold2));
+    animation:fbStamp .5s cubic-bezier(.2,1.4,.4,1) .55s forwards}
+  .ft.w .fb::after{content:'';position:absolute;inset:0;background:linear-gradient(105deg,transparent 30%,rgba(255,255,255,.75) 50%,transparent 70%);
+    transform:translateX(-120%);animation:fbShine 2.4s ease-in-out 1.2s infinite}
+  .ft.dq .fb{background:#c0392b;color:#fff}
+  .fsc{display:flex;flex-direction:column;align-items:center;gap:2px;animation:fscIn .5s cubic-bezier(.2,1.3,.4,1) .15s both}
+  .fsc .s{font:italic 800 clamp(38px,13vh,54px)/1 var(--msport);letter-spacing:.04em;white-space:nowrap;text-shadow:0 3px 0 rgba(0,0,0,.35)}
+  .fsc .s i{font-style:normal;opacity:.5;margin:0 .12em}
+  .fsc .k{font:italic 800 12px/1 var(--msport);letter-spacing:.18em;color:var(--mgold);text-transform:uppercase}
+  .fr{display:grid;grid-template-columns:2.2em minmax(0,1fr) 2.2em;align-items:center;column-gap:8px;opacity:0;animation:frIn .3s ease-out forwards;
+    animation-delay:calc(.75s + var(--i)*.07s)}
+  .fr b{font:italic 800 clamp(13px,4.4vh,17px)/1.15 var(--msport);color:var(--mdim)}
+  .fr b.hi{color:#fff}
+  .fr b:last-of-type{text-align:right}
+  .fr .fm{display:flex;flex-direction:column;gap:2px;min-width:0}
+  .fr .fm span{font:700 clamp(10px,3.2vh,12px)/1.1 system-ui,-apple-system,sans-serif;color:var(--mdim);text-align:center;white-space:nowrap;
+    overflow:hidden;text-overflow:ellipsis}
+  .fr .bar{display:flex;gap:3px;height:4px}
+  .fr .bar i{flex:1;display:flex;background:rgba(255,255,255,.08);border-radius:2px;overflow:hidden}
+  .fr .bar i:first-child{justify-content:flex-end}
+  .fr .bar i u{display:block;height:100%;border-radius:2px;transform-origin:var(--o);transform:scaleX(0);
+    animation:frBar .6s cubic-bezier(.2,.8,.3,1) forwards;animation-delay:calc(.9s + var(--i)*.07s)}
+  .fr .bar i:first-child u{--o:100% 50%}.fr .bar i:last-child u{--o:0 50%}
+  .fsh{font:italic 800 12px/1 var(--msport);letter-spacing:.12em;color:var(--mgold);text-transform:uppercase;margin-bottom:2px}
+  .fs{display:flex;align-items:center;gap:8px;padding:4px 6px;border-radius:8px;background:rgba(255,255,255,.05);opacity:0;
+    animation:fsIn .4s cubic-bezier(.2,1.2,.4,1) forwards;animation-delay:calc(1.4s + var(--i)*.18s)}
+  .fs .st{flex:none;width:3.1em;font:800 12px/1 system-ui;color:var(--mgold);letter-spacing:-.05em}
+  .fs .fl{flex:none;width:26px;height:17px;border-radius:3px;overflow:hidden}
+  .fs .fl img,.fs .fl svg{width:100%;height:100%;object-fit:cover;display:block}
+  .fs .ff{display:flex;flex-direction:column;gap:1px;min-width:0}
+  .fs .ff b{font:italic 800 14px/1.05 var(--msport);white-space:nowrap}
+  .fs .ff span{font:700 11px/1.1 system-ui,-apple-system,sans-serif;color:var(--mdim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .fhl{position:absolute;left:var(--ml);bottom:calc(var(--mb) + 10px);display:none;align-items:center;gap:8px;padding:5px 10px;border-radius:6px;
+    background:rgba(4,9,18,.72);font:italic 800 13px/1 var(--msport);letter-spacing:.06em;text-transform:uppercase;pointer-events:none}
+  #overscr.fin .fhl.on{display:flex}
+  .fhl::before{content:'';width:8px;height:8px;border-radius:50%;background:#e8384f;animation:rwPulse .8s ease-in-out infinite alternate}
+  .fhl i{font-style:normal;color:var(--mgold)}
+  #overscr.fin #oReward{margin:0 0 2px;font-size:14px}
+  #overscr.fin #oReward .rw-rows,#overscr.fin #oReward .rw-note{display:none}
+  #overscr.fin #oReward .rw-tot{margin-top:0;justify-content:center;gap:12px;font-size:24px}
+  #oWal{align-self:center;margin:0 0 2px}
+  #overscr:not(.fin) #oWal{display:none}
+  @keyframes ftInL{from{opacity:0;transform:translateX(-40px)}to{opacity:1;transform:none}}
+  @keyframes ftInR{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:none}}
+  @keyframes fscIn{from{opacity:0;transform:scale(.6)}to{opacity:1;transform:none}}
+  @keyframes fbIn{to{opacity:1}}
+  @keyframes fbStamp{0%{opacity:0;transform:scale(2.2) rotate(-6deg)}100%{opacity:1;transform:none}}
+  @keyframes fbShine{0%,55%{transform:translateX(-120%)}100%{transform:translateX(120%)}}
+  @keyframes ftGlow{to{box-shadow:0 0 0 2px var(--mgold),0 0 34px rgba(255,209,102,.85)}}
+  @keyframes frIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+  @keyframes frBar{to{transform:scaleX(1)}}
+  @keyframes fsIn{from{opacity:0;transform:translateX(18px)}to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion:reduce){ .ft,.fsc,.fr,.fs,.ft .fb,.fr .bar i u{animation:none!important;opacity:1;transform:none} .ft.w .fb::after{display:none} }
   /* начисление (rwPaint / rwPlay): строки «за что», итог, летящие монеты — только transform / opacity */
   #oReward{margin-top:8px;width:100%;font:italic 800 15px/1.2 var(--msport);color:#fff}
   #oReward:empty{display:none}
@@ -682,15 +761,20 @@
 
   <div id="overscr" class="mlay">
     <section class="mscr cur" data-s="result">
-      <div class="mhead"><div class="mcrumb"><div class="mbrand sm">BVR Hockey <b>26</b></div><div class="mtitle" id="oTitle">МАТЧ ОКОНЧЕН</div></div><span class="mpill mwal" id="oWal" style="margin-left:auto;visibility:hidden"></span></div>
-      <div class="mleft"><div class="mlist">
+      <div class="mhead"><div class="mcrumb"><div class="mbrand sm">BVR Hockey <b>26</b></div><div class="mtitle" id="oTitle">МАТЧ ОКОНЧЕН</div></div></div>
+      <div class="mleft"><span class="mpill mwal" id="oWal" style="visibility:hidden"></span><div id="oReward"></div><div class="mlist">
         <div class="mi mf" id="oAgain" data-act="again"></div>
         <div class="mi mf" id="oNext" data-act="lnext" style="display:none"></div>
         <div class="mi mf" id="oAdRw" data-act="adrw" style="display:none"></div>
         <div class="mi mf" id="oMenu" data-act="menu"></div>
       </div></div>
-      <div class="mright"><div class="mcard mglass mres"><div id="oScore">0 : 0</div><div id="oWinner">—</div><div id="oReward"></div></div></div>
+      <div class="mright"><div class="mcard mglass mres"><div id="oScore">0 : 0</div><div id="oWinner">—</div></div></div>
+      <!-- итог матча в стиле трансляции (finPaint): команды и счёт, статистика, три звезды; кнопки и монеты — в .mleft -->
+      <div class="fband" id="fBand"></div>
+      <div class="fstats mglass" id="fStats"></div>
+      <div class="fstars mglass" id="fStars"></div>
     </section>
+    <div class="fhl" id="fHl"></div>
     <div class="mfoot"><span></span><div class="mhints"></div></div>
   </div>
 
@@ -1393,7 +1477,9 @@ ru:{
   delayedYou:'ОТЛОЖЕННЫЙ ОФСАЙД · ВЫЙДИ ИЗ ЗОНЫ', icingWarn:'ВОЗМОЖЕН ПРОБРОС',
   powerplay:'БОЛЬШИНСТВО', shorthand:'МЕНЬШИНСТВО',
   pause:'ПАУЗА', resume:'ПРОДОЛЖИТЬ', mainMenu:'ГЛАВНОЕ МЕНЮ',
-  over:'МАТЧ ОКОНЧЕН', again:'ИГРАТЬ СНОВА',
+  over:'МАТЧ ОКОНЧЕН', again:'ИГРАТЬ СНОВА', rematch:'РЕВАНШ', hlReplay:'Повтор', hl_goal:'гол', hl_post:'штанга', hl_save:'сейв', fFinal:'Финал', fWin:'Победа', fLoss:'Поражение', fDraw:'Ничья', fDq:'Дисквалификация',
+  fYou:'Ты', fCpu:'Компьютер', fFriend:'Друг', fStars:'Три звезды матча', fG:'г', fA:'п', fS:'бр.', fH:'сил.', fSv:'сейвы',
+  stShots:'Броски', stSog:'В створ', stSaves:'Сейвы', stHits:'Силовые', stTake:'Отборы', stFo:'Вбрасывания', stPen:'Удаления', stPass:'Точность паса',
   draw:'НИЧЬЯ', winner:'ПОБЕДИЛА КОМАНДА', youWin:'ПОБЕДА', youLose:'ПОРАЖЕНИЕ', dq:'ДИСКВАЛИФИКАЦИЯ', dqSub:'удалены все полевые', rwDq:'Дисквалификация',
   tactic:'Тактика', tacStd:'Стандарт', tacAtt:'Атака', tacDef:'Оборона',
   padA1:'пас', padA2:'прессинг', padB1:'бросок', padB2:'отбор', padX1:'навес', padX2:'силовой', padY1:'в разрез', padY2:'вратарь',
@@ -1490,7 +1576,9 @@ en:{
   delayedYou:'DELAYED OFFSIDE · CLEAR THE ZONE', icingWarn:'POSSIBLE ICING',
   powerplay:'POWER PLAY', shorthand:'SHORT-HANDED',
   pause:'PAUSED', resume:'RESUME', mainMenu:'MAIN MENU',
-  over:'FULL TIME', again:'PLAY AGAIN',
+  over:'FULL TIME', again:'PLAY AGAIN', rematch:'REMATCH', hlReplay:'Replay', hl_goal:'goal', hl_post:'post', hl_save:'save', fFinal:'Final', fWin:'Win', fLoss:'Loss', fDraw:'Draw', fDq:'Disqualified',
+  fYou:'You', fCpu:'CPU', fFriend:'Friend', fStars:'Three stars', fG:'G', fA:'A', fS:'SOG', fH:'hits', fSv:'saves',
+  stShots:'Shots', stSog:'On goal', stSaves:'Saves', stHits:'Hits', stTake:'Takeaways', stFo:'Faceoffs won', stPen:'Penalties', stPass:'Pass accuracy',
   draw:'DRAW', winner:'WINNER:', youWin:'YOU WIN', youLose:'YOU LOSE', dq:'DISQUALIFIED', dqSub:'every skater in the box', rwDq:'Disqualified',
   tactic:'Tactics', tacStd:'Balanced', tacAtt:'Attack', tacDef:'Defence',
   padA1:'pass', padA2:'press', padB1:'shot', padB2:'poke', padX1:'lob', padX2:'check', padY1:'through', padY2:'goalie',
@@ -1589,7 +1677,9 @@ id:{
   delayedYou:'OFFSIDE TERTUNDA · KELUAR DARI ZONA', icingWarn:'KEMUNGKINAN ICING',
   powerplay:'UNGGUL PEMAIN', shorthand:'KURANG PEMAIN',
   pause:'JEDA', resume:'LANJUTKAN', mainMenu:'MENU UTAMA',
-  over:'PERTANDINGAN SELESAI', again:'MAIN LAGI',
+  over:'PERTANDINGAN SELESAI', again:'MAIN LAGI', rematch:'TANDING ULANG', hlReplay:'Tayangan ulang', hl_goal:'gol', hl_post:'tiang', hl_save:'penyelamatan', fFinal:'Final', fWin:'Menang', fLoss:'Kalah', fDraw:'Seri', fDq:'Diskualifikasi',
+  fYou:'Kamu', fCpu:'Komputer', fFriend:'Teman', fStars:'Tiga bintang', fG:'G', fA:'A', fS:'tembakan', fH:'benturan', fSv:'penyelamatan',
+  stShots:'Tembakan', stSog:'Ke gawang', stSaves:'Penyelamatan', stHits:'Benturan', stTake:'Rebutan', stFo:'Menang face-off', stPen:'Penalti', stPass:'Akurasi umpan',
   draw:'SERI', winner:'PEMENANG:', youWin:'KAMU MENANG', youLose:'KAMU KALAH', dq:'DISKUALIFIKASI', dqSub:'semua pemain kena hukuman', rwDq:'Diskualifikasi',
   tactic:'Taktik', tacStd:'Seimbang', tacAtt:'Menyerang', tacDef:'Bertahan',
   padA1:'umpan', padA2:'tekan', padB1:'tembak', padB2:'rebut', padX1:'lambung', padX2:'benturan', padY1:'terobosan', padY2:'kiper',
@@ -2759,6 +2849,8 @@ reset(true);
 
 /* ---------- экран результата ---------- */
 function showResult(){
+  var ov=document.getElementById('overscr'); if(ov) ov.classList.add('fin');
+  finPaint();
   var d=score[0]===score[1] && MDQ<0;
   setText('oTitle', MDQ>=0 ? T('dq')+': '+clubAb(TEAM[MDQ]) : T('over'));
   setText('oScore', score[0]+' : '+score[1]);
@@ -2773,7 +2865,7 @@ function showResult(){
   }
   setText('oWinner', w);
   rwShow();
-  setText('oAgain', T('again'));
+  setText('oAgain', T('rematch'));
   setText('oMenu', T('mainMenu'));
   var onx=document.getElementById('oNext'); if(onx) onx.style.display='none';
   MENU.foc.result=0;
@@ -2781,6 +2873,167 @@ function showResult(){
   var ag=document.getElementById('oAgain'); if(ag) ag.style.display=(NET.on && NET.role==='guest')?'none':'';
   adsPaint();
   var e=document.getElementById('overscr'); if(e) e.style.display='flex';
+}
+/* ---------- итог матча как в трансляции: команды, счёт, статистика, три звезды ---------- */
+var FIN={a:0};      /* угол облёта арены за экраном итога (finCamTick) */
+function finFlag(c){ return '<span class="fl">'+mKitImg(c, true, '')+'</span>'; }
+function finWho(t){ return t===HUMAN ? T('fYou') : (NET.on ? T('fFriend') : T('fCpu')); }
+function finPaint(){
+  var band=document.getElementById('fBand'), st=document.getElementById('fStats'), sr=document.getElementById('fStars');
+  if(!band || !STATS) return;
+  var dq=MDQ, draw=score[0]===score[1] && dq<0, win=dq>=0 ? 1-dq : (score[0]>score[1] ? 0 : 1);
+  var team=function(t){
+    var c=TEAM[t], w=!draw && t===win, cls='ft'+(t?' r':'')+(w?' w':'')+(dq===t?' dq':'');
+    var badge=draw ? T('fDraw') : (dq===t ? T('fDq') : (w ? T('fWin') : T('fLoss')));
+    return '<div class="'+cls+'">'+finFlag(c)+'<div class="fi"><span class="fw">'+mEsc(finWho(t))+'</span><span class="fn">'+mEsc(clubName(c))+'</span>'+
+      '<span class="fb">'+mEsc(badge)+'</span></div></div>';
+  };
+  band.innerHTML=team(0)+'<div class="fsc"><span class="s">'+score[0]+'<i>:</i>'+score[1]+'</span><span class="k">'+mEsc(T('fFinal'))+'</span></div>'+team(1);
+  /* статистика: слева команда 0, справа 1; полоски — доля от большего из двух */
+  var A=STATS.teams[0], B=STATS.teams[1], pc=function(m){ return m.passes ? Math.round(m.passesDone/m.passes*100) : 0; };
+  var rows=[['stShots',A.shots,B.shots],['stSog',A.sog,B.sog],['stSaves',A.saves,B.saves],['stHits',A.hits,B.hits],
+            ['stTake',A.takeaways,B.takeaways],['stFo',STATS.fo[0],STATS.fo[1]],['stPen',A.penalties,B.penalties],['stPass',pc(A),pc(B),'%']];
+  /* цвета сборных; похожие (Россия и Канада — обе красные) — у правой светлая полоска */
+  var c0=NATIONS[TEAM[0].n].c, c1=NATIONS[TEAM[1].n].c, hx=function(h,i){ return parseInt(h.substr(1+i*2,2),16); };
+  if(Math.hypot(hx(c0,0)-hx(c1,0), hx(c0,1)-hx(c1,1), hx(c0,2)-hx(c1,2))<110) c1='#e8eef6';
+  st.innerHTML=rows.map(function(r, i){
+    var a=r[1]|0, b=r[2]|0, m=Math.max(a,b,1), u=r[3]||'', low=r[0]==='stPen';     /* удалений меньше — лучше */
+    var hiA=a!==b && (low ? a<b : a>b), hiB=a!==b && !hiA;
+    return '<div class="fr" style="--i:'+i+'"><b'+(hiA?' class="hi"':'')+'>'+a+u+'</b><div class="fm"><span>'+mEsc(T(r[0]))+'</span>'+
+      '<div class="bar"><i><u style="width:'+(a/m*100)+'%;background:'+c0+'"></u></i><i><u style="width:'+(b/m*100)+'%;background:'+c1+'"></u></i></div></div>'+
+      '<b'+(hiB?' class="hi"':'')+'>'+b+u+'</b></div>';
+  }).join('');
+  /* три звезды: очки (гол 3, передача 2, бросок 0.5, силовой 0.3) и вратари (сейв 0.6, «сухарь» +2) */
+  /* сейвы вратарей — отдельно (STATS.sv): список игроков уходит в match:summary как был */
+  var ps=[], all={};
+  for(var k in STATS.players) all[k]=STATS.players[k];
+  for(k in STATS.sv){ var gp=players[k]; all[k]={t:gp?gp.team:0, num:gp?gp.num:0, g:0, a:0, s:0, h:0, sv:STATS.sv[k], gk:true}; }
+  for(k in all){ var q=all[k];
+    var v = q.gk ? q.sv*0.6 + (score[1-q.t]===0 && q.sv>0 ? 2 : 0) : q.g*3 + q.a*2 + q.s*0.5 + q.h*0.3;
+    if(v>0) ps.push({q:q, v:v + (q.t===win && !draw ? 0.5 : 0)}); }
+  ps.sort(function(x,y){ return y.v-x.v; });
+  var line=function(q){
+    if(q.gk) return T('fSv')+': '+q.sv;
+    var a=[]; if(q.g) a.push(q.g+' '+T('fG')); if(q.a) a.push(q.a+' '+T('fA')); if(!q.g && !q.a) a.push(q.s+' '+T('fS')); if(q.h) a.push(q.h+' '+T('fH'));
+    return a.join(' · ');
+  };
+  sr.innerHTML='<div class="fsh">'+mEsc(T('fStars'))+'</div>'+ps.slice(0,3).map(function(o, i){
+    var q=o.q, c=TEAM[q.t];
+    return '<div class="fs" style="--i:'+i+'"><span class="st">'+['★★★','★★','★'][i]+'</span>'+finFlag(c)+
+      '<div class="ff"><b>№'+q.num+' · '+mEsc(clubAb(c))+'</b><span>'+mEsc(line(q))+'</span></div></div>';
+  }).join('');
+  if(!ps.length) sr.innerHTML='';
+}
+/* за экраном итога — медленный облёт арены (как 3D-фон меню); уходим с итога — камера прежняя */
+function finCamTick(dt){
+  var vis=state==='over' && resultShown() && document.getElementById('overscr').classList.contains('fin'), on=vis && GLOK;
+  if(vis!==!!FIN.vis){ FIN.vis=vis; document.body.classList.toggle('fin', vis); }
+  if(!on){ if(FIN.on){ FIN.on=false; cam.yaw=0; cam.targetYaw=0; updYaw(); } return; }
+  if(!FIN.on){ FIN.on=true; FIN.a=0; }
+  if(HL.clips.length) return;                 /* камера повтора — hlApply */
+  FIN.a+=dt*0.045;
+  var a=FIN.a, R=25;
+  cam.x=-Math.sin(a)*R; cam.z=-Math.cos(a)*R; cam.y=12.5; cam.pitch=0.46; cam.yaw=a; FX.trauma=0; FX.old=0;
+  cam.focusX=0; cam.focusZ=0; updYaw();
+}
+/* ---------- лучшие моменты за экраном итога ----------
+   Во время матча 30 раз в секунду пишем, что видно на экране (после сети и симуляции — у хоста и у гостя одинаково):
+   игроки (x, z, угол, скорость, упал, удалён, спиной) и шайба; клипы действий (бросок, пас, силовой) — по кадру.
+   Гол, штанга, сейв в створе — клип: 4 с до и 1 с после. На экране итога клипы идут по кругу за полупрозрачным
+   экраном (перед самим моментом — замедление), камера сбоку ближе игровой; нет клипов — облёт арены (finCamTick).
+   Позиции подменяются только на время отрисовки (hlApply → render → hlRestore): симуляция и сеть их не видят. */
+var HL={rec:false, n:0, acc:0, buf:null, cap:0, w:0, acts:[], clips:[], pend:[], play:null, save:null};
+var HL_HZ=30, HL_PRE=4.0, HL_POST=1.0, HL_K=9;      /* полей на игрока */
+function hlReset(){
+  var np=players.length; HL.cap=Math.round(HL_HZ*(HL_PRE+HL_POST+1)); HL.w=np*HL_K+4;
+  HL.buf=new Float32Array(HL.cap*HL.w); HL.n=0; HL.acc=0; HL.acts=[]; HL.clips=[]; HL.pend=[]; HL.play=null;
+}
+function hlRecord(dt){
+  HL.rec = (state==='play' || state==='goal') && !TRAIN.on && !PAUSED;
+  /* запись встала (свисток, конец матча, пауза) — клипы режем по тому, что есть */
+  if(!HL.rec){ while(HL.pend.length) hlCut(HL.pend.shift()); return; }
+  if(!HL.buf || HL.w!==players.length*HL_K+4) hlReset();
+  HL.acc+=dt; if(HL.acc<1/HL_HZ) return; HL.acc-=1/HL_HZ; if(HL.acc>1/HL_HZ) HL.acc=0;
+  var o=(HL.n%HL.cap)*HL.w, b=HL.buf;
+  for(var i=0;i<players.length;i++){ var p=players[i], k=o+i*HL_K;
+    b[k]=p.x; b[k+1]=p.z; b[k+2]=p.yaw; b[k+3]=p.vx||0; b[k+4]=p.vz||0; b[k+5]=p.spd||0; b[k+6]=p.down>0?1:0; b[k+7]=p.boxed?1:0; b[k+8]=p._back?1:0; }
+  var q=o+players.length*HL_K, ow=puck.owner?players.indexOf(puck.owner):-1;
+  b[q]=puck.x; b[q+1]=puck.y; b[q+2]=puck.z; b[q+3]=ow;
+  HL.n++;
+  /* клипы, которым уже хватило «после» */
+  for(var j=HL.pend.length-1;j>=0;j--){ var c=HL.pend[j]; if(HL.n-c.at>=HL_POST*HL_HZ){ hlCut(c); HL.pend.splice(j,1); } }
+  if(HL.acts.length>200) HL.acts.splice(0, HL.acts.length-200);
+}
+function hlCut(c){
+  var from=Math.max(0, HL.n-HL.cap+1, c.at-Math.round(HL_PRE*HL_HZ)), to=HL.n, len=to-from;
+  if(len<HL_HZ) return;
+  var f=new Float32Array(len*HL.w);
+  for(var i=0;i<len;i++) f.set(HL.buf.subarray(((from+i)%HL.cap)*HL.w, ((from+i)%HL.cap+1)*HL.w), i*HL.w);
+  c.f=f; c.len=len; c.ev=c.at-from;
+  c.acts=HL.acts.filter(function(a){ return a[0]>=from && a[0]<to; }).map(function(a){ return [a[0]-from, a[1], a[2], a[3]]; });
+  HL.clips.push(c);
+  /* голы — все (до 6), остальное — пока моментов меньше четырёх */
+  var goals=HL.clips.filter(function(x){ return x.kind==='goal'; }), rest=HL.clips.filter(function(x){ return x.kind!=='goal'; });
+  HL.clips = goals.slice(-6).concat(rest.slice(-Math.max(0, 4-goals.length))).sort(function(a,b){ return a.at-b.at; });
+}
+function hlMark(kind, e){
+  if(!HL.rec || TRAIN.on) return;
+  var p=players[e.p], t=(e.t===0||e.t===1)?e.t:(p?p.team:-1);
+  HL.pend.push({kind:kind, at:HL.n, t:t, num:p&&!p.goalie?p.num:0, clock:Math.max(0, MATCH_MIN*60-clock)});
+}
+EV.on('goal', function(e){ hlMark('goal', e); });
+EV.on('post', function(e){ hlMark('post', e); });
+EV.on('save', function(e){ if(e.shot && e.kind==='line') hlMark('save', {t:e.t, p:e.g}); });
+EV.on('match:start', function(){ hlReset(); });
+/* кадр повтора на время отрисовки */
+function hlApply(dt){
+  if(!FIN.on || !HL.clips.length || !GLOK) { if(HL.play){ HL.play=null; hlTag(''); } return false; }
+  var P=HL.play;
+  if(!P){ P=HL.play={i:0, t:0, f:-1, wait:0, fx:0, fz:0, start:true}; }
+  var c=HL.clips[P.i];
+  if(P.start){ P.start=false; P.t=0; P.f=-1; var q0=players.length*HL_K; P.fx=c.f[q0]; P.fz=c.f[q0+2]; hlTag(c); }
+  if(P.wait>0){ P.wait-=dt; if(P.wait<=0){ P.i=(P.i+1)%HL.clips.length; P.start=true; } }
+  else {
+    /* замедление на последних 1.4 с перед моментом и полсекунды после */
+    var fr=P.t*HL_HZ, slow=fr>c.ev-1.4*HL_HZ && fr<c.ev+0.5*HL_HZ;
+    P.t+=dt*(slow?0.4:1);
+    if(P.t*HL_HZ>=c.len-1){ P.t=(c.len-1)/HL_HZ; P.wait=0.6; }
+  }
+  var x=Math.min(c.len-1.001, P.t*HL_HZ), f0=Math.floor(x), u=x-f0, W=HL.w, A=c.f, a=f0*W, b=(f0+1)*W;
+  /* действия игроков (бросок, пас, силовой) — когда повтор доходит до их кадра */
+  for(var k=0;k<c.acts.length;k++){ var ac=c.acts[k]; if(ac[0]>P.f && ac[0]<=f0 && players[ac[1]]) playAction(players[ac[1]], ac[2], ac[3]); }
+  if(f0<P.f) P.f=-1; P.f=f0;
+  /* подмена: сохраняем настоящее, ставим кадр повтора */
+  var S=HL.save||(HL.save=[]), i;
+  for(i=0;i<players.length;i++){ var p=players[i], o=i*HL_K;
+    S[i]=[p.x,p.z,p.yaw,p.vx,p.vz,p.spd,p.down,p.boxed,p._back];
+    p.x=A[a+o]+(A[b+o]-A[a+o])*u; p.z=A[a+o+1]+(A[b+o+1]-A[a+o+1])*u;
+    var y0=A[a+o+2], dy=A[b+o+2]-y0; dy=Math.atan2(Math.sin(dy),Math.cos(dy)); p.yaw=y0+dy*u;
+    p.vx=A[a+o+3]; p.vz=A[a+o+4]; p.spd=A[a+o+5]; p.down=A[a+o+6]?0.5:0; p.boxed=A[a+o+7]?1:0; p._back=!!A[a+o+8];
+  }
+  var q=players.length*HL_K;
+  S.puck=[puck.x,puck.y,puck.z,puck.owner]; S.ctl=controlled;
+  puck.x=A[a+q]+(A[b+q]-A[a+q])*u; puck.y=A[a+q+1]+(A[b+q+1]-A[a+q+1])*u; puck.z=A[a+q+2]+(A[b+q+2]-A[a+q+2])*u;
+  puck.owner=A[a+q+3]>=0 ? players[A[a+q+3]] : null; controlled=null;
+  /* камера сбоку, ближе игровой, мягко за шайбой */
+  var kf=Math.min(1, dt*3);
+  P.fx+=(puck.x-P.fx)*kf; P.fz+=(puck.z-P.fz)*kf;
+  cam.x=P.fx; cam.z=P.fz-10.5; cam.y=7.2; cam.pitch=0.56; cam.yaw=0; FX.trauma=0; FX.old=0;
+  cam.focusX=P.fx; cam.focusZ=P.fz; updYaw();
+  return true;
+}
+function hlRestore(){
+  var S=HL.save; if(!S) return;
+  for(var i=0;i<players.length;i++){ var p=players[i], v=S[i];
+    p.x=v[0]; p.z=v[1]; p.yaw=v[2]; p.vx=v[3]; p.vz=v[4]; p.spd=v[5]; p.down=v[6]; p.boxed=v[7]; p._back=v[8]; }
+  puck.x=S.puck[0]; puck.y=S.puck[1]; puck.z=S.puck[2]; puck.owner=S.puck[3]; controlled=S.ctl;
+}
+function hlTag(c){
+  var el=document.getElementById('fHl'); if(!el) return;
+  if(!c){ el.className='fhl'; el.innerHTML=''; return; }
+  var who=c.t>=0 ? clubAb(TEAM[c.t])+(c.num?' №'+c.num:'') : '', m=Math.floor(c.clock/60), sec=Math.floor(c.clock%60);
+  el.innerHTML=mEsc(T('hlReplay'))+' · <i>'+mEsc(T('hl_'+c.kind))+'</i>'+(who?' · '+mEsc(who):'')+' · '+m+':'+(sec<10?'0':'')+sec;
+  el.className='fhl on';
 }
 function hideResult(){
   rwStop();
@@ -3089,7 +3342,7 @@ function fovNoStick(M, row){
 }
 
 function camUpdate(dt){
-  if(CAMLOCK || MENU3D.on){ cam.fk=0; return; }
+  if(CAMLOCK || MENU3D.on || FIN.on){ cam.fk=0; return; }
 
   // Determine focus target
   var carrier = puck.owner;
@@ -5317,6 +5570,7 @@ EV.on('hit', function(e){
 
 /* игра просит проиграть действие один раз */
 function playAction(p, name, dur){
+  if(HL.rec) HL.acts.push([HL.n, players.indexOf(p), name, dur||0.5]);
   p._act=name; p._actT=dur||0.5;
   if(p._an){ p._an.pc=p._an.c; p._an.pt=p._an.t; p._an.mix=1; p._an.c=name; p._an.t=0; }
 }
@@ -6316,6 +6570,7 @@ function frameStepInner(dt){
   MENU.tick(dt);        /* после readInput: Esc / Start, открывшие паузу, меню в этом кадре уже не видит нажатыми */
   MUSIC.tick(dt);
   menu3dTick(dt);
+  finCamTick(dt);
   RDT=dt;
   /* кнопки гаснут только в матче: в меню они и так не мешают */
   if(state==='menu'||PAUSED){ uiIdle=0; if(_padDim){ _padDim=false; padFade(false); } }
@@ -6338,7 +6593,9 @@ function frameStepInner(dt){
       NET.sendT-=dt;
       if(NET.sendT<=0){ NET.sendT=1/6; netSnap(); }
     }
+    var hlOn=hlApply(dt);
     if(!MENU.covers()) pfRender();
+    if(hlOn) hlRestore();
     return;
   }
 
@@ -6378,6 +6635,7 @@ function frameStepInner(dt){
       pfAdd('net',_tn2);
     }
   }
+  hlRecord(dt);
   if(!MENU.covers()) pfRender();   /* меню и экран поворота непрозрачны — площадку под ними не рисуем */
 
   if(msgT>0){ msgT-=dt; if(msgT<=0) msgBox.style.opacity=0; }
@@ -7396,7 +7654,8 @@ MUSIC.next=function(){
   MUSIC.paint(true);
   if(MUSIC.cur>0 || MUSIC.want()) MUSIC.play();
 };
-MUSIC.want=function(){ return !MUSIC.off && !SND.off && state==='menu' && VOL.mus>0; };
+/* музыка — в меню и на экране итога матча */
+MUSIC.want=function(){ return !MUSIC.off && !SND.off && (state==='menu' || (state==='over' && resultShown())) && VOL.mus>0; };
 MUSIC.play=function(){
   if(!MUSIC.el || MUSIC.pending) return;
   MUSIC.pending=true; MUSIC.apply();
@@ -7674,6 +7933,7 @@ function trainHud(force){
 }
 function showTrainResult(){
   var L=TRAIN.L, r=TRAIN.res, lt=LT(TRAIN.i);
+  var ov=document.getElementById('overscr'); if(ov) ov.classList.remove('fin');
   setText('oTitle', T('tLesson')+' '+(TRAIN.i+1)+' · '+lt.n);
   var sc=document.getElementById('oScore');
   if(sc) sc.innerHTML='<span class="md big '+(['e','b','s','g'][r.medal])+'"></span>';
@@ -7960,7 +8220,7 @@ EV.on('match:end',   function(e){
 function statsTeam(){ return {shots:0, sog:0, goals:0, passes:0, passesDone:0, saves:0,
                               hits:0, penalties:0, pokes:0, takeaways:0, posts:0}; }
 var STATS=null;
-function statsReset(){ STATS={teams:[statsTeam(),statsTeam()], players:{}, faceoffs:0, events:0}; }
+function statsReset(){ STATS={teams:[statsTeam(),statsTeam()], players:{}, faceoffs:0, events:0, fo:[0,0], sv:{}}; }
 statsReset();
 function statsP(i){
   if(i<0 || !players[i]) return null;
@@ -7971,11 +8231,11 @@ EV.on('*', function(e,n){
   STATS.events++;
   var T0=STATS.teams, tm=(e.t===0||e.t===1)?T0[e.t]:null, ps;
   switch(n){
-    case 'faceoff': STATS.faceoffs++; break;
+    case 'faceoff': STATS.faceoffs++; if(e.w===0||e.w===1) STATS.fo[e.w]++; break;
     case 'shot': tm.shots++; if((ps=statsP(e.p))) ps.s++; break;
     case 'pass': tm.passes++; break;
     case 'pass:recv': tm.passesDone++; break;
-    case 'save': if(e.shot){ tm.saves++; T0[1-e.t].sog++;
+    case 'save': if(e.shot){ tm.saves++; T0[1-e.t].sog++; if(e.g>=0) STATS.sv[e.g]=(STATS.sv[e.g]|0)+1;
                    if(e.noShot){ T0[1-e.t].shots++; if((ps=statsP(e.by))) ps.s++; } } break;
     case 'goal': tm.goals++; if(!e.own){ tm.sog++; if(e.noShot){ tm.shots++; if((ps=statsP(e.p))) ps.s++; } }
                  if((ps=statsP(e.p))) ps.g++; if((ps=statsP(e.assist))) ps.a++; break;
@@ -8332,7 +8592,7 @@ EV.on('match:rewardNone', function(e){ if(e.id===MATCH.id && RWD.id===e.id && RW
 var RW_LATER_MS=8000;
 /* состояние награды на экране итога (не RW: это ширина площадки, BVRSim.RW) */
 var RWD={id:'', st:null, res:null, played:'', timer:0, raf:0, fly:[], t:[]};
-function rwTotal(res){ return (res.coins|0)+(res.stake && res.stake.delta|0); }
+function rwTotal(res){ return (res.coins|0)+((res.stake && res.stake.delta)|0); }
 function rwFrom(res){ return Math.max(0, res.balance-rwTotal(res)); }
 function rwRows(res){
   var h='', p=res.parts||{};
