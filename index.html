@@ -599,13 +599,18 @@
      opacity в анимациях. В уроке (showTrainResult) — прежний экран: класса fin нет */
   .fband,.fstats{display:none}
   #overscr.fin{background:linear-gradient(180deg,rgba(4,9,18,.72),rgba(4,9,18,.5) 45%,rgba(4,9,18,.78))}
-  #overscr.fin .mscr{grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);
+  #overscr.fin .mscr{grid-template-columns:minmax(0,1.25fr) minmax(0,.75fr);grid-template-rows:auto minmax(0,1fr);
     grid-template-areas:"band band" "stats left";gap:8px 22px;padding-top:calc(var(--mt) - 6px)}
   #overscr.fin .mhead,#overscr.fin .mright{display:none}
   #overscr.fin .fband{grid-area:band;display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:12px}
   #overscr.fin .fstats{grid-area:stats;align-self:center;max-height:100%;display:flex;flex-direction:column;justify-content:center;gap:1px;padding:6px 12px;min-height:0;overflow:hidden}
-  #overscr.fin .mleft{justify-content:center;gap:4px}
-  #overscr.fin .mleft .mlist .mi{font-size:clamp(15px,4.6vh,19px)}
+  /* справа — такая же панель, как статистика, только меньше: кошелёк, итог монет и кнопки; полоса выбора — внутри неё */
+  #overscr.fin .mleft{justify-content:center;gap:4px;align-self:center;max-height:100%;padding:8px 12px;overflow:hidden;
+    background:linear-gradient(180deg,rgba(18,40,70,.8),rgba(8,20,38,.85));border:1px solid rgba(143,216,255,.18);border-radius:14px}
+  #overscr.fin .mleft .mlist{margin-top:0}
+  #overscr.fin .mleft .mlist .mi{font-size:clamp(15px,4.6vh,19px);padding-left:6px}
+  #overscr.fin .mleft .mi.on::before{left:-12px;right:-12px;clip-path:none}
+  #overscr.fin .mleft .mi.on::after{right:2px}
   .ft{display:flex;align-items:center;gap:10px;min-width:0;animation:ftInL .55s cubic-bezier(.2,.9,.25,1.15) both}
   .ft.r{flex-direction:row-reverse;text-align:right;animation-name:ftInR}
   .ft .fl{position:relative;flex:none;width:clamp(48px,15vh,64px);aspect-ratio:3/2;border-radius:7px;overflow:hidden;
