@@ -15,7 +15,8 @@ const browserName = opt('browser', 'chromium');
 const port = +opt('port', 8548);
 const fails = [];
 const ok = (c, m) => { if (!c) fails.push(m); };
-const LIMIT = { skate: 50, pass: 65, lead: 80, lob: 60, shot: 60, poke: 65, switch: 95, goalie: 110, tactic: 95, rush: 90 };
+const LIMIT = { skate: 50, pass: 65, lead: 80, lob: 60, shot: 60, onetimer: 90, poke: 65, switch: 95, face: 90, goalie: 110, gkpass: 90, tactic: 95, rush: 90 };
+const NL = 13;   // lessons with medals; index NL — free skate
 
 const srv = await startServer(port);
 const g = await openGame(browserName, { w: 844, h: 390, mobile: true, tg: fakeTelegram({ fullscreen: true, safe: { left: 47, right: 47, bottom: 21 }, content: { top: 46 } }) });
@@ -33,7 +34,7 @@ try {
   ok((await page.evaluate('__hk.trainLoad()')) === true && (await page.evaluate(trainReq)) === 1, 'the training code did not load on demand');
   // ---------- every lesson by its bot
   const keys = [];
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < NL; i++) {
     let res = null, st = null, runs = 0;
     // a lesson with luck can end «done» without a medal (goalie: 4 saves of 8) — like a player, try again
     for (; runs < 3 && !(res && res.done && res.medal >= 1); runs++) {
@@ -49,11 +50,11 @@ try {
     console.log(`lesson ${i + 1} ${st.key}: ${res && res.done ? 'complete' : 'NOT complete'}, medal ${res ? res.medal : '-'}, value ${res ? Math.round(res.v * 10) / 10 : '-'}, tries ${runs}`);
     const lay = await page.evaluate("({over: document.getElementById('overscr').style.display, layer: __hk.menuState().layer, next: getComputedStyle(document.getElementById('oNext')).display})");
     ok(lay.over === 'flex' && lay.layer === 'result', `lesson ${i + 1}: no result screen ${JSON.stringify(lay)}`);
-    if (res && res.done && i < 9) ok(lay.next !== 'none', `lesson ${i + 1}: no "Next lesson" on the result screen`);
+    if (res && res.done && i < NL - 1) ok(lay.next !== 'none', `lesson ${i + 1}: no "Next lesson" on the result screen`);
     if (res && res.done) ok((st.prog.l[st.key] || {}).m >= 1, `lesson ${i + 1}: medal not saved ${JSON.stringify(st.prog.l[st.key])}`);
   }
   // ---------- free skate; Pause → Main menu → back to the lesson list
-  await page.evaluate('__hk.train(10)'); await page.evaluate('__hk.step(3000)');
+  await page.evaluate(`__hk.train(${NL})`); await page.evaluate('__hk.step(3000)');
   let st = await page.evaluate('__hk.trainState()');
   ok(st.on && st.key === 'free' && !st.res, `free skate: ${JSON.stringify({ on: st.on, key: st.key, res: st.res })}`);
   await page.keyboard.press('Escape'); await page.evaluate('__hk.step(100)');
@@ -62,8 +63,8 @@ try {
   ms = await page.evaluate('__hk.menuState()'); st = await page.evaluate('__hk.trainState()');
   ok(ms.stack.join() === 'main,train' && !st.on, `Main menu from a lesson should open the lesson list: ${JSON.stringify(ms.stack)} on=${st.on}`);
   ok(!(await page.evaluate("document.body.classList.contains('training')")), 'the lesson screen stays after leaving');
-  // ---------- tactics by touch (lesson 9)
-  await page.evaluate('__hk.train(8)'); await page.evaluate('__hk.step(500)');
+  // ---------- tactics by touch (lesson 12)
+  await page.evaluate('__hk.train(11)'); await page.evaluate('__hk.step(500)');
   await page.tap('#ltac [data-tac="2"]'); await page.evaluate('__hk.step(50)');
   ok((await page.evaluate('__hk.tac()[__hk.human()]')) === 2, 'tactics button (touch) did not switch to Defence');
   await page.evaluate("__hk.menu('main')");
@@ -74,10 +75,10 @@ try {
   await page.goto(`http://127.0.0.1:${port}/index.html?frozen&seed=21&nomusic`, { waitUntil: 'load' });
   await page.waitForFunction('window.__hk && __hk.trainState', null, { timeout: 30000 });
   st = await page.evaluate('__hk.trainState()');
-  ok(st.medals >= 10, `medals after reload: ${st.medals}`);
+  ok(st.medals >= NL, `medals after reload: ${st.medals}`);
   await page.evaluate("__hk.menu('train')"); await page.evaluate('__hk.step(50)');
   const doneRows = await page.evaluate("document.querySelectorAll('#start .mscr.cur .mles .mi.ok').length");
-  ok(doneRows === 10, `lesson list after reload: ${doneRows} lessons marked complete`);
+  ok(doneRows === NL, `lesson list after reload: ${doneRows} lessons marked complete`);
   await page.evaluate("__hk.menu('main')"); await page.evaluate('__hk.step(50)');
   for (let k = 0; k < 8 && (await page.evaluate('__hk.menuState().focus')) !== 'train'; k++) { await page.keyboard.press('ArrowDown'); await page.evaluate('__hk.step(20)'); }
   await page.keyboard.press('Enter'); await page.evaluate('__hk.step(20)');

@@ -27,7 +27,7 @@ const SETUPS = [
 const CLOSE_W = { ru: 100, en: 76, id: 76 }, RIGHT_W = 96;
 const LANGS = ['ru', 'en', 'id'];
 // every match notification: [text, subtext] keys (flash in index.html)
-const FLASHES = [['goal', 'ourGoal'], ['goal', 'theirGoal'], ['penalty', 'penaltySub'], ['hit'], ['save'], ['offside'], ['icing'],
+const FLASHES = [['goal', 'ourGoal'], ['goal', 'theirGoal'], ['penalty', 'penaltySub'], ['hit'], ['save'], ['oneTimer'], ['offside'], ['icing'],
   ['gamepad', 'connected'], ['peerOut']];
 const PAD_KEYS = { bA: ['padA1', 'padA2'], bB: ['padB1', 'padB2'], bX: ['padX1', 'padX2'], bY: ['padY1', 'padY2'], bRT: ['hRT'] };
 
