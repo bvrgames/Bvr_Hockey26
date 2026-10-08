@@ -595,19 +595,17 @@
   .mres{align-items:center;text-align:center;padding:16px 20px}
   #oScore{font:italic 800 clamp(40px,14vh,60px)/1 var(--msport);letter-spacing:.04em}
   #oWinner{font:italic 800 16px/1.2 var(--msport);color:var(--mgold);text-transform:uppercase}
-  /* итог матча (finPaint): сверху команды и счёт, ниже статистика | кнопки и монеты | три звезды. Только transform /
+  /* итог матча (finPaint): сверху команды и счёт, ниже статистика | кнопки и монеты. Только transform /
      opacity в анимациях. В уроке (showTrainResult) — прежний экран: класса fin нет */
-  .fband,.fstats,.fstars{display:none}
+  .fband,.fstats{display:none}
   #overscr.fin{background:linear-gradient(180deg,rgba(4,9,18,.72),rgba(4,9,18,.5) 45%,rgba(4,9,18,.78))}
-  #overscr.fin .mscr{grid-template-columns:minmax(0,1.3fr) minmax(178px,.85fr) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);
-    grid-template-areas:"band band band" "stats left stars";gap:8px 14px;padding-top:calc(var(--mt) - 6px)}
+  #overscr.fin .mscr{grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);
+    grid-template-areas:"band band" "stats left";gap:8px 22px;padding-top:calc(var(--mt) - 6px)}
   #overscr.fin .mhead,#overscr.fin .mright{display:none}
   #overscr.fin .fband{grid-area:band;display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:12px}
   #overscr.fin .fstats{grid-area:stats;align-self:center;max-height:100%;display:flex;flex-direction:column;justify-content:center;gap:1px;padding:6px 12px;min-height:0;overflow:hidden}
-  #overscr.fin .fstars{grid-area:stars;align-self:center;max-height:100%;display:flex;flex-direction:column;justify-content:center;gap:4px;padding:6px 10px;min-height:0;overflow:hidden}
   #overscr.fin .mleft{justify-content:center;gap:4px}
   #overscr.fin .mleft .mlist .mi{font-size:clamp(15px,4.6vh,19px)}
-  @media (max-width:700px){ #overscr.fin .mscr{grid-template-columns:minmax(0,1.3fr) minmax(170px,1fr);grid-template-areas:"band band" "stats left"} #overscr.fin .fstars{display:none} }
   .ft{display:flex;align-items:center;gap:10px;min-width:0;animation:ftInL .55s cubic-bezier(.2,.9,.25,1.15) both}
   .ft.r{flex-direction:row-reverse;text-align:right;animation-name:ftInR}
   .ft .fl{position:relative;flex:none;width:clamp(48px,15vh,64px);aspect-ratio:3/2;border-radius:7px;overflow:hidden;
@@ -643,15 +641,6 @@
   .fr .bar i u{display:block;height:100%;border-radius:2px;transform-origin:var(--o);transform:scaleX(0);
     animation:frBar .6s cubic-bezier(.2,.8,.3,1) forwards;animation-delay:calc(.9s + var(--i)*.07s)}
   .fr .bar i:first-child u{--o:100% 50%}.fr .bar i:last-child u{--o:0 50%}
-  .fsh{font:italic 800 12px/1 var(--msport);letter-spacing:.12em;color:var(--mgold);text-transform:uppercase;margin-bottom:2px}
-  .fs{display:flex;align-items:center;gap:8px;padding:4px 6px;border-radius:8px;background:rgba(255,255,255,.05);opacity:0;
-    animation:fsIn .4s cubic-bezier(.2,1.2,.4,1) forwards;animation-delay:calc(1.4s + var(--i)*.18s)}
-  .fs .st{flex:none;width:3.1em;font:800 12px/1 system-ui;color:var(--mgold);letter-spacing:-.05em}
-  .fs .fl{flex:none;width:26px;height:17px;border-radius:3px;overflow:hidden}
-  .fs .fl img,.fs .fl svg{width:100%;height:100%;object-fit:cover;display:block}
-  .fs .ff{display:flex;flex-direction:column;gap:1px;min-width:0}
-  .fs .ff b{font:italic 800 14px/1.05 var(--msport);white-space:nowrap}
-  .fs .ff span{font:700 11px/1.1 system-ui,-apple-system,sans-serif;color:var(--mdim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .fhl{position:absolute;left:var(--ml);bottom:calc(var(--mb) + 10px);display:none;align-items:center;gap:8px;padding:5px 10px;border-radius:6px;
     background:rgba(4,9,18,.72);font:italic 800 13px/1 var(--msport);letter-spacing:.06em;text-transform:uppercase;pointer-events:none}
   #overscr.fin .fhl.on{display:flex}
@@ -671,8 +660,7 @@
   @keyframes ftGlow{to{box-shadow:0 0 0 2px var(--mgold),0 0 34px rgba(255,209,102,.85)}}
   @keyframes frIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
   @keyframes frBar{to{transform:scaleX(1)}}
-  @keyframes fsIn{from{opacity:0;transform:translateX(18px)}to{opacity:1;transform:none}}
-  @media (prefers-reduced-motion:reduce){ .ft,.fsc,.fr,.fs,.ft .fb,.fr .bar i u{animation:none!important;opacity:1;transform:none} .ft.w .fb::after{display:none} }
+  @media (prefers-reduced-motion:reduce){ .ft,.fsc,.fr,.ft .fb,.fr .bar i u{animation:none!important;opacity:1;transform:none} .ft.w .fb::after{display:none} }
   /* начисление (rwPaint / rwPlay): строки «за что», итог, летящие монеты — только transform / opacity */
   #oReward{margin-top:8px;width:100%;font:italic 800 15px/1.2 var(--msport);color:#fff}
   #oReward:empty{display:none}
@@ -769,10 +757,9 @@
         <div class="mi mf" id="oMenu" data-act="menu"></div>
       </div></div>
       <div class="mright"><div class="mcard mglass mres"><div id="oScore">0 : 0</div><div id="oWinner">—</div></div></div>
-      <!-- итог матча в стиле трансляции (finPaint): команды и счёт, статистика, три звезды; кнопки и монеты — в .mleft -->
+      <!-- итог матча в стиле трансляции (finPaint): команды и счёт, статистика слева; кнопки и монеты — справа (.mleft) -->
       <div class="fband" id="fBand"></div>
       <div class="fstats mglass" id="fStats"></div>
-      <div class="fstars mglass" id="fStars"></div>
     </section>
     <div class="fhl" id="fHl"></div>
     <div class="mfoot"><span></span><div class="mhints"></div></div>
@@ -1478,7 +1465,7 @@ ru:{
   powerplay:'БОЛЬШИНСТВО', shorthand:'МЕНЬШИНСТВО',
   pause:'ПАУЗА', resume:'ПРОДОЛЖИТЬ', mainMenu:'ГЛАВНОЕ МЕНЮ',
   over:'МАТЧ ОКОНЧЕН', again:'ИГРАТЬ СНОВА', rematch:'РЕВАНШ', hlReplay:'Повтор', hl_goal:'гол', hl_post:'штанга', hl_save:'сейв', fFinal:'Финал', fWin:'Победа', fLoss:'Поражение', fDraw:'Ничья', fDq:'Дисквалификация',
-  fYou:'Ты', fCpu:'Компьютер', fFriend:'Друг', fStars:'Три звезды матча', fG:'г', fA:'п', fS:'бр.', fH:'сил.', fSv:'сейвы',
+  fYou:'Ты', fCpu:'Компьютер', fFriend:'Друг', 
   stShots:'Броски', stSog:'В створ', stSaves:'Сейвы', stHits:'Силовые', stTake:'Отборы', stFo:'Вбрасывания', stPen:'Удаления', stPass:'Точность паса',
   draw:'НИЧЬЯ', winner:'ПОБЕДИЛА КОМАНДА', youWin:'ПОБЕДА', youLose:'ПОРАЖЕНИЕ', dq:'ДИСКВАЛИФИКАЦИЯ', dqSub:'удалены все полевые', rwDq:'Дисквалификация',
   tactic:'Тактика', tacStd:'Стандарт', tacAtt:'Атака', tacDef:'Оборона',
@@ -1577,7 +1564,7 @@ en:{
   powerplay:'POWER PLAY', shorthand:'SHORT-HANDED',
   pause:'PAUSED', resume:'RESUME', mainMenu:'MAIN MENU',
   over:'FULL TIME', again:'PLAY AGAIN', rematch:'REMATCH', hlReplay:'Replay', hl_goal:'goal', hl_post:'post', hl_save:'save', fFinal:'Final', fWin:'Win', fLoss:'Loss', fDraw:'Draw', fDq:'Disqualified',
-  fYou:'You', fCpu:'CPU', fFriend:'Friend', fStars:'Three stars', fG:'G', fA:'A', fS:'SOG', fH:'hits', fSv:'saves',
+  fYou:'You', fCpu:'CPU', fFriend:'Friend', 
   stShots:'Shots', stSog:'On goal', stSaves:'Saves', stHits:'Hits', stTake:'Takeaways', stFo:'Faceoffs won', stPen:'Penalties', stPass:'Pass accuracy',
   draw:'DRAW', winner:'WINNER:', youWin:'YOU WIN', youLose:'YOU LOSE', dq:'DISQUALIFIED', dqSub:'every skater in the box', rwDq:'Disqualified',
   tactic:'Tactics', tacStd:'Balanced', tacAtt:'Attack', tacDef:'Defence',
@@ -1678,7 +1665,7 @@ id:{
   powerplay:'UNGGUL PEMAIN', shorthand:'KURANG PEMAIN',
   pause:'JEDA', resume:'LANJUTKAN', mainMenu:'MENU UTAMA',
   over:'PERTANDINGAN SELESAI', again:'MAIN LAGI', rematch:'TANDING ULANG', hlReplay:'Tayangan ulang', hl_goal:'gol', hl_post:'tiang', hl_save:'penyelamatan', fFinal:'Final', fWin:'Menang', fLoss:'Kalah', fDraw:'Seri', fDq:'Diskualifikasi',
-  fYou:'Kamu', fCpu:'Komputer', fFriend:'Teman', fStars:'Tiga bintang', fG:'G', fA:'A', fS:'tembakan', fH:'benturan', fSv:'penyelamatan',
+  fYou:'Kamu', fCpu:'Komputer', fFriend:'Teman', 
   stShots:'Tembakan', stSog:'Ke gawang', stSaves:'Penyelamatan', stHits:'Benturan', stTake:'Rebutan', stFo:'Menang face-off', stPen:'Penalti', stPass:'Akurasi umpan',
   draw:'SERI', winner:'PEMENANG:', youWin:'KAMU MENANG', youLose:'KAMU KALAH', dq:'DISKUALIFIKASI', dqSub:'semua pemain kena hukuman', rwDq:'Diskualifikasi',
   tactic:'Taktik', tacStd:'Seimbang', tacAtt:'Menyerang', tacDef:'Bertahan',
@@ -2874,12 +2861,12 @@ function showResult(){
   adsPaint();
   var e=document.getElementById('overscr'); if(e) e.style.display='flex';
 }
-/* ---------- итог матча как в трансляции: команды, счёт, статистика, три звезды ---------- */
+/* ---------- итог матча как в трансляции: команды, счёт, статистика ---------- */
 var FIN={a:0};      /* угол облёта арены за экраном итога (finCamTick) */
 function finFlag(c){ return '<span class="fl">'+mKitImg(c, true, '')+'</span>'; }
 function finWho(t){ return t===HUMAN ? T('fYou') : (NET.on ? T('fFriend') : T('fCpu')); }
 function finPaint(){
-  var band=document.getElementById('fBand'), st=document.getElementById('fStats'), sr=document.getElementById('fStars');
+  var band=document.getElementById('fBand'), st=document.getElementById('fStats');
   if(!band || !STATS) return;
   var dq=MDQ, draw=score[0]===score[1] && dq<0, win=dq>=0 ? 1-dq : (score[0]>score[1] ? 0 : 1);
   var team=function(t){
@@ -2903,26 +2890,6 @@ function finPaint(){
       '<div class="bar"><i><u style="width:'+(a/m*100)+'%;background:'+c0+'"></u></i><i><u style="width:'+(b/m*100)+'%;background:'+c1+'"></u></i></div></div>'+
       '<b'+(hiB?' class="hi"':'')+'>'+b+u+'</b></div>';
   }).join('');
-  /* три звезды: очки (гол 3, передача 2, бросок 0.5, силовой 0.3) и вратари (сейв 0.6, «сухарь» +2) */
-  /* сейвы вратарей — отдельно (STATS.sv): список игроков уходит в match:summary как был */
-  var ps=[], all={};
-  for(var k in STATS.players) all[k]=STATS.players[k];
-  for(k in STATS.sv){ var gp=players[k]; all[k]={t:gp?gp.team:0, num:gp?gp.num:0, g:0, a:0, s:0, h:0, sv:STATS.sv[k], gk:true}; }
-  for(k in all){ var q=all[k];
-    var v = q.gk ? q.sv*0.6 + (score[1-q.t]===0 && q.sv>0 ? 2 : 0) : q.g*3 + q.a*2 + q.s*0.5 + q.h*0.3;
-    if(v>0) ps.push({q:q, v:v + (q.t===win && !draw ? 0.5 : 0)}); }
-  ps.sort(function(x,y){ return y.v-x.v; });
-  var line=function(q){
-    if(q.gk) return T('fSv')+': '+q.sv;
-    var a=[]; if(q.g) a.push(q.g+' '+T('fG')); if(q.a) a.push(q.a+' '+T('fA')); if(!q.g && !q.a) a.push(q.s+' '+T('fS')); if(q.h) a.push(q.h+' '+T('fH'));
-    return a.join(' · ');
-  };
-  sr.innerHTML='<div class="fsh">'+mEsc(T('fStars'))+'</div>'+ps.slice(0,3).map(function(o, i){
-    var q=o.q, c=TEAM[q.t];
-    return '<div class="fs" style="--i:'+i+'"><span class="st">'+['★★★','★★','★'][i]+'</span>'+finFlag(c)+
-      '<div class="ff"><b>№'+q.num+' · '+mEsc(clubAb(c))+'</b><span>'+mEsc(line(q))+'</span></div></div>';
-  }).join('');
-  if(!ps.length) sr.innerHTML='';
 }
 /* за экраном итога — медленный облёт арены (как 3D-фон меню); уходим с итога — камера прежняя */
 function finCamTick(dt){
@@ -8220,7 +8187,7 @@ EV.on('match:end',   function(e){
 function statsTeam(){ return {shots:0, sog:0, goals:0, passes:0, passesDone:0, saves:0,
                               hits:0, penalties:0, pokes:0, takeaways:0, posts:0}; }
 var STATS=null;
-function statsReset(){ STATS={teams:[statsTeam(),statsTeam()], players:{}, faceoffs:0, events:0, fo:[0,0], sv:{}}; }
+function statsReset(){ STATS={teams:[statsTeam(),statsTeam()], players:{}, faceoffs:0, events:0, fo:[0,0]}; }
 statsReset();
 function statsP(i){
   if(i<0 || !players[i]) return null;
@@ -8235,7 +8202,7 @@ EV.on('*', function(e,n){
     case 'shot': tm.shots++; if((ps=statsP(e.p))) ps.s++; break;
     case 'pass': tm.passes++; break;
     case 'pass:recv': tm.passesDone++; break;
-    case 'save': if(e.shot){ tm.saves++; T0[1-e.t].sog++; if(e.g>=0) STATS.sv[e.g]=(STATS.sv[e.g]|0)+1;
+    case 'save': if(e.shot){ tm.saves++; T0[1-e.t].sog++;
                    if(e.noShot){ T0[1-e.t].shots++; if((ps=statsP(e.by))) ps.s++; } } break;
     case 'goal': tm.goals++; if(!e.own){ tm.sog++; if(e.noShot){ tm.shots++; if((ps=statsP(e.p))) ps.s++; } }
                  if((ps=statsP(e.p))) ps.g++; if((ps=statsP(e.assist))) ps.a++; break;
