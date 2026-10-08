@@ -708,7 +708,7 @@ try {
   const G = await sock('');
   await new Promise((r) => setTimeout(r, 300));
   H.ws.send(JSON.stringify({ t: 'cfg', a: 0, b: 3, min: 0.25, id: mid }));
-  const tEnd = Date.now(); while (!(H.end && G.end) && Date.now() - tEnd < 40000) await new Promise((r) => setTimeout(r, 200));
+  const tEnd = Date.now(); while (!(H.end && G.end) && Date.now() - tEnd < 120000) await new Promise((r) => setTimeout(r, 200));
   ok(H.end && G.end, 'the 15-second server match ended');
   if (H.end) {
     const sc = H.end.score, C = { id: A.id + 2, first_name: 'Host' }, D = { id: A.id + 3, first_name: 'Guest' };
@@ -760,7 +760,8 @@ try {
     ok((await coinsOf(SH)) === 5 && (await coinsOf(SG)) === 5, 'stake: 10 locked from each (15 → 5)');
     H.send({ t: 'cfg', a: 0, b: 3, min: 0.25, id: 'ab' + sm.slice(2) });
     ok(!(await next(H, (x) => x.t === 'cfg', 800)), 'stake: a match with a stake is not restarted halfway');
-    const t1 = Date.now(); while (!(H.end && G.end) && Date.now() - t1 < 40000) await sleep(200);
+    // a 15 s match: goals stop the clock for every faceoff (5–7 s each) — wait up to 120 s, as room:proto does
+    const t1 = Date.now(); while (!(H.end && G.end) && Date.now() - t1 < 120000) await sleep(200);
     ok(H.end && G.end, 'stake: the staked match ended');
     if (H.end) {
       const sc = H.end.score, win = sc[0] > sc[1] ? 0 : sc[0] < sc[1] ? 1 : -1;
@@ -799,7 +800,7 @@ try {
     const lv = await next(z.G, (x) => x.t === 'stake' && x.live);
     ok(lv && lv.live.id === sm, `test bot (D1): a stake between test players starts ${JSON.stringify(lv)}`);
     ok((await tcoins(TH)) === 975 && (await tcoins(TG)) === 975 && (await coinsOf(TH)) === 0, 'test bot (D1): 25 locked from the test balances only');
-    const t1 = Date.now(); while (!(z.H.end && z.G.end) && Date.now() - t1 < 40000) await sleep(200);
+    const t1 = Date.now(); while (!(z.H.end && z.G.end) && Date.now() - t1 < 120000) await sleep(200);
     if (z.H.end) {
       const sc = z.H.end.score, want = sc[0] > sc[1] ? [1025, 975] : sc[0] < sc[1] ? [975, 1025] : [1000, 1000];
       let got = []; for (let i = 0; i < 30; i++) { got = [await tcoins(TH), await tcoins(TG)]; if (got[0] === want[0] && got[1] === want[1]) break; await sleep(200); }
@@ -1088,7 +1089,7 @@ try {
     ok(live && live.live.id === sm, `refund: stake locked ${JSON.stringify(live)}`);
     let got = []; for (let i = 0; i < 40; i++) { got = [await coinsOf(SH), await coinsOf(SG)]; if (got[0] === before[0] && got[1] === before[1]) break; await sleep(250); }
     ok(got[0] === before[0] && got[1] === before[1], `refund: no room result → both back ${JSON.stringify(got)} (was ${JSON.stringify(before)})`);
-    const t1 = Date.now(); while (!(H.end && G.end) && Date.now() - t1 < 40000) await sleep(200);
+    const t1 = Date.now(); while (!(H.end && G.end) && Date.now() - t1 < 120000) await sleep(200);
     await sleep(1500);
     ok((await coinsOf(SH)) === before[0] && (await coinsOf(SG)) === before[1], 'refund: the match ending afterwards pays nothing more');
     // not enough coins: a player with none cannot confirm
