@@ -19,6 +19,7 @@
     "balance": "node tools/balance.mjs",
     "offball": "node tools/offball.mjs",
     "passrecv": "node tools/passrecv.mjs",
+    "onetimer": "node tools/onetimer.mjs",
     "smoke:tg": "node tools/smoke-tg.mjs && node tools/smoke-tg.mjs --browser webkit",
     "smoke:quality": "node tools/smoke-quality.mjs && node tools/smoke-quality.mjs --browser webkit",
     "smoke:feel": "node tools/smoke-feel.mjs && node tools/smoke-feel.mjs --browser webkit",

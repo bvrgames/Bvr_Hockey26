@@ -66,7 +66,7 @@ function create(env){
   var score=[0,0], period=1, clock=5*60, state='menu', stateT=0;
   function mkHS(){ return {ctrl:null, charge:0, pressT:0, pressCd:0, autoT:0,
     press:{on:false,x:0,z:0,d:0}, goalieCtl:false, prevCtl:null, pokeT:0,
-    aimX:1, aimZ:0, thruM:null, thruT:0}; }
+    aimX:1, aimZ:0, thruM:null, thruT:0, otT:0, otRecv:0}; }
   var HS=[mkHS(),mkHS()];
   var checkT=0, pokeT=0;
   var pen=[], offWarn=-1, lastTouch=null, prevZone=[0,0];
@@ -114,6 +114,15 @@ function create(env){
     catchLow:0.25,            /* низовой бросок в створ фиксирует с таким шансом, остальное — отскок в сторону */
     reboundZ:[4.5,8.5],       /* отскок уходит вбок, от ворот, м/с */
     passLane:1.4, passMax:24  /* бот-вратарь отдаёт пас: свободная линия не уже, м; дальше не пасует, м */
+  };
+  /* бросок живого игрока: прицел стиком и бросок в одно касание (ИИ целится сам — aiShoot, его это не касается) */
+  var SHOT_CFG={
+    sideMin:0.3,              /* стик вбок от линии атаки хоть на столько (доля) — бросок в этот угол ворот */
+    corner:0.70,              /* угол — так далеко от центра ворот, м (штанга 0.92; дальше 0.76 — уже в штангу) */
+    otWin:1.6,                /* B, пока летит свой пас (не дольше этого с паса), — бросок сразу при приёме, с */
+    otPow:0.7,                /* сила броска в одно касание не меньше (0..1) */
+    otHold:0.4,               /* держал B и при приёме — бросок в одно касание, если отпустил за столько, с */
+    otSave:0.40               /* шанс сейва в створе у броска в одно касание (у обычного 0.55): вратарь не успел за пасом */
   };
   var matchLen=5*60;          /* длина матча, с (задают клиент и комната вместе с clock) — от неё длина удалений */
   /* вбрасывание: ph 0 нет, 1 расстановка, 2 судья держит шайбу, 3 шайба упала — окно нажатий */
@@ -280,7 +289,7 @@ function create(env){
     if(state==='face'){
       FO.ph=1; FO.id=(FO.id+1)%1000000; FO.x=dx; FO.z=dz; FO.taps=[0,0]; FO.acc=[0,0]; FO.done=[false,false]; FO.win=-1;
       for(var t2=0;t2<2;t2++){
-        var hs=HS[t2]; hs.charge=0; hs.pressT=0; hs.press.on=false; gkRush[t2]=false;
+        var hs=HS[t2]; hs.charge=0; hs.otT=0; hs.pressT=0; hs.press.on=false; gkRush[t2]=false;
         if(FO.ctr[t2]) hs.ctrl=FO.ctr[t2];
         FO.tgt[t2]=faceDefault(t2);
       }
@@ -557,11 +566,18 @@ function create(env){
     var gx=adir(p)*GOAL_X, aimZ;
     if(aiZ!==undefined) aimZ=aiZ;
     else {
-      var d=aimDir(p);
-      aimZ = clamp(d.z*0.9, -0.85, 0.85);
-      var gk=goalieOf(p.team===0?1:0);
-      var open = gk ? (gk.z>0 ? -0.72 : 0.72) : 0;
-      aimZ = clamp(aimZ*0.45 + open*0.55, -0.85, 0.85);
+      /* стик вбок (вверх / вниз по экрану при камере сбоку) — шайба в этот угол; стик к воротам или отпущен —
+         в угол, открытый вратарём, как раньше */
+      var inp=aimInput(p), sL=inp?Math.hypot(inp.mx,inp.mz):0, side=0;
+      if(sL>0.25){ var sw=toWorld(inp.mx/sL,inp.mz/sL,[0,0]); if(Math.abs(sw[1])>=SHOT_CFG.sideMin) side=sw[1]>0?1:-1; }
+      if(side) aimZ=side*SHOT_CFG.corner;
+      else {
+        var d=aimDir(p);
+        aimZ = clamp(d.z*0.9, -0.85, 0.85);
+        var gk=goalieOf(p.team===0?1:0);
+        var open = gk ? (gk.z>0 ? -0.72 : 0.72) : 0;
+        aimZ = clamp(aimZ*0.45 + open*0.55, -0.85, 0.85);
+      }
     }
     return {tx:gx, tz:aimZ};
   }
@@ -577,8 +593,9 @@ function create(env){
     LASTPASS={from:p, to:m||null, t:SIMT, lead:!!lead, x:tx, z:tz};
     emit('pass',{p:pIdx(p), t:p.team, to:m?pIdx(m):-1, x:r2(p.x), z:r2(p.z), power:r2(power), lift:!!lift, lead:!!lead});
   }
-  /* aiZ — точка по ширине ворот, выбранная ИИ (может быть мимо створа); у человека не передаётся */
-  function doShot(p,power,aiZ){
+  /* aiZ — точка по ширине ворот, выбранная ИИ (может быть мимо створа); у человека не передаётся;
+     ot — бросок в одно касание (SHOT_CFG) */
+  function doShot(p,power,aiZ,ot){
     var gx=p.dir*GOAL_X, sa=shotAim(p,aiZ), tx=sa.tx, tz=sa.tz;
     var dx=tx-puck.x, dz=tz-puck.z, L=Math.hypot(dx,dz)||1;
     var sp=17+power*17;
@@ -587,8 +604,10 @@ function create(env){
     if(p.x*adir(p) < -1) { icing.armed=true; icing.team=p.team; } else icing.armed=false;
     /* сильный бросок отыгрывается размашистым клипом, обычный — кистевым */
     fx.act(p, power>0.55?'slap_shot':'wrist_shot', power>0.55?0.9:0.65);
-    LASTSHOT={p:p, t:SIMT};
-    emit('shot',{p:pIdx(p), t:p.team, x:r2(p.x), z:r2(p.z), power:r2(power), dist:r2(Math.hypot(gx-p.x,p.z))});
+    LASTSHOT={p:p, t:SIMT, ot:!!ot};
+    var se={p:pIdx(p), t:p.team, x:r2(p.x), z:r2(p.z), power:r2(power), dist:r2(Math.hypot(gx-p.x,p.z))};
+    if(ot) se.ot=1;
+    emit('shot',se);
   }
   /* auto — тычок от прессинга (удержание A): по игроку без шайбы он не бьёт */
   function doPoke(p,auto){
@@ -1003,10 +1022,24 @@ function create(env){
     if(state!=='play'){ hs.press.on=false; hs.pressT=0; gkRush[team]=false; return; }
     var lockA = SIMT<FO.lockT;     /* сразу после вбрасывания A ещё жмут по инерции */
 
+    /* бросок в одно касание: B нажали, пока летел свой пас, — бьём, как только шайба дошла до своего (управление
+       переходит к нему при приёме). Держит B — заряд копится и в полёте, отпустил после приёма — бросок с ним. */
+    if(hs.otT>0){
+      var rc=hs.ctrl;
+      if(rc && puck.owner===rc && !rc.goalie && LASTRECV && LASTRECV.to===rc && SIMT-LASTRECV.t<0.25){
+        hs.otT=0;
+        if(!inp._B){ doShot(rc, Math.max(SHOT_CFG.otPow, hs.charge/0.85), undefined, true); hs.charge=0; }
+        else hs.otRecv=SIMT;
+      } else if(puck.owner || SIMT>hs.otT){ hs.otT=0; hs.charge=0; }
+      else if(inp._B) hs.charge=Math.min(0.85,hs.charge+dt);
+    }
     /* заряд броска */
-    if(hs.charge>0 && !inp._B){
-      if(hs.ctrl && puck.owner===hs.ctrl) doShot(hs.ctrl, clamp(hs.charge/0.85,0.18,1));
-      hs.charge=0;
+    if(hs.charge>0 && !inp._B && !(hs.otT>0)){
+      if(hs.ctrl && puck.owner===hs.ctrl){
+        var otH=hs.otRecv>0 && SIMT-hs.otRecv<SHOT_CFG.otHold;
+        doShot(hs.ctrl, otH ? Math.max(SHOT_CFG.otPow, hs.charge/0.85) : clamp(hs.charge/0.85,0.18,1), undefined, otH);
+      }
+      hs.charge=0; hs.otRecv=0;
     }
 
     /* автовыбор активного */
@@ -1051,7 +1084,12 @@ function create(env){
         if(lockA) hs.pressT=0;
         else if(inp._A) hs.pressT+=dt;
         else { if(hs.pressT>0 && hs.pressT<0.20) switchPlayer(team); hs.pressT=0; }
-        if(edge.B) doPoke(p);
+        if(edge.B){
+          /* свой пас летит — B не отбор, а бросок в одно касание при приёме */
+          if(!puck.owner && LASTPASS && !LASTPASS.fo && LASTPASS.from.team===team && SIMT-LASTPASS.t<SHOT_CFG.otWin){
+            hs.otT=LASTPASS.t+SHOT_CFG.otWin; hs.charge=1/60; hs.otRecv=0;
+          } else doPoke(p);
+        }
         if(edge.X) doCheck(p);
         if(edge.LB) switchPlayer(team);
         if(hs.pressCd>0) hs.pressCd-=dt;
@@ -1398,7 +1436,8 @@ function create(env){
           var gk=goalieOf(g===0?1:0);
           /* меряем от точки пересечения створа, а не от той, куда шайба уже улетела */
           var saveDist=gk?Math.hypot(gk.x-(gx-dir*0.1),gk.z-czg):99;
-          if(saveDist<1.15 && R()<0.55){
+          var otShot=!!(LASTSHOT && LASTSHOT.ot && SIMT-LASTSHOT.t<2.5);
+          if(saveDist<1.15 && R()<(otShot?SHOT_CFG.otSave:0.55)){
             puck.x=gx-dir*0.35; puck.z=czg; puck.y=Math.max(0.05,cyg);
             /* высокий — в ловушку, низовой — иногда фиксирует; соперник у пятака — отбивает. Отскок — вбок, от ворот */
             var hold = !gkFoeNear(gk, GK_CFG.coverFoe) && (cyg>GK_CFG.catchHigh || R()<GK_CFG.catchLow);
@@ -1761,6 +1800,7 @@ function create(env){
   api.netTail=netTail;
   api.PEN_CFG=PEN_CFG;
   api.FACE_CFG=FACE_CFG;
+  api.SHOT_CFG=SHOT_CFG;
   api.FO=FO;
   api.clearOnePenalty=clearOnePenalty;
   api.aimInput=aimInput;
