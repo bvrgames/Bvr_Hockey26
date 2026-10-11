@@ -1,62 +1,77 @@
-// Match sounds from recordings: downloads the sources (CC0 only — see THIRD_PARTY.md), cuts each sound out, trims the
-// silence, evens out the loudness and writes assets/src/sfx/<name>.wav (44.1 kHz mono 16 bit); `npm run assets` then
-// encodes them to assets/dist/sfx-<name>.<hash>.m4a (AAC, like the music) and lists them in window.ASSETS.sfx.
-//   node tools/prep-sfx.mjs [--cache <dir>]     (downloads are kept in the cache dir, default: the OS temp dir)
-// mp3 / wav are decoded by macOS afconvert, ogg (Kenney) by Chromium (Playwright).
-// Loudness: a one-shot's loudest 50 ms is set to ONE_DB rms (peak capped at -1 dBFS); the mix between sounds is in
-// index.html (SFX). The crowd loop is set to LOOP_DB rms over its length and made seamless with an equal-power
-// crossfade; LOOP_TAIL s of its start are appended after the loop, so the page loops [LOOP_PAD, LOOP_PAD + length]
-// inside the decoded buffer and an AAC decoder that keeps a few ms of priming still lands on a seamless window.
-import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from 'node:fs';
+// Match sounds from the owner's own files: assets/src/sfx/<папка>/<файл>.mp3|wav (originals, never written) →
+// assets/src/sfx-ready/<name>.wav (44.1 kHz mono 16 bit); `npm run assets` then encodes them to
+// assets/dist/sfx-<name>.<hash>.m4a (AAC, like the music) and lists them in window.ASSETS.sfx.
+//   node tools/prep-sfx.mjs [--cache <dir>]     (decoded originals are kept in the cache dir, default: the OS temp dir)
+// mp3 / wav are decoded by macOS afconvert (downmixed to mono).
+// Loudness — ITU-R BS.1770 (K-weighting): a one-shot's loudest 400 ms (momentary loudness) is set to ONE_LUFS, a loop's
+// integrated loudness (gated) to LOOP_LUFS; peaks above CEIL dBFS go through a short limiter of at most MAX_GR dB (a sharper
+// transient ends up quieter instead): no clipping, and the AAC encoder's overshoot stays under 0 dBFS. The mix between
+// sounds (fans and arena well under the hits) is in index.html (SFX).
+// One-shots: silence trimmed at both ends (they start at once), short fades. Loops: an equal-power crossfade of the end
+// into the head makes them seamless; LOOP_TAIL s of the head are appended after the loop, so the page loops
+// [LOOP_TAIL / 2, LOOP_TAIL / 2 + length] inside the decoded buffer and an AAC decoder that keeps a few ms of priming
+// still lands on a seamless window. A loop name ends in _loop (tools/pack-assets.mjs).
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, unlinkSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..'), OUT = join(ROOT, 'assets', 'src', 'sfx');
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const IN = join(ROOT, 'assets', 'src', 'sfx'), OUT = join(ROOT, 'assets', 'src', 'sfx-ready');
 const args = process.argv.slice(2), ci = args.indexOf('--cache');
-const CACHE = ci >= 0 ? args[ci + 1] : join(tmpdir(), 'bvr-sfx');
-const SR = 44100, ONE_DB = -14, LOOP_DB = -20, LOOP_XF = 0.6;
+const CACHE = ci >= 0 ? args[ci + 1] : join(tmpdir(), 'bvr-sfx2');
+const SR = 44100, ONE_LUFS = -16, LOOP_LUFS = -23, CEIL = -1.5, MAX_GR = 6;
 export const LOOP_TAIL = 1;   // tools/pack-assets.mjs: loop = [LOOP_TAIL / 2, duration - LOOP_TAIL / 2]
 
-// sources: Freesound previews (CC0), Kenney packs (CC0), OpenGameArt (CC0)
-const FS = (id, file) => ({ url: `https://cdn.freesound.org/previews/${Math.floor(id / 1000)}/${file}-hq.mp3`, file: `fs-${id}.mp3` });
-const SRC = {
-  practice: FS(416981, '416981_2780774'),   // simonlabelle — Ice Hockey Practice round
-  check: FS(161996, '161996_2115985'),      // producerdan — Hockey - Huge Body Check Hit Into Boards
-  whistle: FS(538422, '538422_11966684'),   // Rosa-Orenes256 — Referee whistle sound
-  horn: FS(702099, '702099_15203576'),      // SEF7 — Hockey arena goal horn with crowd applause
-  arena: FS(706497, '706497_15203576'),     // SEF7 — Rogers Arena - NHL game atmosphere
-  coin: FS(830033, '830033_13183432'),      // JW_Audio — Coin, Pick-Up, Tonal, High Pitched, Digital_15
-  impact: { url: 'https://kenney.nl/media/pages/assets/impact-sounds/87b4ddecda-1677589768/kenney_impact-sounds.zip', file: 'kenney-impact.zip' },
-  ui: { url: 'https://kenney.nl/media/pages/assets/ui-audio/490d233f68-1677590494/kenney_ui-audio.zip', file: 'kenney-ui.zip' },
-  swish: { url: 'https://opengameart.org/sites/default/files/swishes.zip', file: 'oga-swishes.zip' },
-};
-// name → source, [in the zip], cut from…to (s), fades (s)
+// name → file (folder/file under assets/src/sfx), cut from…to (s, of the original), max length after the trim (s),
+// start threshold (dB under the peak; a quiet run-up before the hit is cut), loop: crossfade (s) or window (s, the
+// steadiest part of a long recording), seamless: the file is already a seamless loop plus a 1 s tail
 const SFX = {
-  stick: { src: 'practice', from: 15.160, to: 15.300 },
-  shot_wrist: { src: 'practice', from: 87.668, to: 88.050 },
-  shot_slap: { src: 'practice', from: 209.010, to: 209.520 },
-  hit: { src: 'check', from: 4.735, to: 5.550 },
-  save: { src: 'impact', zip: 'Audio/impactPunch_medium_001.ogg' },
-  post: { src: 'impact', zip: 'Audio/impactMetal_light_003.ogg' },
-  whistle: { src: 'whistle' },
-  horn: { src: 'horn', from: 3.350, to: 7.300, fadeOut: 1.2 },
-  coin: { src: 'coin', to: 0.700, fadeOut: 0.35 },
-  ui: { src: 'ui', zip: 'Audio/click5.ogg' },
-  swap: { src: 'swish', zip: 'swishes/swish-11.wav' },
-  crowd_loop: { src: 'arena', from: 33.0, to: 43.5, loop: true },
+  // арена и фанаты (петли; фанаты — по сборным матча, index.html sfxFans)
+  crowd_loop: { f: 'Арена/crowd_loop.wav', loop: true, seamless: true },
+  fan_a_loop: { f: 'Фанаты/FAN.mp3', loop: true, from: 1.0, to: 18.0, xf: 1.2 },
+  fan_b_loop: { f: 'Фанаты/FAN 2.mp3', loop: true, from: 3.0, to: 29.5, xf: 1.2 },
+  fan_rus_loop: { f: 'Фанаты/FAN RUSSIAN.mp3', loop: true, from: 1.0, to: 18.2, xf: 1.2 },
+  fan_rusblr_loop: { f: 'Фанаты/FANS RUSSIAN AND BELARUSIAN.mp3', loop: true, from: 0.5, to: 7.9, xf: 1.0 },
+  // катание (петля, громкость по скорости своего игрока; на матч — один из трёх)
+  skate1_loop: { f: 'Катание/Катание.mp3', loop: true, win: 8, xf: 0.6 },
+  skate2_loop: { f: 'Катание/Катание 2.mp3', loop: true, win: 8, xf: 0.6 },
+  skate3_loop: { f: 'Катание/Катание 3.mp3', loop: true, win: 8, xf: 0.6 },
+  // гол, судья
+  horn: { f: 'Гол/horn.wav', fadeOut: 1.0 },
+  horn2: { f: 'Гол/Сирена.mp3', max: 4.5, fadeOut: 1.2 },
+  whistle: { f: 'Рефери/whistle.wav' },
+  whistle2: { f: 'Рефери/Свист.mp3' },
+  // силовой: в открытом льду / у борта
+  hit: { f: 'Силовой /hit.wav' },
+  hit_boards: { f: 'Силовой /Об борт.mp3', start: -20, max: 2.2, fadeOut: 0.8 },
+  // торможение, разворот
+  brake1: { f: 'Торможение/Торможение 1.mp3' },
+  brake2: { f: 'Торможение/Торможение 2.mp3' },
+  brake3: { f: 'Торможение/Торможение 3.mp3' },
+  brake4: { f: 'Торможение/Торможение 4.mp3' },
+  turn: { f: 'Разворот/Разворот.mp3', max: 1.8, fadeOut: 0.4 },
+  // броски, шайба в борт, штанга
+  shot_wrist: { f: 'Удар/кистевой бросок.mp3' },
+  shot_slap: { f: 'Удар/удар по шайбе .mp3', max: 1.4, fadeOut: 0.5 },
+  boards: { f: 'Удар/ударил попал в борт.mp3', max: 1.4, fadeOut: 0.5 },
+  post: { f: 'Штанга/шайба об штангу.mp3', max: 1.4, fadeOut: 0.5 },
+  // пасы
+  pass1: { f: 'пас/пас.mp3', max: 1.0, fadeOut: 0.4 },
+  pass2: { f: 'пас/пас 2.mp3', max: 1.0, fadeOut: 0.4 },
+  pass3: { f: 'пас/пас 3.mp3', max: 1.0, fadeOut: 0.4 },
+  pass_hard: { f: 'пас/пас сильный.mp3', to: 2.7, max: 1.4, fadeOut: 0.5 },   // после 2.9 с в файле — второй удар
+  // сейв
+  save: { f: 'сейв/save.wav' },
+  save2: { f: 'сейв/сейв.mp3' },
+  // меню
+  ui_swipe: { f: 'меню/Свайп.mp3' },
+  ui_back: { f: 'меню/Назад.mp3' },
 };
 
 const sh = (cmd, a) => execFileSync(cmd, a, { stdio: ['ignore', 'pipe', 'pipe'] });
-function fetchSrc(k) {
-  const s = SRC[k], f = join(CACHE, s.file);
-  if (!existsSync(f)) sh('curl', ['-sfL', '--retry', '6', '--retry-all-errors', '--retry-delay', '3', '--max-time', '300', '-A', 'Mozilla/5.0', '-o', f, s.url]);
-  if (!/\.zip$/.test(f)) return f;
-  const d = f.replace(/\.zip$/, '');
-  if (!existsSync(d)) sh('unzip', ['-oq', f, '-d', d]);
-  return d;
-}
 function readWav(f) {
   const b = readFileSync(f); let o = 12, fmt = null;
   while (o < b.length) {
@@ -77,25 +92,52 @@ function writeWav(f, x) {
   for (let i = 0; i < n; i++) b.writeInt16LE(Math.max(-32768, Math.min(32767, Math.round(x[i] * 32767))), 44 + i * 2);
   writeFileSync(f, b);
 }
-async function decodeOgg(files) {   // Chromium decodes Vorbis; WebKit and afconvert do not
-  const { chromium } = await import('playwright'), br = await chromium.launch(), p = await br.newPage();
-  for (const [src, out] of files) {
-    const pcm = await p.evaluate(async (b64) => {
-      const u = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)), buf = await new OfflineAudioContext(1, 1, 44100).decodeAudioData(u.buffer);
-      const oc = new OfflineAudioContext(1, Math.ceil(buf.duration * 44100), 44100), s = oc.createBufferSource();
-      s.buffer = buf; s.connect(oc.destination); s.start(); return Array.from((await oc.startRendering()).getChannelData(0));
-    }, readFileSync(src).toString('base64'));
-    writeWav(out, Float32Array.from(pcm));
-  }
-  await br.close();
-}
 const db = (v) => 20 * Math.log10(v + 1e-12), amp = (d) => Math.pow(10, d / 20);
-const rms = (x, a = 0, b = x.length) => { let s = 0; for (let i = a; i < b; i++) s += x[i] * x[i]; return Math.sqrt(s / Math.max(1, b - a)); };
 const peak = (x) => x.reduce((m, v) => Math.max(m, Math.abs(v)), 0);
 
-function trim(x) {   // silence: start 3 ms before the first sample above -36 dB of the peak, end after the last above -50 dB
+// BS.1770 K-weighting: high shelf (+4 dB above ~1.7 kHz) and the RLB high-pass, as biquads for SR
+function biquad(x, b, a) {
+  const y = new Float64Array(x.length); let x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+  for (let i = 0; i < x.length; i++) { const v = b[0] * x[i] + b[1] * x1 + b[2] * x2 - a[1] * y1 - a[2] * y2; x2 = x1; x1 = x[i]; y2 = y1; y1 = v; y[i] = v; }
+  return y;
+}
+function kWeight(x) {
+  let K = Math.tan(Math.PI * 1681.974450955533 / SR), Vh = Math.pow(10, 3.999843853973347 / 20), Vb = Math.pow(Vh, 0.4996667741545416), Q = 0.7071752369554196;
+  let a0 = 1 + K / Q + K * K;
+  const s = biquad(x, [(Vh + Vb * K / Q + K * K) / a0, 2 * (K * K - Vh) / a0, (Vh - Vb * K / Q + K * K) / a0], [1, 2 * (K * K - 1) / a0, (1 - K / Q + K * K) / a0]);
+  K = Math.tan(Math.PI * 38.13547087602444 / SR); Q = 0.5003270373238773; a0 = 1 + K / Q + K * K;
+  return biquad(s, [1, -2, 1], [1, 2 * (K * K - 1) / a0, (1 - K / Q + K * K) / a0]);
+}
+function blocks(x) {   // mean square of K-weighted 400 ms blocks, 75 % overlap; a sound shorter than 400 ms is one block
+  const k = kWeight(x), w = Math.round(0.4 * SR), hop = Math.round(0.1 * SR), z = [];
+  if (k.length <= w) { let s = 0; for (const v of k) s += v * v; return [s / w]; }
+  for (let a = 0; a + w <= k.length; a += hop) { let s = 0; for (let i = a; i < a + w; i++) s += k[i] * k[i]; z.push(s / w); }
+  return z;
+}
+const lufs = (ms) => -0.691 + 10 * Math.log10(ms + 1e-20);
+const momentaryMax = (x) => lufs(Math.max(...blocks(x)));
+function integrated(x) {   // gated: absolute −70 LUFS, then relative −10 LU
+  const z = blocks(x).filter((m) => lufs(m) > -70), mean = (a) => a.reduce((s, v) => s + v, 0) / Math.max(1, a.length);
+  const rel = lufs(mean(z)) - 10;
+  return lufs(mean(z.filter((m) => lufs(m) > rel)));
+}
+// gain by gainDb (less, if the limiter would have to take over MAX_GR dB: a sharp click stays a click), then a limiter: the gain dips where a peak would pass CEIL — smoothly, 5 ms before it and 80 ms after
+// (both passes only lower the gain, so no sample is over CEIL)
+function level(x, gainDb) {
+  const over = db(peak(x)) + gainDb - CEIL, g = amp(gainDb - Math.max(0, over - MAX_GR)), c = amp(CEIL), n = x.length, env = new Float32Array(n);
+  for (let i = 0; i < n; i++) { const v = Math.abs(x[i] * g); env[i] = v > c ? c / v : 1; }
+  const att = Math.exp(-1 / (0.005 * SR)), rel = Math.exp(-1 / (0.08 * SR));
+  let e = 1, mn = 0;
+  for (let i = n - 1; i >= 0; i--) { e = Math.min(env[i], 1 - (1 - e) * att); env[i] = e; }    // backward: the dip starts before the peak…
+  e = 1;
+  for (let i = 0; i < n; i++) { e = Math.min(env[i], 1 - (1 - e) * rel); env[i] = e; mn = Math.min(mn, db(e)); }   // …and recovers after it
+  const y = new Float32Array(n); for (let i = 0; i < n; i++) y[i] = x[i] * g * env[i];
+  return { y, gr: mn };
+}
+
+function trim(x, startDb = -36) {   // silence: start 3 ms before the first sample above startDb of the peak, end after the last above −50 dB
   const p = peak(x); let a = 0, b = x.length;
-  while (a < b && Math.abs(x[a]) < p * amp(-36)) a++;
+  while (a < b && Math.abs(x[a]) < p * amp(startDb)) a++;
   while (b > a && Math.abs(x[b - 1]) < p * amp(-50)) b--;
   return x.slice(Math.max(0, a - Math.round(0.003 * SR)), b);
 }
@@ -105,38 +147,50 @@ function fade(x, fin, fout) {
   for (let i = 0; i < no; i++) x[x.length - 1 - i] *= Math.pow(i / no, 1.5);
   return x;
 }
-function oneShot(x) {   // loudest 50 ms → ONE_DB rms, peak ≤ -1 dBFS
-  const w = Math.round(0.05 * SR); let best = 0;
-  for (let i = 0; i + w <= Math.max(w, x.length); i += Math.round(w / 4)) best = Math.max(best, rms(x, i, Math.min(x.length, i + w)));
-  const g = Math.min(amp(ONE_DB) / best, amp(-1) / peak(x));
-  return { x: x.map((v) => v * g), loud: db(best * g), pk: db(peak(x) * g) };
+function steadiest(x, sec) {   // the window of sec s whose 0.5 s levels vary least (no single loud stride in the loop)
+  const h = Math.round(0.5 * SR), lv = [];
+  for (let a = 0; a + h <= x.length; a += h) { let s = 0; for (let i = a; i < a + h; i++) s += x[i] * x[i]; lv.push(db(Math.sqrt(s / h))); }
+  const n = Math.round(sec / 0.5); let best = 0, bv = Infinity;
+  for (let i = 1; i + n < lv.length - 1; i++) {   // not the first / last 0.5 s (fades of the recording)
+    const w = lv.slice(i, i + n), m = w.reduce((s, v) => s + v, 0) / n, v = w.reduce((s, q) => s + (q - m) ** 2, 0) / n;
+    if (v < bv) { bv = v; best = i; }
+  }
+  return x.slice(best * h, (best + n) * h + Math.round(0.6 * SR));   // + the crossfade
 }
-function loop(x) {   // seamless: the head crossfades with what follows the end; then LOOP_TAIL s of the head again
-  const c = Math.round(LOOP_XF * SR), L = x.length - c, y = new Float32Array(L + LOOP_TAIL * SR);
-  for (let i = 0; i < L; i++) y[i] = x[i];
-  for (let i = 0; i < c; i++) { const t = i / c; y[i] = x[i] * Math.sin(t * Math.PI / 2) + x[L + i] * Math.cos(t * Math.PI / 2); }
-  for (let i = 0; i < LOOP_TAIL * SR; i++) y[L + i] = y[i % L];
-  const g = amp(LOOP_DB) / rms(y, 0, L), out = y.map((v) => v * g);
-  if (peak(out) > amp(-1)) throw new Error('crowd loop clips: lower LOOP_DB');
-  return { x: out, loud: LOOP_DB, pk: db(peak(out)), len: L / SR };
+function oneShot(x, s) {
+  x = trim(x, s.start);
+  if (s.max && x.length > s.max * SR) x = x.slice(0, Math.round(s.max * SR));
+  x = fade(x, 0.002, s.fadeOut || Math.min(0.04, x.length / SR * 0.25));
+  const r = level(x, ONE_LUFS - momentaryMax(x));
+  return { x: r.y, loud: momentaryMax(r.y), gr: r.gr };
+}
+function loop(x, s) {   // seamless: the head crossfades with what follows the end; then LOOP_TAIL s of the head again
+  let y, L;
+  if (s.seamless) { L = x.length - LOOP_TAIL * SR; y = x.slice(0, L + LOOP_TAIL * SR); }
+  else {
+    if (s.win) x = steadiest(x, s.win);
+    const c = Math.round((s.xf || 0.6) * SR); L = x.length - c; y = new Float32Array(L + LOOP_TAIL * SR);
+    for (let i = 0; i < L; i++) y[i] = x[i];
+    for (let i = 0; i < c; i++) { const t = i / c; y[i] = x[i] * Math.sin(t * Math.PI / 2) + x[L + i] * Math.cos(t * Math.PI / 2); }
+    for (let i = 0; i < LOOP_TAIL * SR; i++) y[L + i] = y[i % L];
+  }
+  const body = y.slice(0, L), r = level(y, LOOP_LUFS - integrated(body));
+  return { x: r.y, loud: integrated(r.y.slice(0, L)), gr: r.gr, len: L / SR };
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   mkdirSync(CACHE, { recursive: true }); mkdirSync(OUT, { recursive: true });
-  const pcm = {}, ogg = [];
   for (const [name, s] of Object.entries(SFX)) {
-    const got = fetchSrc(s.src), f = s.zip ? join(got, s.zip) : got, w = join(CACHE, `${s.src}-${(s.zip || 'src').replace(/\W/g, '_')}.wav`);
-    if (!existsSync(w)) { if (/\.ogg$/.test(f)) ogg.push([f, w]); else sh('afconvert', ['-f', 'WAVE', '-d', `LEI16@${SR}`, '-c', '1', f, w]); }
-    pcm[name] = w;
-  }
-  if (ogg.length) await decodeOgg(ogg);
-  for (const [name, s] of Object.entries(SFX)) {
-    let x = readWav(pcm[name]);
+    const src = join(IN, s.f);
+    if (!existsSync(src)) throw new Error('no file ' + s.f);
+    const w = join(CACHE, createHash('sha1').update(readFileSync(src)).digest('hex').slice(0, 16) + '.wav');
+    if (!existsSync(w)) sh('afconvert', ['-f', 'WAVE', '-d', `LEI16@${SR}`, '-c', '1', src, w]);
+    let x = readWav(w);
     x = x.slice(Math.round((s.from || 0) * SR), s.to ? Math.round(s.to * SR) : x.length);
-    const r = s.loop ? loop(x) : oneShot(fade(trim(x), 0.002, s.fadeOut || Math.min(0.04, x.length / SR * 0.25)));
+    const r = s.loop ? loop(x, s) : oneShot(x, s);
     writeWav(join(OUT, name + '.wav'), r.x);
-    console.log(`${name.padEnd(11)} ${(r.x.length / SR).toFixed(3)} s  loud ${r.loud.toFixed(1)} dB  peak ${r.pk.toFixed(1)} dBFS${r.len ? `  loop ${r.len.toFixed(3)} s` : ''}`);
+    console.log(`${name.padEnd(16)} ${(r.x.length / SR).toFixed(3)} s  ${r.loud.toFixed(1)} LUFS${s.loop ? '-I' : '-M'}  peak ${db(peak(r.x)).toFixed(1)} dBFS` +
+      `${r.gr < -0.05 ? `  limiter ${r.gr.toFixed(1)} dB` : ''}${r.len ? `  loop ${r.len.toFixed(3)} s` : ''}  ← ${s.f}`);
   }
-  const extra = readdirSync(OUT).filter((f) => !SFX[f.replace(/\.wav$/, '')]);
-  if (extra.length) console.log('not in SFX (delete?): ' + extra.join(', '));
+  for (const f of readdirSync(OUT)) if (!SFX[f.replace(/\.wav$/, '')]) { unlinkSync(join(OUT, f)); console.log('removed ' + f); }
 }

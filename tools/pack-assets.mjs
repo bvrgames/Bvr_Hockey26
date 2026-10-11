@@ -12,7 +12,7 @@
 //   assets/dist/<name>.<hash>.png
 //   assets/src/music/*.mp3    menu music (title = file name, artist BvR) → assets/dist/music-<hash>.m4a, AAC 96 kbit/s via
 //                             macOS afconvert; the hash is of the source + encoder settings, so --check never re-encodes
-//   assets/src/sfx/*.wav      match sounds (tools/prep-sfx.mjs cuts them from CC0 recordings, THIRD_PARTY.md) →
+//   assets/src/sfx-ready/*.wav match sounds (tools/prep-sfx.mjs makes them from the originals in assets/src/sfx/<папка>/) →
 //                             assets/dist/sfx-<name>.<hash>.m4a with the music's encoder, window.ASSETS.sfx[name]; a loop's
 //                             window [start, end] in s → window.ASSETS.sfxLoop[name] (prep-sfx appends LOOP_TAIL s after it)
 //   assets/src/fonts/*.woff2  menu font (Fira Sans Extra Condensed 800 italic, OFL) → assets/dist/font-lat|font-cyr.<hash>.woff2
@@ -35,7 +35,7 @@ import { createHash } from 'node:crypto';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = join(ROOT, 'assets', 'src'), DIST = join(ROOT, 'assets', 'dist'), HTML = join(ROOT, 'index.html');
 const IMAGES = ['env', 'ads', 'logo'];
-const SFX = join(SRC, 'sfx'), LOOP_TAIL = 1;   // = tools/prep-sfx.mjs LOOP_TAIL
+const SFX = join(SRC, 'sfx-ready'), LOOP_TAIL = 1;   // = tools/prep-sfx.mjs LOOP_TAIL
 const MUSIC = join(SRC, 'music'), FONTS = join(SRC, 'fonts'), ICONS = join(SRC, 'icons'), KITS = join(SRC, 'kits');
 // the drawing's own bounds (getBBox in Chromium) instead of the artboard: the icon is exactly as tall as the text it
 // stands next to; both share the artboard's rows 55.4…870.2. Measure again when the art changes.
