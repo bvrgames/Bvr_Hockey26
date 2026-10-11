@@ -113,9 +113,16 @@
     display:flex;flex-direction:column;align-items:center;gap:4px;pointer-events:none;
     max-width:92vw}
   body.portrait #topbar{top:46px}
-  #chip{padding:5px 12px;border-radius:7px;background:rgba(210,140,30,.92);color:#1d1305;
-    font-size:11px;font-weight:800;letter-spacing:.10em;text-transform:uppercase;
-    opacity:0;transition:opacity .18s;white-space:nowrap}
+  /* объявления (предупреждение об офсайде, возможен проброс) — ячейка в конце табло, на месте скорости (в отладке
+     скорость на это время прячется); появилась / пропала — layoutTop двигает надпись матча правее */
+  #hud>#chip{display:none;background:rgba(210,140,30,.92);color:#1d1305;font-size:10.5px;font-weight:800;
+    letter-spacing:.07em;text-transform:uppercase;white-space:nowrap}
+  #hud>#chip.on{display:flex}
+  #hud.chipon>#spdw{display:none!important}
+  /* не влезает в ряд кнопок Telegram — короткая надпись (layoutTop) */
+  #chip .cs,#hud.chipshort #chip .cl{display:none}
+  #hud.chipshort #chip .cs{display:inline}
+  #hud.chiphide>#chip{display:none}
   /* вбрасывание: своя доля нажатий слева (синяя), соперника — справа (красная) */
   #fobar{display:flex;flex-direction:column;align-items:center;gap:4px;opacity:0;transition:opacity .15s}
   #fobar span{font-size:11px;font-weight:800;letter-spacing:.06em;color:#fff;text-shadow:0 2px 8px rgba(0,0,0,.8);
@@ -126,7 +133,6 @@
   body.portrait #legend{display:none}
   body.portrait #hud{left:8px;top:8px}
   body.portrait #hud>div{padding:0 7px;font-size:11px}
-  body.portrait #chip{top:46px}
   body.portrait #hud2{top:42px;left:8px}
   #legend{position:absolute;right:10px;top:48px;z-index:6;   /* под кнопкой паузы */
     font-size:10px;line-height:1.5;
@@ -710,11 +716,11 @@
     <div><span id="t2n">ЗЕЛ</span><span class="sw" id="t2c" style="background:#1f7a52"></span></div>
     <div class="clk"><span id="per">МАТЧ</span> · <span id="clk">5:00</span></div>
     <div id="spdw" class="dbg" style="color:rgba(255,255,255,.55)"><span id="spd">0 км/ч</span></div>
+    <div id="chip"><span class="cl"></span><span class="cs"></span></div>
   </div>
 
   <div id="hud2"><span id="ppl"></span></div>
   <div id="topbar">
-    <div id="chip"></div>
     <div id="fobar"><span></span><div><i></i></div></div>
   </div>
   <div id="msgbox"><div id="msg"></div><div id="sub"></div></div>
@@ -1291,8 +1297,14 @@ function layoutTop(){
   var hud=document.getElementById('hud'); if(!hud) return;
   var SA=safeInsets(), band=tgButtonsBand();
   var top0=SA.t, below=SA.t+band;           /* верх экрана / ниже кнопок Telegram */
+  hud.classList.remove('chipshort');
   var hw=hud.offsetWidth||260, hh=hud.offsetHeight||30;
   var hudX, hudY;
+  /* объявление не влезает в ряд кнопок Telegram или в ширину экрана (вертикаль) — коротко */
+  if(hud.classList.contains('chipon') && ((band>0 && !PORTRAIT && SA.l+tgCloseW()+8+hw>W-SA.r-TG_BTN_W-8) ||
+                                          hw>W-SA.l-SA.r-16)){
+    hud.classList.add('chipshort'); hw=hud.offsetWidth||hw;
+  }
   if(band>0 && !PORTRAIT){
     /* горизонталь, полный экран: табло сразу правее «Закрыть», в том же ряду и по центру ряда
        по высоте; не помещается до «⌄ •••» — ниже полосы кнопок, у левого края */
@@ -1303,6 +1315,10 @@ function layoutTop(){
     hudX=SA.l+8; hudY=below+6;                  /* вертикаль: всё ниже кнопок Telegram */
   } else {
     hudX=SA.l+(PORTRAIT?8:12); hudY=top0+(PORTRAIT?8:10);
+  }
+  /* табло с объявлением уехало за середину экрана (узкий телефон без полосы кнопок) — объявление короче */
+  if(!PORTRAIT && hud.classList.contains('chipon') && !hud.classList.contains('chipshort') && hudX+hw/2>=W/2){
+    hud.classList.add('chipshort'); hw=hud.offsetWidth||hw;
   }
   /* пауза: справа, ниже кнопок Telegram */
   var bp=document.getElementById('bPause');
@@ -1470,8 +1486,8 @@ ru:{
   pr_trip:'ПОДНОЖКА', pr_slash:'УДАР КЛЮШКОЙ', pr_hold:'ЗАДЕРЖКА КЛЮШКОЙ', pr_back:'АТАКА СЗАДИ', pr_board:'ТОЛЧОК НА БОРТ', pr_interference:'БЛОКИРОВКА',
   cover:'ВРАТАРЬ НАКРЫЛ ШАЙБУ', foHint:'Стик — кому отбросить · A жми, когда шайба упадёт', foWon:'ВБРАСЫВАНИЕ ВЫИГРАНО', foLost:'ВБРАСЫВАНИЕ ПРОИГРАНО',
   offside:'ОФСАЙД', icing:'ПРОБРОС', delayed:'ОТЛОЖЕННЫЙ ОФСАЙД',
-  delayedYou:'ОТЛОЖЕННЫЙ ОФСАЙД · ВЫЙДИ ИЗ ЗОНЫ', icingWarn:'ВОЗМОЖЕН ПРОБРОС',
-  offPre:'ПРЕДУПРЕЖДЕНИЕ ОБ ОФСАЙДЕ', offPreYou:'ПРЕДУПРЕЖДЕНИЕ ОБ ОФСАЙДЕ · ПАС НАЗАД ИЛИ ЖДИ',
+  delayedYou:'ОТЛОЖЕННЫЙ ОФСАЙД', icingWarn:'ВОЗМОЖЕН ПРОБРОС',
+  offPre:'ПРЕДУПР. ОФСАЙДА', offPreYou:'ПРЕДУПР. ОФСАЙДА', offPreS:'ОФСАЙД?', delayedS:'ОТЛ. ОФСАЙД', icingS:'ПРОБРОС?',
   powerplay:'БОЛЬШИНСТВО', shorthand:'МЕНЬШИНСТВО',
   pause:'ПАУЗА', resume:'ПРОДОЛЖИТЬ', mainMenu:'ГЛАВНОЕ МЕНЮ',
   over:'МАТЧ ОКОНЧЕН', again:'ИГРАТЬ СНОВА', rematch:'РЕВАНШ', hlReplay:'Повтор', hl_goal:'гол', hl_post:'штанга', hl_save:'сейв', fFinal:'Финал', fWin:'Победа', fLoss:'Поражение', fDraw:'Ничья', fDq:'Дисквалификация',
@@ -1570,8 +1586,8 @@ en:{
   pr_trip:'TRIPPING', pr_slash:'SLASHING', pr_hold:'HOOKING', pr_back:'CHECKING FROM BEHIND', pr_board:'BOARDING', pr_interference:'INTERFERENCE',
   cover:'GOALIE COVERS THE PUCK', foHint:'Stick — where to send it · mash A once the puck drops', foWon:'FACEOFF WON', foLost:'FACEOFF LOST',
   offside:'OFFSIDE', icing:'ICING', delayed:'DELAYED OFFSIDE',
-  delayedYou:'DELAYED OFFSIDE · CLEAR THE ZONE', icingWarn:'POSSIBLE ICING',
-  offPre:'OFFSIDE WARNING', offPreYou:'OFFSIDE WARNING · PASS BACK OR WAIT',
+  delayedYou:'DELAYED OFFSIDE', icingWarn:'POSSIBLE ICING',
+  offPre:'OFFSIDE WARNING', offPreYou:'OFFSIDE WARNING', offPreS:'OFFSIDE?', delayedS:'DELAYED OFF.', icingS:'ICING?',
   powerplay:'POWER PLAY', shorthand:'SHORT-HANDED',
   pause:'PAUSED', resume:'RESUME', mainMenu:'MAIN MENU',
   over:'FULL TIME', again:'PLAY AGAIN', rematch:'REMATCH', hlReplay:'Replay', hl_goal:'goal', hl_post:'post', hl_save:'save', fFinal:'Final', fWin:'Win', fLoss:'Loss', fDraw:'Draw', fDq:'Disqualified',
@@ -1672,8 +1688,8 @@ id:{
   cover:'KIPER MENUTUP KEPING', foHint:'Stik — arah keping · tekan A cepat saat keping jatuh', foWon:'FACE-OFF MENANG', foLost:'FACE-OFF KALAH',
   penaltySub:'menabrak pemain tanpa keping',
   offside:'OFFSIDE', icing:'ICING', delayed:'OFFSIDE TERTUNDA',
-  delayedYou:'OFFSIDE TERTUNDA · KELUAR DARI ZONA', icingWarn:'KEMUNGKINAN ICING',
-  offPre:'PERINGATAN OFFSIDE', offPreYou:'PERINGATAN OFFSIDE · OPER KE BELAKANG ATAU TUNGGU',
+  delayedYou:'OFFSIDE TERTUNDA', icingWarn:'KEMUNGKINAN ICING',
+  offPre:'PERINGATAN OFFSIDE', offPreYou:'PERINGATAN OFFSIDE', offPreS:'OFFSIDE?', delayedS:'OFFSIDE T.', icingS:'ICING?',
   powerplay:'UNGGUL PEMAIN', shorthand:'KURANG PEMAIN',
   pause:'JEDA', resume:'LANJUTKAN', mainMenu:'MENU UTAMA',
   over:'PERTANDINGAN SELESAI', again:'MAIN LAGI', rematch:'TANDING ULANG', hlReplay:'Tayangan ulang', hl_goal:'gol', hl_post:'tiang', hl_save:'penyelamatan', fFinal:'Final', fWin:'Menang', fLoss:'Kalah', fDraw:'Seri', fDq:'Diskualifikasi',
@@ -3267,9 +3283,15 @@ var msgEl=document.getElementById('msg'), subEl=document.getElementById('sub'),
 function flash(a,b,dur){
   msgEl.textContent=a; subEl.textContent=b||'';
   subEl.style.display=b?'block':'none';
+  msgT=dur||1.6;
   fitMsg();
   msgBox.style.opacity=1;
-  msgT=dur||1.6;
+}
+/* надпись погасла — объявление в табло снова полное (fitMsg могло его укоротить или спрятать) */
+function msgHide(){
+  msgT=0; msgBox.style.opacity=0;
+  var hud=document.getElementById('hud');
+  if(hud && (hud.classList.contains('chiphide') || hud.classList.contains('chipshort'))){ hud.classList.remove('chiphide'); layoutTop(); }
 }
 /* Надпись правее табло, по центру его строки. Границы (MSGZ) считает layoutTop: справа — до «⌄ •••», если табло
    в полосе кнопок Telegram, и всегда до паузы; сверху — не выше зоны устройства (табло ниже полосы — не выше её
@@ -3300,6 +3322,12 @@ function fitMsg(){
     return !over();
   };
   var x=hud.offsetLeft+hw+6, maxW=MSGZ.r-x;
+  /* табло с объявлением (#chip) шире: надпись правее не влезает — на время надписи объявление короче, потом прячется
+     (надпись 1–2 с; погасла — msgHide → layoutTop вернёт объявление) */
+  if(msgT>0 && hud.classList.contains('chipon') && !(maxW>=64 && fit(x, maxW))){
+    if(!hud.classList.contains('chipshort')){ hud.classList.add('chipshort'); hw=hud.offsetWidth; x=hud.offsetLeft+hw+6; maxW=MSGZ.r-x; }
+    if(!(maxW>=64 && fit(x, maxW))){ hud.classList.add('chiphide'); hw=hud.offsetWidth; x=hud.offsetLeft+hw+6; maxW=MSGZ.r-x; }
+  }
   if(maxW>=64 && (fit(x, maxW) || !PORTRAIT)){
     if(over()) mb.classList.add('brk');
     mb.style.top=Math.round(Math.max(MSGZ.top, hud.offsetTop+hh/2-mb.offsetHeight/2))+'px';
@@ -6848,7 +6876,7 @@ function frameStepInner(dt){
   sfxTick(dt);
   if(!MENU.covers()) pfRender();   /* меню и экран поворота непрозрачны — площадку под ними не рисуем */
 
-  if(msgT>0){ msgT-=dt; if(msgT<=0) msgBox.style.opacity=0; }
+  if(msgT>0){ msgT-=dt; if(msgT<=0) msgHide(); }
   fxDom();
 
   if(chargeT>0){ hudStyle(powEl, 'opacity', '1'); hudStyle(powI, 'width', Math.round(chargeT/0.85*100)+'%'); }
@@ -6881,17 +6909,21 @@ function frameStepInner(dt){
 
   /* предупреждение об офсайде: 0/1 — отложенный, 2/3 — «предупреждение» (свои в зоне, шайбу не ввозить, пас назад
      можно; sim offWarn) */
-  var chip=he.chip;
+  var chip=he.chip, chipOn=false;
   if(offWarn>=0 && state==='play'){
     var oT=offWarn&1, oPre=offWarn>=2;
-    hudText(chip, oPre ? (oT===HUMAN?T('offPreYou'):T('offPre')) : (oT===HUMAN?T('delayedYou'):T('delayed')));
+    hudText(chip.firstChild, oPre ? (oT===HUMAN?T('offPreYou'):T('offPre')) : (oT===HUMAN?T('delayedYou'):T('delayed')));
+    hudText(chip.lastChild, oPre ? T('offPreS') : T('delayedS'));
     hudStyle(chip, 'background', oT===HUMAN ? 'rgba(214,52,52,0.94)' : 'rgba(210,140,30,0.92)');
     hudStyle(chip, 'color', oT===HUMAN ? '#fff' : '#1d1305');
-    hudStyle(chip, 'opacity', '1');
+    chipOn=true;
   }
-  else if(icing.armed && state==='play'){ hudText(chip, T('icingWarn'));
-    hudStyle(chip, 'background', 'rgba(210,140,30,0.92)'); hudStyle(chip, 'color', '#1d1305'); hudStyle(chip, 'opacity', '1'); }
-  else hudStyle(chip, 'opacity', '0');
+  else if(icing.armed && state==='play'){ hudText(chip.firstChild, T('icingWarn')); hudText(chip.lastChild, T('icingS'));
+    hudStyle(chip, 'background', 'rgba(210,140,30,0.92)'); hudStyle(chip, 'color', '#1d1305'); chipOn=true; }
+  if(chip && chip._on!==chipOn){
+    chip._on=chipOn; chip.classList.toggle('on', chipOn); chip.parentNode.classList.toggle('chipon', chipOn);
+    layoutTop();                                       /* табло стало шире / уже — надпись матча правее него */
+  }
   faceHud();
 
   /* скорость активного игрока */
@@ -9361,7 +9393,7 @@ window.__hk={hs:function(){return HS;},net:function(){return NET;},setCam:functi
   showFps:function(on){ setShowFps(on); }, fitPad:function(){ fitPadLabels(); }, T:function(k){ return T(k); },
   layoutTop:function(){ layoutTop(); },
   /* надпись матча: flash('goal','ourGoal') — ключи текстов (на 30 с); flash() — убрать; вернёт её место и размер */
-  flash:function(a,b){ if(a) flash(T(a), b?T(b):'', 30); else { msgT=0; msgBox.style.opacity=0; }
+  flash:function(a,b){ if(a) flash(T(a), b?T(b):'', 30); else msgHide();
     var r=msgBox.getBoundingClientRect(); return {x:r.left, y:r.top, w:r.width, h:r.height,
       fm:parseFloat(getComputedStyle(msgEl).fontSize), wrap:msgBox.classList.contains('wrap'), brk:msgBox.classList.contains('brk'),
       below:msgBox.getBoundingClientRect().top>document.getElementById('hud').getBoundingClientRect().bottom}; },
