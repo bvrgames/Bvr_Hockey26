@@ -23,7 +23,7 @@ const IN = join(ROOT, 'assets', 'src', 'sfx'), OUT = join(ROOT, 'assets', 'src',
 const args = process.argv.slice(2), ci = args.indexOf('--cache');
 const CACHE = ci >= 0 ? args[ci + 1] : join(tmpdir(), 'bvr-sfx2');
 const SR = 44100, ONE_LUFS = -16, LOOP_LUFS = -23, CEIL = -1.5, MAX_GR = 6;
-export const LOOP_TAIL = 1;   // tools/pack-assets.mjs: loop = [LOOP_TAIL / 2, duration - LOOP_TAIL / 2]
+export const LOOP_TAIL = 1;
 
 // name → file (folder/file under assets/src/sfx), cut from…to (s, of the original), max length after the trim (s),
 // start threshold (dB under the peak; a quiet run-up before the hit is cut), loop: crossfade (s) or window (s, the
@@ -35,6 +35,8 @@ const SFX = {
   fan_b_loop: { f: 'Фанаты/FAN 2.mp3', loop: true, from: 3.0, to: 29.5, xf: 1.2 },
   fan_rus_loop: { f: 'Фанаты/FAN RUSSIAN.mp3', loop: true, from: 1.0, to: 18.2, xf: 1.2 },
   fan_rusblr_loop: { f: 'Фанаты/FANS RUSSIAN AND BELARUSIAN.mp3', loop: true, from: 0.5, to: 7.9, xf: 1.0 },
+  // «шайбу-шайбу» — ритм ~2.295 с: петля ровно на два такта (4.59 с) с 1.0 с + 0.3 с перекрёстного затухания
+  fan_shaibu_loop: { f: 'Фанаты/шайбу шайбу.mp3', loop: true, from: 1.0, to: 5.89, xf: 0.3 },
   // катание (петля, громкость по скорости своего игрока; на матч — один из трёх)
   skate1_loop: { f: 'Катание/Катание.mp3', loop: true, win: 8, xf: 0.6 },
   skate2_loop: { f: 'Катание/Катание 2.mp3', loop: true, win: 8, xf: 0.6 },
@@ -45,9 +47,13 @@ const SFX = {
   joy: { f: 'Гол/Радость.mp3', max: 6.0, fadeOut: 2.0 },   // трибуны радуются голу (вместе с сиреной)
   whistle: { f: 'Рефери/whistle.wav' },
   whistle2: { f: 'Рефери/Свист.mp3' },
-  // силовой: в открытом льду / у борта
+  // силовой: в открытом льду (случайно один из пяти) / у борта
   hit: { f: 'Силовой /hit.wav' },
   hit_boards: { f: 'Силовой /Об борт.mp3', start: -20, max: 2.2, fadeOut: 0.8 },
+  hit2: { f: 'Силовой /силовой 2.mp3', start: -20, max: 1.6, fadeOut: 0.6 },   // разбег перед ударом срезан
+  hit3: { f: 'Силовой /силовой 3.mp3', start: -20, max: 1.6, fadeOut: 0.6 },
+  hit4: { f: 'Силовой /силовой 4.mp3', start: -20, max: 1.6, fadeOut: 0.6 },
+  hit_hard: { f: 'Силовой /силовой жесткий.mp3', start: -20, max: 1.6, fadeOut: 0.6 },
   // торможение, разворот
   brake1: { f: 'Торможение/Торможение 1.mp3' },
   brake2: { f: 'Торможение/Торможение 2.mp3' },
