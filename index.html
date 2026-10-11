@@ -1796,7 +1796,7 @@ var FAN_VOL={fan_rusblr_loop:2};
 /* фанаты — не весь матч, а заряды: первый через 15–40 с живой игры, длится 10–20 с («FAN», «FAN 2» — 18–30 с), следующий
    через 30–70 с; каждый заряд — фанаты одной команды (чаще по очереди); остальное время — только гул арены (crowd_loop).
    Время идёт только в матче, не на паузе и не в тренировке */
-var FANS={first:[15,40], len:[10,20], lenLong:[18,30], gap:[30,70], fadeIn:0.8, fadeOut:1.2};
+var FANS={first:[15,40], len:[10,20], lenLong:[18,30], gap:[30,70], fadeIn:0.8, fadeOut:1.2, shLen:[12,18], shGap:[15,25]};
 var FAN_LONG={fan_a_loop:1, fan_b_loop:1};     /* «FAN», «FAN 2» — заряд подольше */
 /* музыка на арене: на каждой остановке, кроме начала матча (гол, нарушение, офсайд, проброс, вратарь накрыл), — от
    свистка до вбрасывания, ровно пока игра стоит, играет кусок нашего трека из меню как из динамиков арены: полоса
@@ -1993,16 +1993,18 @@ var SFX={
 /* каждый кадр: фанаты (только в матче, не в тренировке и не на паузе), катание по скорости своего игрока, торможение и
    разворот. Скорость — по сдвигу позиции за кадр (так же у гостя в сети, где позиции из снимков) */
 var SKT={p:null, x:0, z:0, vx:0, vz:0, h:[], t:0, brT:-9, tuT:-9, fan:[-1,-1,-1], sk:-1, rate:-1, fanT:-1, fanOn:false, side:-1,
-         goalAt:[0,0], sh:false};
-/* время матча, с от начала (по часам матча — так же у гостя в сети) */
-function sfxElapsed(){ var L=MATCH.len || SIM.matchLen || 0; return L>0 ? {t:L-clock, L:L} : null; }
-/* команда t (Россия, Беларусь, Казахстан, СССР) долго не забивает: прошло 2/3 матча, а её последнего гола нет уже 1/3
-   матча (или не забивала вовсе) */
+         shCd:0, per:{n:-1, len:0, goals:[0,0], done:[false,false]}};
+/* «шайбу-шайбу» по периодам: период начался (match:start или смена period) — его длина = часы в этот момент.
+   Команда t (Россия, Беларусь, Казахстан, СССР) в этом периоде не забила, а прошло SH_AT периода, — один заряд
+   «шайбу-шайбу» (FANS.shLen), один раз за период на команду. Сейчас период один (весь матч); с тремя периодами — так же */
+var SH_AT=0.8;
+function sfxPeriod(len){ SKT.per={n:period, len:len>0 ? len : clock, goals:[0,0], done:[false,false]}; }
 function sfxShaibu(t){
-  var e=sfxElapsed(); if(!e || !SHAIBU[TEAM[t] && TEAM[t].id]) return false;
-  return e.t>=e.L*2/3 && e.t-SKT.goalAt[t]>=e.L/3;
+  var P=SKT.per; if(!SHAIBU[TEAM[t] && TEAM[t].id] || !(P.len>0) || P.done[t] || P.goals[t]) return false;
+  return P.len-clock>=P.len*SH_AT;
 }
-EV.on('goal', function(e){ var x=sfxElapsed(); if(x && (e.t===0 || e.t===1)) SKT.goalAt[e.t]=x.t; });
+EV.on('match:start', function(e){ sfxPeriod(e && e.len); });
+EV.on('goal', function(e){ if(e.t===0 || e.t===1) SKT.per.goals[e.t]++; });
 function sfxSpan(r){ return r[0]+(r[1]-r[0])*sfxRnd(); }
 /* музыка арены: кусок (AudioBufferSource) → ARN.inp: полоса → сухой + эхо → ARN.g → master */
 var ARN={g:null, inp:null, src:null, key:null, ps:'', first:true, last:-1, q:[], t:0, want:false};
@@ -2070,17 +2072,23 @@ function sfxTick(dt){
   var live=inM && !PAUSED;
   arenaTick(inM);
   /* заряды фанатов */
-  if(!inM){ SKT.fanT=-1; SKT.fanOn=false; SKT.side=-1; SKT.goalAt=[0,0]; SKT.sh=false; }
+  if(!inM){ SKT.fanT=-1; SKT.fanOn=false; SKT.side=-1; SKT.shCd=0; SKT.per.len=0; }
   else if(live && !TRAIN.on){
+    if(SKT.per.n!==period && SKT.per.len>0) sfxPeriod();                 /* новый период */
     if(SKT.fanT<0) SKT.fanT=sfxSpan(FANS.first);
-    SKT.fanT-=dt;
-    if(SKT.fanT<=0){
+    SKT.fanT-=dt; SKT.shCd-=dt;
+    /* условие выполнилось — «шайбу-шайбу» сразу, не дожидаясь очередного заряда (обычный заряд прерывается); если
+       условие у обеих команд — за вторую после паузы shGap */
+    var sht=SREC.fans[2].want && SKT.shCd<=0 && !(SKT.fanOn && SKT.side===2) ? (sfxShaibu(0) ? 0 : (sfxShaibu(1) ? 1 : -1)) : -1;
+    if(sht>=0){
+      SKT.per.done[sht]=true;
+      SKT.fanOn=true; SKT.side=2; SKT.fanT=sfxSpan(FANS.shLen); SKT.shCd=SKT.fanT+sfxSpan(FANS.shGap);
+    }
+    else if(SKT.fanT<=0){
       SKT.fanOn=!SKT.fanOn;
-      if(SKT.fanOn){   /* чьи фанаты: если групп две — чаще другая, чем в прошлый раз; команда долго не забивает —
-                          через раз «шайбу-шайбу» */
+      if(SKT.fanOn){   /* чьи фанаты: если групп две — чаще другая, чем в прошлый раз */
         var two=!!SREC.fans[1].want, prev=SKT.side===2 ? -1 : SKT.side;
-        if(SREC.fans[2].want && !SKT.sh && (sfxShaibu(0) || sfxShaibu(1))){ SKT.side=2; SKT.sh=true; }
-        else { SKT.sh=false; SKT.side=!two ? 0 : (prev<0 ? (sfxRnd()<0.5 ? 0 : 1) : (sfxRnd()<0.7 ? 1-prev : prev)); }
+        SKT.side=!two ? 0 : (prev<0 ? (sfxRnd()<0.5 ? 0 : 1) : (sfxRnd()<0.7 ? 1-prev : prev));
       }
       var fk=SREC.fans[Math.max(0,SKT.side)].want;
       SKT.fanT=sfxSpan(SKT.fanOn ? (FAN_LONG[fk] ? FANS.lenLong : FANS.len) : FANS.gap);
@@ -9230,7 +9238,7 @@ window.__hk={hs:function(){return HS;},net:function(){return NET;},setCam:functi
   sfx:function(){ return {ac:AC ? AC.state : 'none', ready:Object.keys(SREC.buf).filter(function(k){ return !SFX_LAZY.test(k); }).sort(), err:SREC.err,
             want:Object.keys(ASSETS.sfx||{}).filter(function(k){ return !SFX_LAZY.test(k); }).length, crowd:!!SREC.crowd, synthCrowd:!!SREC.synthCrowd,
             fans:SREC.fans.map(function(o){ return o.k; }), fansWant:SREC.fans.map(function(o){ return o.want||null; }), fanOn:SKT.fanOn,
-            fanSide:SKT.side, fanT:+SKT.fanT.toFixed(1), shaibu:[sfxShaibu(0), sfxShaibu(1)], arena:!!ARN.src, arenaKey:ARN.src ? ARN.key : null, arenaQ:ARN.q.slice(), skate:SREC.sk.k, fanGain:SKT.fan.slice(), skateGain:+Math.max(0,SKT.sk).toFixed(3), brakeT:SKT.brT, turnT:SKT.tuT, t:SKT.t}; },
+            fanSide:SKT.side, fanT:+SKT.fanT.toFixed(1), shaibu:[sfxShaibu(0), sfxShaibu(1)], per:JSON.parse(JSON.stringify(SKT.per)), arena:!!ARN.src, arenaKey:ARN.src ? ARN.key : null, arenaQ:ARN.q.slice(), skate:SREC.sk.k, fanGain:SKT.fan.slice(), skateGain:+Math.max(0,SKT.sk).toFixed(3), brakeT:SKT.brT, turnT:SKT.tuT, t:SKT.t}; },
   /* какие фанаты играют в матче команд a и b (номера в CLUBS) */
   sfxFan:function(a, b){ var t=TEAM; TEAM=[CLUBS[a], CLUBS[b]]; var k=sfxFanKeys(); TEAM=t; return k.join('+'); },
   music:function(){ return {session:navigator.audioSession ? navigator.audioSession.type : 'none', silent:!!(SND.silent && !SND.silent.paused), ac:AC ? AC.state : 'none', off:MUSIC.off, blocked:MUSIC.blocked, name:MUSIC.name, playing:!!(MUSIC.el && !MUSIC.el.paused), cur:+MUSIC.cur.toFixed(2),
