@@ -143,7 +143,10 @@ try {
   ok(q.level === 1 && q.fps > 55, `after the drop: expected MEDIUM at full speed, got level ${q.level}, ${q.fps} fps`);
   console.log(`  HIGH → MEDIUM after ${tDown.toFixed(1)} s; then ${q.fps} fps on MEDIUM, resolution ×${q.dyn}`);
 
-  for (const e of g.logs.filter(isError)) fails.push(`[${e.type}] ${e.text}`);
+  // the test reloads the page per quality level: match sounds still downloading are aborted by the navigation
+  // («cancelled» / ERR_ABORTED) — not an error; a real failure (404, decode) still counts
+  const navAbort = (e) => e.type === 'requestfailed' && /\/assets\/dist\/sfx-[^ ]+ (cancelled|net::ERR_ABORTED)$/.test(e.text);
+  for (const e of g.logs.filter((l) => isError(l) && !navAbort(l))) fails.push(`[${e.type}] ${e.text}`);
   for (const e of await page.evaluate('__hk.errors()')) fails.push(`[window] ${e}`);
 } catch (e) {
   fails.push('runner error: ' + e.message.split('\n')[0]);

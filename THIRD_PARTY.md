@@ -46,7 +46,7 @@ Since 11.10.2026 the match sounds are the owner's own files in `assets/src/sfx/<
 `tools/prep-sfx.mjs` makes `assets/src/sfx-ready/*.wav` from them (loudness by LUFS, trimmed silence, seamless loops),
 `npm run assets` encodes them to `assets/dist/sfx-*.m4a`. The licenses of the new files are on the owner.
 
-Five of them are the earlier CC0 recordings (public domain, no attribution required), kept by the owner in the folders:
+Six of them are the earlier CC0 recordings (public domain, no attribution required), kept by the owner in the folders:
 
 | file | source | author | license |
 |---|---|---|---|
@@ -54,6 +54,7 @@ Five of them are the earlier CC0 recordings (public domain, no attribution requi
 | `сейв/save.wav` | [Impact Sounds](https://kenney.nl/assets/impact-sounds), `impactPunch_medium_001.ogg` | Kenney (kenney.nl) | CC0 |
 | `Рефери/whistle.wav` | [Referee whistle sound.wav](https://freesound.org/s/538422/) (Freesound 538422) | Rosa-Orenes256 | CC0 |
 | `Гол/horn.wav` | [Hockey arena goal horn with crowd applause](https://freesound.org/s/702099/) (Freesound 702099), 3.35–7.30 s | SEF7 | CC0 |
+| `coin.wav` | [GAMEMisc_Designed, Coin, Pick-Up, Tonal, High Pitched, Digital_15](https://freesound.org/s/830033/) (Freesound 830033), 0–0.7 s | JW_Audio | CC0 |
 | `Арена/crowd_loop.wav` | [Rogers Arena - NHL game atmosphere](https://freesound.org/s/706497/) (Freesound 706497), 33.0–43.5 s | SEF7 | CC0 |
 
 Freesound files were taken from the site's HQ mp3 previews (the CC0 license covers the sound, not the file format).

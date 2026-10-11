@@ -80,6 +80,8 @@ const SFX = {
   // меню
   ui_swipe: { f: 'меню/Свайп.mp3' },
   ui_back: { f: 'меню/Назад.mp3' },
+  // монета на экране итога — запись из прежнего набора (CC0, THIRD_PARTY.md): новой нет, оставлена по просьбе
+  coin: { f: 'coin.wav' },
 };
 
 const sh = (cmd, a) => execFileSync(cmd, a, { stdio: ['ignore', 'pipe', 'pipe'] });
