@@ -157,6 +157,31 @@ export function d1Store(db) {
                           OR users.is_premium IS NOT excluded.is_premium OR (excluded.platform IS NOT NULL AND users.platform IS NOT excluded.platform)`)
         .bind(u.id, u.name, u.username, u.lang, u.premium, platform, now, now, now).run();
     },
+    // ---- news to the players (coins.js handleBroadcast, migrations/0005_broadcast.sql)
+    async bcastNext(id, only, n) {
+      const r = await db.prepare(`SELECT user_id, language_code FROM users u WHERE bot_gone = 0
+                                  AND NOT EXISTS (SELECT 1 FROM bcast_sent s WHERE s.bcast = ? AND s.user_id = u.user_id)
+                                  ${only ? `AND user_id IN (${only.map(() => '?').join(',')})` : ''} ORDER BY user_id LIMIT ?`)
+        .bind(id, ...(only || []), n).all();
+      return r.results.map((x) => ({ uid: x.user_id, lang: x.language_code }));
+    },
+    async bcastMark(id, uid, status, now) {
+      const q = [db.prepare('INSERT OR IGNORE INTO bcast_sent (bcast, user_id, status, at) VALUES (?, ?, ?, ?)').bind(id, uid, status, now)];
+      if (status === 'gone') q.push(db.prepare('UPDATE users SET bot_gone = 1 WHERE user_id = ?').bind(uid));
+      await db.batch(q);
+    },
+    async bcastCount(id, only) {
+      const inOnly = only ? `AND user_id IN (${only.map(() => '?').join(',')})` : '';
+      const r = await db.batch([
+        db.prepare(`SELECT COUNT(*) AS total, SUM(status = 'sent') AS sent, SUM(status = 'gone') AS gone, SUM(status = 'fail') AS fail
+                    FROM bcast_sent WHERE bcast = ? ${inOnly}`).bind(id, ...(only || [])),
+        db.prepare(`SELECT COUNT(*) AS n FROM users u WHERE bot_gone = 0
+                    AND NOT EXISTS (SELECT 1 FROM bcast_sent s WHERE s.bcast = ? AND s.user_id = u.user_id) ${inOnly}`).bind(id, ...(only || [])),
+      ]);
+      const a = r[0].results[0] || {};
+      return { total: a.total | 0, sent: a.sent | 0, gone: a.gone | 0, fail: a.fail | 0, left: r[1].results[0].n | 0 };
+    },
+    async botBack(uid) { await db.prepare('UPDATE users SET bot_gone = 0 WHERE user_id = ? AND bot_gone = 1').bind(uid).run(); },
     // ---- the developer's page (coins.js «admin»): read only; one D1 batch per page
     async adminOverview(t) {
       const seen = 'COALESCE(last_seen, updated_at)';

@@ -58,6 +58,10 @@
  *                                              already (nothing changes), 'repeat' — this idem is in already
  *   adRewardsSince(uid, t) → { n, last }        paid rewarded videos (ledger 'ad_reward') since t, the latest one ever
  *   touch(user, platform, now)                 who the player is on every signed request (creates the row if new)
+ *   news (handleBroadcast, migrations/0005_broadcast.sql):
+ *   bcastNext(id, only, n) → [{ uid, lang }]  players who have not got news id yet and are not 'gone' (only: these ids)
+ *   bcastMark(id, uid, status, now)            'sent' | 'gone' | 'fail' for this news; 'gone' also skips later news
+ *   bcastCount(id, only) → { total, sent, gone, fail, left }   botBack(uid): a 'gone' player wrote to the bot — news again
  *   grant({ uid, name, delta, reason, ref, now }) → 'ok' | 'repeat'   test coins (test store only): the ledger row and
  *                                              the balance in one transaction; the same (uid, reason, ref) again — 'repeat'
  *   the developer's page (read only): adminOverview(t) → raw counts (coins.js overviewShape), adminPlayers({ q, id, sort,
@@ -562,6 +566,7 @@ export function playButtons(param, lang) {
 // a message to the bot in a private chat: /start, /paysupport, /terms, anything else — a hint (nobody reads the chat)
 async function botMessage(d, msg) {
   if (!msg.chat || msg.chat.type !== 'private') return 'skip';
+  if (msg.from && d.store && d.store.botBack) await d.store.botBack(msg.from.id);   // gone from news → back (handleBroadcast)
   const lang = L3(msg.from && msg.from.language_code), text = msg.text || '';
   const m = /^\/(start|paysupport|terms)(?:@\w+)?(?:\s+(\S+))?\s*$/.exec(text);
   if (m && m[1] === 'start') {
@@ -664,6 +669,64 @@ async function botSetup(url, d) {
   // the menu button is the owner's («ИГРАТЬ» → the BVR games hub): never changed from here, only shown
   return json(200, { rev: SETUP_REV, installed: target, before: pub, info: await d.bot('getWebhookInfo', {}), commands: await d.bot('getMyCommands', {}),
                      menuButton: await d.bot('getChatMenuButton', {}) });
+}
+
+// ---------- news to the players: a push to everyone who played (docs/EVENTS.md «Рассылка»)
+// POST /tg/broadcast, header X-Broadcast-Secret = the secret BROADCAST_SECRET; the owner runs tools/broadcast.mjs, it
+// calls this again and again until nobody is left. Body: { id: 'upd-1310' (one per piece of news: who got it is kept
+// per id, so a repeat or a crash in the middle never sends anyone the same news twice), texts: { ru, en, id } (HTML),
+// button: { ru, en, id } (the web_app button under the text, opens hockey), only: [uid] (a test to these players
+// only), max: players per call (≤ 100), dry: true (only count) }. The language is the player's Telegram one (L3).
+// Telegram allows ~30 messages a second: one every BCAST.gap ms. «Too Many Requests: retry after N» — the call stops,
+// that player stays for the next one ({ retry: N }). Answer: { batch: this call's { sent, gone, fail }, total, sent,
+// gone, fail, left — the news so far }. Who cannot get messages (blocked the bot, never opened its chat,
+// deleted the account) — 'gone', skipped by later news until they write to the bot again (botMessage).
+export const BCAST = { gap: 45, max: 100, idRe: /^[a-z0-9_-]{1,32}$/ };
+export function bcastWhy(e) {
+  const m = String((e && e.message) || e);
+  const r = /retry after (\d+)/i.exec(m);
+  if (r) return { retry: +r[1] || 1 };
+  if (/Forbidden|chat not found|user not found|PEER_ID_INVALID|deactivated/i.test(m)) return { status: 'gone' };
+  return { status: 'fail', error: m.slice(0, 200) };
+}
+export async function handleBroadcast(request, d) {
+  const url = new URL(request.url);
+  if (url.pathname !== '/tg/broadcast') return null;
+  const got = request.headers.get('X-Broadcast-Secret') || '';
+  if (request.method !== 'POST' || !d.secret || !sameBytes(enc.encode(got), enc.encode(d.secret))) return json(403, { reason: 'secret' });
+  if (!d.store || !d.bot) return json(503, { reason: 'not configured' });
+  let b = null; try { b = await request.json(); } catch (e) {}
+  const t = b && b.texts;
+  if (!b || !BCAST.idRe.test(b.id || '') || !t || !['ru', 'en', 'id'].every((l) => typeof t[l] === 'string' && t[l].length && t[l].length <= 4096)) return json(422, { reason: 'body' });
+  const only = Array.isArray(b.only) ? b.only.filter((x) => Number.isSafeInteger(x) && x > 0).slice(0, 100) : null;
+  if (only && !only.length) return json(422, { reason: 'only' });
+  if (b.dry) return json(200, { id: b.id, ...(await d.store.bcastCount(b.id, only)) });
+  const max = Math.min(BCAST.max, Math.max(1, b.max | 0 || 25)), sleep = d.sleep || ((ms) => new Promise((r) => setTimeout(r, ms)));
+  const now = d.now || Math.floor(Date.now() / 1000), out = { sent: 0, gone: 0, fail: 0 };
+  let retry = 0;
+  const next = await d.store.bcastNext(b.id, only, max);
+  for (const p of next) {
+    const l = L3(p.lang), t0 = Date.now();
+    const btn = (b.button && typeof b.button[l] === 'string' && b.button[l].slice(0, 40)) || BOT_TEXTS.hockey[l];
+    let st = 'sent', why = null;
+    try {
+      await d.bot('sendMessage', { chat_id: p.uid, text: t[l], parse_mode: 'HTML', link_preview_options: { is_disabled: true },
+        reply_markup: { inline_keyboard: [[{ text: btn, web_app: { url: GAME.url } }]] } });
+    } catch (e) {
+      why = bcastWhy(e);
+      if (why.retry) { retry = why.retry; break; }
+      st = why.status;
+      if (st === 'fail') console.warn('broadcast fail', JSON.stringify({ id: b.id, uid: p.uid, error: why.error }));
+    }
+    await d.store.bcastMark(b.id, p.uid, st, now);
+    out[st]++;
+    const wait = BCAST.gap - (Date.now() - t0);
+    if (wait > 0) await sleep(wait);
+  }
+  const c = await d.store.bcastCount(b.id, only);
+  console.log('broadcast', JSON.stringify({ id: b.id, ...out, retry, left: c.left }));
+  // batch — this call; total/sent/gone/fail/left — the news so far
+  return json(200, { id: b.id, batch: out, ...(retry ? { retry } : {}), ...c });
 }
 
 // ---------- the developer's page: read only, ADMIN_IDS only (docs/EVENTS.md «Страница разработчика»)

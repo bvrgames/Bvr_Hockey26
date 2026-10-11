@@ -10,6 +10,7 @@
  *   GET  /v1/stars/packs, POST /v1/stars/invoice { pack } → { order, link }, GET /v1/stars/order?id= → { status, balance }
  *   POST /tg/webhook  the bot's updates (secret TG_WEBHOOK_SECRET in X-Telegram-Bot-Api-Secret-Token): star payments,
  *                     refunds, /paysupport, /terms;  POST /tg/setup — the one-time setWebhook by the owner (coins.js)
+ *   POST /tg/broadcast news to every player from the bot (secret BROADCAST_SECRET in X-Broadcast-Secret; tools/broadcast.mjs)
  *
  * This file is only the Cloudflare glue; the rules (initData check, plausibility, reward, caps, limits) are in
  * server/coins.js, which knows nothing about Cloudflare, and the SQL is in server/coins-d1.js. Moving the API
@@ -25,7 +26,7 @@
  * to match it (otherwise 422 'mismatch'); such matches pay from their own daily cap (ledger reason 'match_duo'). Matches
  * the server did not count (host mode, an unknown room) are paid like a match against the AI, from the AI cap.
  */
-import { handleCoins, handleBot, handleBotSetup, botApiFrom, confFrom } from './coins.js';
+import { handleCoins, handleBot, handleBotSetup, handleBroadcast, botApiFrom, confFrom } from './coins.js';
 import { d1Store } from './coins-d1.js';
 // the developer's page — served as text to ADMIN_IDS only (wrangler.toml [[rules]] type Text); never in the game's files
 import ADMIN_UI from './admin-ui.js';
@@ -48,7 +49,8 @@ const botFrom = (env) => (env.BOT_TOKEN ? botApiFrom(env.BOT_TOKEN, env.TG_API |
 export async function handleApi(request, env) {
   const store = env.DB ? d1Store(env.DB) : null, bot = botFrom(env);
   const tg = { secret: env.TG_WEBHOOK_SECRET, store, bot };
-  return (await handleBot(request, tg)) || (await handleBotSetup(request, tg)) || handleCoins(request, {
+  return (await handleBot(request, tg)) || (await handleBotSetup(request, tg)) ||
+    (await handleBroadcast(request, { secret: env.BROADCAST_SECRET, store, bot })) || handleCoins(request, {
     botToken: env.BOT_TOKEN,
     // the test bot (secret BOT_TOKEN_TEST, D1 binding DB_TEST — a database of its own): coins and stakes for testing
     botTokenTest: env.BOT_TOKEN_TEST,

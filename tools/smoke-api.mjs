@@ -426,6 +426,26 @@ function summary(o = {}) {
   ok((await ago('/v1/admin/me', initData({ id: 9101, first_name: 'X', username: 'B1' }))) === 200, 'admin core: the admin id → 200');
   ok((await handleCoins(req('GET', '/v1/admin/me', initData(B1)), { ...adeps, adminIds: '' })).status === 403, 'admin core: no ADMIN_IDS → 403 to all');
   ok((await ago('/v1/admin/ui.js', initData(B1))) === 200 && (await ago('/v1/admin/ui.js', initData(B2))) === 403, 'admin core: the page text only to the admin');
+  // news to the players (handleBroadcast): rate errors stop the call, unreachable players are skipped
+  {
+    const { handleBroadcast, bcastWhy } = await import('../server/coins.js');
+    ok(bcastWhy(new Error('bot sendMessage: Too Many Requests: retry after 7')).retry === 7 && bcastWhy(new Error('bot sendMessage: Forbidden: bot was blocked by the user')).status === 'gone' &&
+       bcastWhy(new Error('bot sendMessage: Bad Request: chat not found')).status === 'gone' && bcastWhy(new Error('fetch failed')).status === 'fail', 'broadcast core: Bot API errors sorted');
+    const Snt = new Map(), Gone = new Set(), P = [{ uid: 1, lang: 'ru' }, { uid: 2, lang: 'en' }, { uid: 3, lang: null }];
+    const bst = { async bcastNext(id, only, n) { return P.filter((p) => !Gone.has(p.uid) && !Snt.has(id + p.uid) && (!only || only.includes(p.uid))).slice(0, n); },
+      async bcastMark(id, uid, st) { Snt.set(id + uid, st); if (st === 'gone') Gone.add(uid); },
+      async bcastCount(id) { const v = [...Snt].filter(([k]) => k.startsWith(id)).map(([, x]) => x); return { total: v.length, sent: v.filter((x) => x === 'sent').length, gone: 0, fail: 0, left: (await bst.bcastNext(id, null, 99)).length }; } };
+    let limited = true; const got = [];
+    const bot = async (m, p) => { if (p.chat_id === 2 && limited) { limited = false; throw new Error('bot sendMessage: Too Many Requests: retry after 3'); } got.push([p.chat_id, p.text]); return true; };
+    const B = (body) => handleBroadcast(new Request('http://w/tg/broadcast', { method: 'POST', headers: { 'X-Broadcast-Secret': 'S' }, body: JSON.stringify(body) }), { secret: 'S', store: bst, bot, sleep: async () => {} });
+    const T = { id: 'n1', texts: { ru: 'привет', en: 'hi', id: 'halo' } };
+    let j = await (await B(T)).json();
+    ok(j.retry === 3 && j.batch.sent === 1 && j.left === 2, `broadcast core: «retry after» stops the call, the player stays ${JSON.stringify(j)}`);
+    j = await (await B(T)).json();
+    ok(j.left === 0 && JSON.stringify(got) === '[[1,"привет"],[2,"hi"],[3,"hi"]]', `broadcast core: the next call goes on, no language → en ${JSON.stringify(got)}`);
+    ok((await B({ ...T, id: 'n2', only: [] })).status === 422 && (await handleBroadcast(new Request('http://w/tg/broadcast', { method: 'POST', body: '{}' }), { secret: '', store: bst, bot })).status === 403,
+      'broadcast core: empty only → 422, no secret on the Worker → 403');
+  }
   // why a signature is refused (the owner's log line «auth refused»): another bot token (e.g. revoked in @BotFather), stale
   const { checkInitData } = await import('../server/coins.js');
   const nowS = Math.floor(Date.now() / 1000);
@@ -442,18 +462,20 @@ const persist = mkdtempSync(join(tmpdir(), 'bvr-api-'));
 let w = null;
 // a fake Bot API (TG_API points the Worker here): records every call, invoices get a link with the order id in it
 const BOT_PORT = port + 3, HOOK_SECRET = 'smoke-webhook-secret', botCalls = [];
+const BCAST_SECRET = 'smoke-broadcast-secret', BCAST_BLOCKED = 777000555;
 const botSrv = createServer((rq, rs) => { let b = ''; rq.on('data', (c) => { b += c; }); rq.on('end', () => {
   const method = rq.url.split('/').pop(); let params = {}; try { params = JSON.parse(b || '{}'); } catch (e) {}
   botCalls.push({ method, params, token: rq.url.split('/')[1] });
   const result = method === 'createInvoiceLink' ? 'https://t.me/$smoke_' + params.payload : method === 'getMyCommands' ? [] : method === 'getUpdates' ? [] :
     method === 'getWebhookInfo' ? { url: '', pending_update_count: 0 } : method === 'getChatMenuButton' ? { type: 'commands' } : true;
+  if (method === 'sendMessage' && params.chat_id === BCAST_BLOCKED) { rs.writeHead(403, { 'content-type': 'application/json' }); rs.end(JSON.stringify({ ok: false, error_code: 403, description: 'Forbidden: bot was blocked by the user' })); return; }
   rs.writeHead(200, { 'content-type': 'application/json' }); rs.end(JSON.stringify({ ok: true, result }));
 }); });
 await new Promise((res) => botSrv.listen(BOT_PORT, '127.0.0.1', res));
 const ADMIN = { id: 777000999, first_name: 'Dev', username: 'dev_admin', language_code: 'ru' };
 const TOKEN_TEST = 'TEST_BOT_TOKEN_second_bot';
 const AD_SECRET = 'smoke-adsgram-secret-0123';
-const VARS = ['--var', `BOT_TOKEN:${TOKEN}`, '--var', `ADSGRAM_REWARD_SECRET:${AD_SECRET}`, '--var', `BOT_TOKEN_TEST:${TOKEN_TEST}`, '--var', `TG_API:http://127.0.0.1:${BOT_PORT}`, '--var', `TG_WEBHOOK_SECRET:${HOOK_SECRET}`,
+const VARS = ['--var', `BOT_TOKEN:${TOKEN}`, '--var', `ADSGRAM_REWARD_SECRET:${AD_SECRET}`, '--var', `BOT_TOKEN_TEST:${TOKEN_TEST}`, '--var', `TG_API:http://127.0.0.1:${BOT_PORT}`, '--var', `TG_WEBHOOK_SECRET:${HOOK_SECRET}`, '--var', `BROADCAST_SECRET:${BCAST_SECRET}`,
   '--var', `ADMIN_IDS:123, ${ADMIN.id}`, '--var', 'ADMIN_CACHE:0'];
 try {
   for (const db of ['DB', 'DB_TEST']) {
@@ -675,6 +697,42 @@ try {
     ok(!botCalls.some((c) => c.method === 'setChatMenuButton') && botCalls.some((c) => c.method === 'getChatMenuButton'), 'setup: the menu button (the games hub) is never changed');
     ok(r.status === 200 && sw && sw.params.url === API + '/tg/webhook' && sw.params.secret_token === HOOK_SECRET && sw.params.allowed_updates.includes('pre_checkout_query') &&
        sc && sc.params.commands.map((c) => c.command).join() === 'start,paysupport,terms', `setup: setWebhook + setMyCommands ${JSON.stringify([r.status, sw && sw.params, sc && sc.params])}`);
+  }
+
+  // ---------- news to the players on the real Worker + D1 (handleBroadcast): the language, once per news, the blocked skipped
+  {
+    const NB = { id: BCAST_BLOCKED, first_name: 'Blocked', language_code: 'id' }, NR = { id: A.id + 30, first_name: 'Ru', language_code: 'ru' }, NE = { id: A.id + 31, first_name: 'En', language_code: 'de' };
+    for (const u of [NB, NR, NE]) await call('GET', '/v1/profile', initData(u));
+    const news = { id: 'smoke-1', texts: { ru: '<b>Обновление</b>', en: '<b>Update</b>', id: '<b>Pembaruan</b>' }, button: { ru: 'Играть', en: 'Play', id: 'Main' } };
+    const bc = async (extra, secret = BCAST_SECRET) => { const r = await fetch(API + '/tg/broadcast', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Broadcast-Secret': secret }, body: JSON.stringify({ ...news, ...extra }) });
+      return { status: r.status, j: await r.json() }; };
+    ok((await bc({}, 'wrong')).status === 403 && (await bc({ id: 'Bad id!' })).status === 422 && (await bc({ texts: { ru: 'x' } })).status === 422, 'broadcast: wrong secret → 403, bad id / texts → 422');
+    r = await bc({ dry: true });
+    const all = r.j.left;
+    ok(r.status === 200 && all >= 3 && r.j.total === 0, `broadcast: dry counts everyone, sends nothing ${JSON.stringify(r.j)}`);
+    botCalls.length = 0;
+    r = await bc({ only: [NB.id, NR.id, NE.id] });
+    const sm = botCalls.filter((c) => c.method === 'sendMessage'), to = (u) => sm.find((c) => c.params.chat_id === u.id);
+    ok(r.status === 200 && r.j.batch.sent === 2 && r.j.batch.gone === 1 && r.j.left === 0 && sm.length === 3, `broadcast: only three players → 2 sent, the blocked one gone ${JSON.stringify(r.j)}`);
+    ok(to(NR) && to(NR).params.text === '<b>Обновление</b>' && to(NR).params.parse_mode === 'HTML' && to(NR).params.reply_markup.inline_keyboard[0][0].text === 'Играть' &&
+       to(NR).params.reply_markup.inline_keyboard[0][0].web_app.url === 'https://bvr-hockey26.vercel.app/' && to(NE).params.text === '<b>Update</b>' && to(NB).params.text === '<b>Pembaruan</b>',
+       `broadcast: each in their language with the play button ${JSON.stringify(sm.map((c) => [c.params.chat_id, c.params.text]))}`);
+    botCalls.length = 0;
+    r = await bc({ only: [NB.id, NR.id, NE.id] });
+    ok(r.j.batch.sent === 0 && !botCalls.some((c) => c.method === 'sendMessage'), 'broadcast: the same news again → nobody gets it twice');
+    // everyone else, in calls of 2, until nobody is left; the blocked one is skipped by the next news
+    botCalls.length = 0; let calls = 0;
+    do { r = await bc({ max: 2 }); calls++; } while (r.j.left && calls < 100);
+    const ids = botCalls.filter((c) => c.method === 'sendMessage').map((c) => c.params.chat_id);
+    ok(r.j.left === 0 && ids.length === all - 3 && new Set(ids).size === ids.length && !ids.includes(NR.id) && r.j.total === all, `broadcast: the rest in calls of 2, each once (${ids.length}/${all - 3}, ${calls} calls) ${JSON.stringify(r.j)}`);
+    botCalls.length = 0;
+    r = await bc({ id: 'smoke-2', only: [NB.id, NR.id] });
+    ok(r.j.batch.sent === 1 && !botCalls.some((c) => c.params && c.params.chat_id === NB.id), `broadcast: the next news skips who blocked the bot ${JSON.stringify(r.j)}`);
+    // the blocked player writes to the bot → gets news again
+    await fetch(API + '/tg/webhook', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Telegram-Bot-Api-Secret-Token': HOOK_SECRET },
+      body: JSON.stringify({ update_id: 90, message: { message_id: 1, from: NB, chat: { id: NB.id, type: 'private' }, date: Math.floor(Date.now() / 1000), text: '/start' } }) });
+    r = await bc({ id: 'smoke-3', only: [NB.id], dry: true });
+    ok(r.j.left === 1, `broadcast: who wrote to the bot again gets news again ${JSON.stringify(r.j)}`);
   }
 
 

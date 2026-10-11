@@ -12,3 +12,4 @@ server/.wrangler/
 
 # служебные файлы macOS
 .DS_Store
+server/.broadcast-secret

@@ -342,6 +342,28 @@ EV.emit('shot', { p: 3, t: 0, ... });                 // возвращает pa
 склейка — `api.js` / `worker.js`. Ручной возврат: `refundStarPayment(user_id, telegram_payment_charge_id)` из Bot API
 (charge id — на странице разработчика / в `star_orders`), списание сделает `refunded_payment`.
 
+### Рассылка (сделано 12.10.2026)
+
+Новости всем, кто играл: бот @bvr_games_bot пишет каждому игроку из `users` на его языке Telegram (ru / id, остальным —
+en), под текстом кнопка `web_app` «Играть» → хоккей. Запуск — с машины владельца, без кнопок в игре и в боте:
+
+```
+node tools/broadcast.mjs news/<id>.json --dry            # сколько получат
+node tools/broadcast.mjs news/<id>.json --only 454163382 # проба себе
+node tools/broadcast.mjs news/<id>.json                  # всем
+```
+
+Файл новости — `news/<id>.json`: `{ id, texts: { ru, en, id }, button: { ru, en, id } }`, текст в HTML Telegram
+(`<b>`, `<i>`, до 4096 знаков). Скрипт зовёт `POST /tg/broadcast` (заголовок `X-Broadcast-Secret` = секрет Worker'а
+`BROADCAST_SECRET`; у владельца — в `server/.broadcast-secret`, не в git), пока никого не осталось: за вызов до 100
+сообщений, одно в 45 мс (лимит Telegram ~30/с), «Too Many Requests: retry after N» — пауза и дальше. Кому ушло —
+`bcast_sent` (новость, игрок), поэтому повтор, обрыв или проба себе никому не шлют дважды; новая новость — новый `id`.
+Кто не может получать (заблокировал бота, ни разу не открывал чат с ним, удалил аккаунт) — `users.bot_gone = 1`,
+следующие новости его пропускают, пока он сам не напишет боту. Правила — `coins.js` (`handleBroadcast`, `BCAST`),
+SQL — `coins-d1.js` (`bcastNext`, `bcastMark`, `bcastCount`, `botBack`), схема — `migrations/0005_broadcast.sql`,
+тест — `smoke:api`. Итог: `wrangler d1 execute DB --remote --command "SELECT status, COUNT(*) FROM bcast_sent WHERE
+bcast='<id>' GROUP BY status"`.
+
 ### Монеты за звёзды (сделано 02.10.2026)
 
 **Правило:** звёзды можно обменять на монеты, **в одну сторону** — монеты на звёзды не меняются. Монеты — только
