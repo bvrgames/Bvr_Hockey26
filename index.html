@@ -1788,8 +1788,16 @@ var AC=null,master=null,crowdGain=null;
 var VOL={mus:0.7, sfx:1};
 function applySfx(){ if(master) master.gain.value=0.42*VOL.sfx; }
 /* сведение фона (записи арены, фанатов и катания нормализованы к −23 LUFS, звуки к −16 LUFS по самым громким 400 мс —
-   tools/prep-sfx.mjs): арена ~−35, фанаты ~−30, катание на полной скорости ~−29 — заметно тише ударов, свистка, бросков */
-var MIX={arena:0.25, fans:0.45, skate:0.5};
+   tools/prep-sfx.mjs): арена ~−35, фанаты ~−28, катание на полной скорости ~−29 — заметно тише ударов, свистка, бросков */
+var MIX={arena:0.25, fans:0.6, skate:0.5};
+/* фанаты — не весь матч, а заряды: первый через 15–40 с живой игры, длится 10–20 с, следующий через 30–70 с; остальное
+   время — только гул арены (crowd_loop). Время идёт только в матче, не на паузе и не в тренировке */
+var FANS={first:[15,40], len:[10,20], gap:[30,70], fadeIn:0.8, fadeOut:1.2};
+/* музыка на арене: остановка (нарушение, офсайд, проброс, вратарь накрыл шайбу) — до вбрасывания играет наш трек из
+   меню как из динамиков арены: полоса 180 Гц–3.5 кГц, эхо зала (свёртка), с случайного места трека. Не в начале матча
+   и не после гола (там сирена), не в тренировке. Громкость — «Музыка» × «Звуки». Тот же <audio>, что в меню (на iPhone
+   play() без касания можно только у элемента, уже игравшего по касанию) */
+var ARENA_MUS={delay:0.6, level:0.9, fadeIn:0.5, fadeOut:1.2, from:0.1, to:0.7};
 function audioInit(){
   if(AC) return;
   try{
@@ -1965,7 +1973,48 @@ var SFX={
 };
 /* каждый кадр: фанаты (только в матче, не в тренировке и не на паузе), катание по скорости своего игрока, торможение и
    разворот. Скорость — по сдвигу позиции за кадр (так же у гостя в сети, где позиции из снимков) */
-var SKT={p:null, x:0, z:0, vx:0, vz:0, h:[], t:0, brT:-9, tuT:-9, fan:-1, sk:-1, rate:-1};
+var SKT={p:null, x:0, z:0, vx:0, vz:0, h:[], t:0, brT:-9, tuT:-9, fan:-1, sk:-1, rate:-1, fanT:-1, fanOn:false};
+function sfxSpan(r){ return r[0]+(r[1]-r[0])*sfxRnd(); }
+/* музыка арены: цепочка из MediaElementSource музыки меню (MUSIC.src) → полоса → сухой + эхо → ARN.g → master */
+var ARN={g:null, on:false, t:0, want:false, off:0};
+function arenaChain(){
+  if(ARN.g || !AC || !MUSIC.src) return !!ARN.g;
+  try{
+    var hp=AC.createBiquadFilter(), lp=AC.createBiquadFilter(), dry=AC.createGain(), wet=AC.createGain(), cv=AC.createConvolver();
+    hp.type='highpass'; hp.frequency.value=180; lp.type='lowpass'; lp.frequency.value=3500;
+    var sr=AC.sampleRate, n=Math.floor(sr*2.6), ir=AC.createBuffer(2,n,sr);
+    for(var c=0;c<2;c++){ var d=ir.getChannelData(c);
+      for(var i=0;i<n;i++){ var t=i/sr; d[i]=(sfxRnd()*2-1)*Math.exp(-t*2.6)*(t<0.012?t/0.012:1); } }   /* зал ~2.5 с */
+    cv.buffer=ir; dry.gain.value=0.45; wet.gain.value=0.55;
+    ARN.g=AC.createGain(); ARN.g.gain.value=0;
+    MUSIC.src.connect(hp); hp.connect(lp); lp.connect(dry); lp.connect(cv); cv.connect(wet); dry.connect(ARN.g); wet.connect(ARN.g);
+    ARN.g.connect(master);
+  }catch(e){ ARN.g=null; }
+  return !!ARN.g;
+}
+function arenaStart(){
+  var el=MUSIC.el; if(!el || SND.off || !(VOL.mus>0) || TRAIN.on || !arenaChain()) return;
+  if(!ARN.on){
+    if(el.duration>20){ try{ el.currentTime=el.duration*(ARENA_MUS.from+(ARENA_MUS.to-ARENA_MUS.from)*sfxRnd()); }catch(e){} }
+    try{ var p=el.play(); if(p && p.catch) p.catch(function(){}); }catch(e){ return; }
+  }
+  ARN.on=true; ARN.off=0;
+  sfxSet(ARN.g.gain, ARENA_MUS.level*VOL.mus, ARENA_MUS.fadeIn/3);
+}
+function arenaStop(){
+  if(!ARN.on || ARN.off) return;
+  ARN.off=performance.now(); sfxSet(ARN.g.gain, 0, ARENA_MUS.fadeOut/3);
+}
+/* после затухания — пауза, если меню своей музыке её не забрало */
+function arenaTick(){
+  if(ARN.want && state==='face' && !PAUSED){ if(performance.now()>=ARN.t){ ARN.want=false; arenaStart(); } }
+  else if(ARN.want && state!=='face') ARN.want=false;
+  if(ARN.on && !ARN.off && (state!=='face' || PAUSED)) arenaStop();
+  if(ARN.on && ARN.off && performance.now()-ARN.off>ARENA_MUS.fadeOut*1000+200){
+    ARN.on=false; ARN.off=0;
+    if(!MUSIC.want() && MUSIC.el && !MUSIC.el.paused) MUSIC.el.pause();
+  }
+}
 function sfxSet(par, v, tc){ try{ par.setTargetAtTime(v, AC.currentTime, tc); }catch(e){} }
 function sfxTick(dt){
   if(!AC || !SREC.fanG) return;
@@ -1973,8 +2022,16 @@ function sfxTick(dt){
   if(inM && !SREC.inM) sfxMatch();
   SREC.inM=inM;
   var live=inM && !PAUSED;
-  var fan=live && !TRAIN.on ? MIX.fans : 0;
-  if(fan!==SKT.fan){ SKT.fan=fan; sfxSet(SREC.fanG.gain, fan, 0.5); }
+  arenaTick();
+  /* заряды фанатов */
+  if(!inM){ SKT.fanT=-1; SKT.fanOn=false; }
+  else if(live && !TRAIN.on){
+    if(SKT.fanT<0) SKT.fanT=sfxSpan(FANS.first);
+    SKT.fanT-=dt;
+    if(SKT.fanT<=0){ SKT.fanOn=!SKT.fanOn; SKT.fanT=sfxSpan(SKT.fanOn ? FANS.len : FANS.gap); }
+  }
+  var fan=live && !TRAIN.on && SKT.fanOn ? MIX.fans : 0;
+  if(fan!==SKT.fan){ SKT.fan=fan; sfxSet(SREC.fanG.gain, fan, (fan ? FANS.fadeIn : FANS.fadeOut)/3); }
   SKT.t+=dt;
   var p=live ? controlled : null;
   if(p && (p.goalie || p.down>0 || p.boxed)) p=null;
@@ -7754,7 +7811,7 @@ MUSIC.unlock=function(){
   audioInit(); applySfx();
   if(AC && AC.state!=='running'){ try{ AC.resume(); }catch(e){} }
   if(!MUSIC.routed && AC){
-    try{ var s=AC.createMediaElementSource(MUSIC.el), g=AC.createGain(); s.connect(g); g.connect(AC.destination); MUSIC.gain=g; MUSIC.routed=true; MUSIC.el.volume=1; }catch(e){}
+    try{ var s=AC.createMediaElementSource(MUSIC.el), g=AC.createGain(); s.connect(g); g.connect(AC.destination); MUSIC.gain=g; MUSIC.src=s; MUSIC.routed=true; MUSIC.el.volume=1; }catch(e){}
   }
   if(!MUSIC.want()) return;
   /* касание раньше, чем докачались модели: трек выбираем сейчас — play() должен прозвучать внутри касания */
@@ -7771,7 +7828,7 @@ MUSIC.tick=function(dt){
   var tgt=MUSIC.want()?1:0;
   if(MUSIC.cur!==tgt){ MUSIC.cur = tgt>MUSIC.cur ? Math.min(1, MUSIC.cur+dt/0.8) : Math.max(0, MUSIC.cur-dt/0.8); MUSIC.apply(); }
   if(tgt && MUSIC.el.paused && !MUSIC.blocked && !MUSIC.pending) MUSIC.play();
-  if(!tgt && MUSIC.cur<=0 && !MUSIC.el.paused) MUSIC.el.pause();
+  if(!tgt && MUSIC.cur<=0 && !MUSIC.el.paused && !ARN.on) MUSIC.el.pause();     /* в матче он же — музыка арены */
   var np=document.getElementById('mnp'); if(np) np.classList.toggle('paused', MUSIC.el.paused);
 };
 /* плашка «сейчас играет»: одна строка «BvR — трек», смена трека — плавно */
@@ -8285,7 +8342,7 @@ EV.on('shot', function(e){
 });
 EV.on('goal',    function(e){ SFX.whistle(); SFX.horn(); buzz([60,50,120],'goal'); fxGoal(e.t);
                               flash(T('goal'), e.t===HUMAN?T('ourGoal'):T('theirGoal'), 1.4); });
-EV.on('stoppage',function(e){ SFX.whistle(); buzz(25); if(e.reason!=='penalty') flash(T(e.reason),'',1.3); });
+EV.on('stoppage',function(e){ SFX.whistle(); buzz(25); ARN.want=true; ARN.t=performance.now()+ARENA_MUS.delay*1000; if(e.reason!=='penalty') flash(T(e.reason),'',1.3); });
 EV.on('match:start', function(){ SFX.whistle(); fxReset(); });
 EV.on('match:end',   function(e){
   /* у хоста экран результата показывает симуляция, у гостя — пришедшее событие (дисквалификацию — до экрана итога) */
@@ -9114,7 +9171,7 @@ window.__hk={hs:function(){return HS;},net:function(){return NET;},setCam:functi
   /* звуки матча: какие записи готовы, какие нет (и почему), идёт ли запись трибун вместо синтеза */
   sfx:function(){ return {ac:AC ? AC.state : 'none', ready:Object.keys(SREC.buf).filter(function(k){ return !SFX_LAZY.test(k); }).sort(), err:SREC.err,
             want:Object.keys(ASSETS.sfx||{}).filter(function(k){ return !SFX_LAZY.test(k); }).length, crowd:!!SREC.crowd, synthCrowd:!!SREC.synthCrowd,
-            fan:SREC.fan.k, fanWant:SREC.fan.want||null, skate:SREC.sk.k, fanGain:SKT.fan, skateGain:+Math.max(0,SKT.sk).toFixed(3), brakeT:SKT.brT, turnT:SKT.tuT, t:SKT.t}; },
+            fan:SREC.fan.k, fanWant:SREC.fan.want||null, fanOn:SKT.fanOn, fanT:+SKT.fanT.toFixed(1), arena:ARN.on, skate:SREC.sk.k, fanGain:SKT.fan, skateGain:+Math.max(0,SKT.sk).toFixed(3), brakeT:SKT.brT, turnT:SKT.tuT, t:SKT.t}; },
   /* какие фанаты играют в матче команд a и b (номера в CLUBS) */
   sfxFan:function(a, b){ var t=TEAM; TEAM=[CLUBS[a], CLUBS[b]]; var k=sfxFanKey(); TEAM=t; return k; },
   music:function(){ return {session:navigator.audioSession ? navigator.audioSession.type : 'none', silent:!!(SND.silent && !SND.silent.paused), ac:AC ? AC.state : 'none', off:MUSIC.off, blocked:MUSIC.blocked, name:MUSIC.name, playing:!!(MUSIC.el && !MUSIC.el.paused), cur:+MUSIC.cur.toFixed(2),
@@ -9258,6 +9315,7 @@ window.__hk={hs:function(){return HS;},net:function(){return NET;},setCam:functi
     if(kind==='hit')  EV.emit('hit',{p:op, t:1-HUMAN, v:mi, vt:HUMAN, clean:true, x:me.x, z:me.z, hard:1});
     if(kind==='post') EV.emit('post',{t:HUMAN, p:mi, bar:false});
     if(kind==='goal') EV.emit('goal',{t:HUMAN, p:mi, assist:-1, own:0, noShot:0});
+    if(kind==='stop') whistle('offside', 4.5, 7, 1-HUMAN);      /* настоящая остановка: свисток → вбрасывание (музыка арены) */
     return __hk.fxState();
   },
   /* только эффекты, без звука и статистики (smoke:feel проверяет, что они не берут Math.random): shot | hit | post |
