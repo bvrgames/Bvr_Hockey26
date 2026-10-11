@@ -19,11 +19,15 @@ import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const IN = join(ROOT, 'assets', 'src', 'sfx'), OUT = join(ROOT, 'assets', 'src', 'sfx-ready');
+const IN = join(ROOT, 'assets', 'src', 'sfx'), OUT = join(ROOT, 'assets', 'src', 'sfx-ready'), MUS = join(ROOT, 'assets', 'src', 'music');
 const args = process.argv.slice(2), ci = args.indexOf('--cache');
 const CACHE = ci >= 0 ? args[ci + 1] : join(tmpdir(), 'bvr-sfx2');
 const SR = 44100, ONE_LUFS = -16, LOOP_LUFS = -23, CEIL = -1.5, MAX_GR = 6;
 export const LOOP_TAIL = 1;
+// музыка арены на вбрасывании: из каждого трека меню (assets/src/music, по алфавиту — как ASSETS.music) два куска по
+// MUS_LEN с (с 30 % и 62 % длины) → arena_m<трек>_<кусок>.wav, громкость MUS_LUFS по всей длине. Это короткие звуки, а не
+// трек меню: качаются заранее и звучат сразу (трек в мегабайты на телефоне не успевал загрузиться за вбрасывание)
+const MUS_AT = [0.30, 0.62], MUS_LEN = 16, MUS_LUFS = -14;   // tools/pack-assets.mjs: loop = [LOOP_TAIL / 2, duration - LOOP_TAIL / 2]
 
 // name → file (folder/file under assets/src/sfx), cut from…to (s, of the original), max length after the trim (s),
 // start threshold (dB under the peak; a quiet run-up before the hit is cut), loop: crossfade (s) or window (s, the
@@ -199,5 +203,19 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     console.log(`${name.padEnd(16)} ${(r.x.length / SR).toFixed(3)} s  ${r.loud.toFixed(1)} LUFS${s.loop ? '-I' : '-M'}  peak ${db(peak(r.x)).toFixed(1)} dBFS` +
       `${r.gr < -0.05 ? `  limiter ${r.gr.toFixed(1)} dB` : ''}${r.len ? `  loop ${r.len.toFixed(3)} s` : ''}  ← ${s.f}`);
   }
-  for (const f of readdirSync(OUT)) if (!SFX[f.replace(/\.wav$/, '')]) { unlinkSync(join(OUT, f)); console.log('removed ' + f); }
+  const tracks = existsSync(MUS) ? readdirSync(MUS).filter((f) => /\.mp3$/i.test(f)).sort((a, b) => a.normalize('NFC').localeCompare(b.normalize('NFC'))) : [];
+  const made = new Set(Object.keys(SFX));
+  tracks.forEach((f, ti) => {
+    const src = join(MUS, f), w = join(CACHE, createHash('sha1').update(readFileSync(src)).digest('hex').slice(0, 16) + '.wav');
+    if (!existsSync(w)) sh('afconvert', ['-f', 'WAVE', '-d', `LEI16@${SR}`, '-c', '1', src, w]);
+    const x = readWav(w);
+    MUS_AT.forEach((at, ci) => {
+      const a = Math.round(x.length * at), y = fade(x.slice(a, Math.min(x.length, a + MUS_LEN * SR)), 0.03, 1.0);
+      const r = level(y, MUS_LUFS - integrated(y)), name = `arena_m${ti}_${ci}`;
+      writeWav(join(OUT, name + '.wav'), r.y); made.add(name);
+      console.log(`${name.padEnd(16)} ${(r.y.length / SR).toFixed(3)} s  ${integrated(r.y).toFixed(1)} LUFS-I  peak ${db(peak(r.y)).toFixed(1)} dBFS` +
+        `${r.gr < -0.05 ? `  limiter ${r.gr.toFixed(1)} dB` : ''}  ← music/${f.normalize('NFC')} ${(at * 100) | 0} %`);
+    });
+  });
+  for (const f of readdirSync(OUT)) if (!made.has(f.replace(/\.wav$/, ''))) { unlinkSync(join(OUT, f)); console.log('removed ' + f); }
 }
