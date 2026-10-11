@@ -810,7 +810,7 @@
   </div>
 </div>
 
-<script src="shared/sim.js?v=a599800247"></script>
+<script src="shared/sim.js?v=f15a2e8077"></script>
 <script>
 (function(){
 'use strict';
@@ -1471,6 +1471,7 @@ ru:{
   cover:'ВРАТАРЬ НАКРЫЛ ШАЙБУ', foHint:'Стик — кому отбросить · A жми, когда шайба упадёт', foWon:'ВБРАСЫВАНИЕ ВЫИГРАНО', foLost:'ВБРАСЫВАНИЕ ПРОИГРАНО',
   offside:'ОФСАЙД', icing:'ПРОБРОС', delayed:'ОТЛОЖЕННЫЙ ОФСАЙД',
   delayedYou:'ОТЛОЖЕННЫЙ ОФСАЙД · ВЫЙДИ ИЗ ЗОНЫ', icingWarn:'ВОЗМОЖЕН ПРОБРОС',
+  offPre:'ПРЕДУПРЕЖДЕНИЕ ОБ ОФСАЙДЕ', offPreYou:'ПРЕДУПРЕЖДЕНИЕ ОБ ОФСАЙДЕ · ПАС НАЗАД ИЛИ ЖДИ',
   powerplay:'БОЛЬШИНСТВО', shorthand:'МЕНЬШИНСТВО',
   pause:'ПАУЗА', resume:'ПРОДОЛЖИТЬ', mainMenu:'ГЛАВНОЕ МЕНЮ',
   over:'МАТЧ ОКОНЧЕН', again:'ИГРАТЬ СНОВА', rematch:'РЕВАНШ', hlReplay:'Повтор', hl_goal:'гол', hl_post:'штанга', hl_save:'сейв', fFinal:'Финал', fWin:'Победа', fLoss:'Поражение', fDraw:'Ничья', fDq:'Дисквалификация',
@@ -1570,6 +1571,7 @@ en:{
   cover:'GOALIE COVERS THE PUCK', foHint:'Stick — where to send it · mash A once the puck drops', foWon:'FACEOFF WON', foLost:'FACEOFF LOST',
   offside:'OFFSIDE', icing:'ICING', delayed:'DELAYED OFFSIDE',
   delayedYou:'DELAYED OFFSIDE · CLEAR THE ZONE', icingWarn:'POSSIBLE ICING',
+  offPre:'OFFSIDE WARNING', offPreYou:'OFFSIDE WARNING · PASS BACK OR WAIT',
   powerplay:'POWER PLAY', shorthand:'SHORT-HANDED',
   pause:'PAUSED', resume:'RESUME', mainMenu:'MAIN MENU',
   over:'FULL TIME', again:'PLAY AGAIN', rematch:'REMATCH', hlReplay:'Replay', hl_goal:'goal', hl_post:'post', hl_save:'save', fFinal:'Final', fWin:'Win', fLoss:'Loss', fDraw:'Draw', fDq:'Disqualified',
@@ -1671,6 +1673,7 @@ id:{
   penaltySub:'menabrak pemain tanpa keping',
   offside:'OFFSIDE', icing:'ICING', delayed:'OFFSIDE TERTUNDA',
   delayedYou:'OFFSIDE TERTUNDA · KELUAR DARI ZONA', icingWarn:'KEMUNGKINAN ICING',
+  offPre:'PERINGATAN OFFSIDE', offPreYou:'PERINGATAN OFFSIDE · OPER KE BELAKANG ATAU TUNGGU',
   powerplay:'UNGGUL PEMAIN', shorthand:'KURANG PEMAIN',
   pause:'JEDA', resume:'LANJUTKAN', mainMenu:'MENU UTAMA',
   over:'PERTANDINGAN SELESAI', again:'MAIN LAGI', rematch:'TANDING ULANG', hlReplay:'Tayangan ulang', hl_goal:'gol', hl_post:'tiang', hl_save:'penyelamatan', fFinal:'Final', fWin:'Menang', fLoss:'Kalah', fDraw:'Seri', fDq:'Diskualifikasi',
@@ -5220,8 +5223,8 @@ function drawCasters(){
   var i,p;
   drawAt(GEO.goal, GOAL_X,0,0,Math.PI,{mat:'goal'});
   drawAt(GEO.goal,-GOAL_X,0,0,0,{mat:'goal'});
-  drawAt(GEO.lm[offWarn===0?1:0],  BLUE_X,0, RW-1.35,-Math.PI/2,{mat:'player',boost:0.10});
-  drawAt(GEO.lm[offWarn===1?1:0], -BLUE_X,0,-(RW-1.35),Math.PI/2,{mat:'player',boost:0.10});
+  drawAt(GEO.lm[offWarn===0||offWarn===2?1:0],  BLUE_X,0, RW-1.35,-Math.PI/2,{mat:'player',boost:0.10});
+  drawAt(GEO.lm[offWarn===1||offWarn===3?1:0], -BLUE_X,0,-(RW-1.35),Math.PI/2,{mat:'player',boost:0.10});
 
   if(FOV.on && HD.ok && FOV.ref && FOV.ref._row>=0 && !RSKIP.players) skinDraw(FOV.ref, FOV.ref._row, null, {kit:FOV.kitRef});
   for(i=0;i<players.length;i++){
@@ -6874,12 +6877,14 @@ function frameStepInner(dt){
     hudStyle(he.h2, 'opacity', '1');
   } else hudStyle(he.h2, 'opacity', '0');
 
-  /* предупреждение об офсайде */
+  /* предупреждение об офсайде: 0/1 — отложенный, 2/3 — «предупреждение» (свои в зоне, шайбу не ввозить, пас назад
+     можно; sim offWarn) */
   var chip=he.chip;
   if(offWarn>=0 && state==='play'){
-    hudText(chip, offWarn===HUMAN?T('delayedYou'):T('delayed'));
-    hudStyle(chip, 'background', offWarn===HUMAN ? 'rgba(214,52,52,0.94)' : 'rgba(210,140,30,0.92)');
-    hudStyle(chip, 'color', offWarn===HUMAN ? '#fff' : '#1d1305');
+    var oT=offWarn&1, oPre=offWarn>=2;
+    hudText(chip, oPre ? (oT===HUMAN?T('offPreYou'):T('offPre')) : (oT===HUMAN?T('delayedYou'):T('delayed')));
+    hudStyle(chip, 'background', oT===HUMAN ? 'rgba(214,52,52,0.94)' : 'rgba(210,140,30,0.92)');
+    hudStyle(chip, 'color', oT===HUMAN ? '#fff' : '#1d1305');
     hudStyle(chip, 'opacity', '1');
   }
   else if(icing.armed && state==='play'){ hudText(chip, T('icingWarn'));

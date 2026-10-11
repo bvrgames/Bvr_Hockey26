@@ -69,7 +69,9 @@ function create(env){
     aimX:1, aimZ:0, thruM:null, thruT:0, otT:0, otRecv:0}; }
   var HS=[mkHS(),mkHS()];
   var checkT=0, pokeT=0;
-  var pen=[], offWarn=-1, lastTouch=null, prevZone=[0,0];
+  /* offWarn: -1 — нет; 0/1 — отложенный офсайд команды; 2/3 — предупреждение команде 0/1 (OFF_PRE: шайба у неё вне
+     зоны атаки, а партнёры остались в зоне — ввезёт шайбу, пока не выехали, — офсайд). Одно число — так же в снимке сети */
+  var pen=[], offWarn=-1, lastTouch=null, prevZone=[0,0], OFF_PRE=2;
   /* тактика ботов: 0 стандарт, 1 атака, 2 оборона (на команду) */
   var TACTIC=[0,0];
   /* вратарь-«выход на игрока»: удержание Y */
@@ -772,6 +774,7 @@ function create(env){
   function aiCarrier(p, dt, foes){
     var LV=aiLevel(p.team), gx=p.dir*GOAL_X;
     if(offWarn===p.team){ p._t=0.05; return; }     /* сначала снять офсайд */
+    if(offWarn===OFF_PRE+p.team && p.x*p.dir>BLUE_X-4){ p._t=0.05; return; }   /* партнёры в зоне — не ввозить, ждать */
     var pd=nearestFoe(p), pressed=pd<2.3;
     var q=shotQuality(p.team, p.x, p.z, LV);
     if(LV.noise){
@@ -1321,7 +1324,20 @@ function create(env){
         for(q2=0;q2<arr2.length;q2++)
           if(arr2[q2].os && zoneOf(arr2[q2].x,dir2)!==1) arr2[q2].os=0;
 
-        /* 1. ВОЗНИКНОВЕНИЕ: шайба входит в чужую зону, а свои уже там */
+        /* 0. ВВЁЗ ШАЙБУ, а свои уже в зоне (не отметились за синей) — офсайд сразу, как в NHL: шайба вышла из зоны —
+           все должны выехать, только потом заходить снова; пас назад можно, ввезти или пас вперёд в зону — нет */
+        if(pz===1 && prevZone[t2]!==1 && carrier && carrier.team===t2){
+          var early=0;
+          for(q2=0;q2<arr2.length;q2++) if(arr2[q2]!==carrier && zoneOf(arr2[q2].x,dir2)===1) early=1;
+          if(early){
+            offWarn=-1;
+            for(q2=0;q2<arr2.length;q2++) arr2[q2].os=0;
+            whistle('offside', dir2*4.5, puck.z>0?7:-7, t2);
+            break;
+          }
+        }
+
+        /* 1. ВОЗНИКНОВЕНИЕ (пас или наброс в зону): шайба входит в чужую зону, а свои уже там — отложенный офсайд */
         if(pz===1 && prevZone[t2]!==1 && mine){
           var armed=0;
           for(q2=0;q2<arr2.length;q2++){
@@ -1335,7 +1351,12 @@ function create(env){
         if(pz!==1){
           for(q2=0;q2<arr2.length;q2++) arr2[q2].os=0;
           if(offWarn===t2) offWarn=-1;
-        }
+          /* ПРЕДУПРЕЖДЕНИЕ: шайба у команды в средней зоне, а кто-то из своих в зоне атаки */
+          var inZ=0;
+          if(mine && puck.x*dir2>-BLUE_X) for(q2=0;q2<arr2.length;q2++) if(arr2[q2]!==carrier && zoneOf(arr2[q2].x,dir2)===1) inZ=1;
+          if(inZ && (offWarn<0 || offWarn>=OFF_PRE)) offWarn=OFF_PRE+t2;
+          else if(!inZ && offWarn===OFF_PRE+t2) offWarn=-1;
+        } else if(offWarn===OFF_PRE+t2) offWarn=-1;
 
         if(offWarn===t2){
           var still=0, viol=null;
@@ -1737,11 +1758,12 @@ function create(env){
           tx = gx - p.dir*2.0; tz = (p.role===0?-1.6:(p.role===2?1.6:0));
         }
         p._tx=tx; p._tz=tz;
-        /* отложенный офсайд: нарушитель немедленно выкатывается за синюю линию */
-        if(p.os){
+        /* отложенный офсайд или предупреждение: нарушитель / партнёр в зоне немедленно выкатывается за синюю линию */
+        var tagUp = offWarn===OFF_PRE+p.team && carrier!==p && zoneOf(p.x,attackDir(p.team))===1;
+        if(p.os || tagUp){
           tx = p.dir*(BLUE_X-1.8);
           tz = clamp(p.z, -RW+2.5, RW-2.5);
-        } else if(offWarn===p.team && carrier===p){
+        } else if((offWarn===p.team || (offWarn===OFF_PRE+p.team && p.x*p.dir>BLUE_X-4)) && carrier===p){
           /* владелец шайбы отводит её назад, чтобы снять офсайд */
           tx = p.dir*(BLUE_X-2.2);
           tz = clamp(p.z, -RW+2.5, RW-2.5);
@@ -1756,7 +1778,7 @@ function create(env){
         /* открывание: до своей точки далеко — догоняет атаку ускорением, а не трусцой */
         if(supp && Math.hypot(tx-p.x, tz-p.z)>4){ maxs=PLAYER_CFG.sprintMaxSpeed; accel=PLAYER_CFG.sprintAccel; }
         if(TACTIC[p.team]===1) maxs+=PLAYER_CFG.aiTacticAttackBonus;
-        if(p.os) maxs=PLAYER_CFG.aiOffsidesMaxSpeed;
+        if(p.os || tagUp) maxs=PLAYER_CFG.aiOffsidesMaxSpeed;
 
         p._cd=(p._cd||0)-dt;
         if(carrier===p){
