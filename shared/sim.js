@@ -69,9 +69,10 @@ function create(env){
     aimX:1, aimZ:0, thruM:null, thruT:0, otT:0, otRecv:0}; }
   var HS=[mkHS(),mkHS()];
   var checkT=0, pokeT=0;
-  /* offWarn: -1 — нет; 0/1 — отложенный офсайд команды; 2/3 — предупреждение команде 0/1 (OFF_PRE: шайба у неё вне
-     зоны атаки, а партнёры остались в зоне — ввезёт шайбу, пока не выехали, — офсайд). Одно число — так же в снимке сети */
-  var pen=[], offWarn=-1, lastTouch=null, prevZone=[0,0], OFF_PRE=2;
+  /* offWarn: -1 — нет; 0/1 — отложенный офсайд команды; 2/3 — предупреждение команде 0/1 (OFF_PRE: шайба уже была у неё
+     в зоне атаки и вышла назад, а партнёры остались в зоне — ввезёт снова, пока не выехали, — офсайд). Одно число — так же
+     в снимке сети. reIn[t] — шайба команды t была в зоне атаки и ещё не все отметились (первый заход — без этого правила) */
+  var pen=[], offWarn=-1, lastTouch=null, prevZone=[0,0], OFF_PRE=2, reIn=[false,false];
   /* тактика ботов: 0 стандарт, 1 атака, 2 оборона (на команду) */
   var TACTIC=[0,0];
   /* вратарь-«выход на игрока»: удержание Y */
@@ -288,7 +289,7 @@ function create(env){
       var g=goalieOf(t);
       if(g){ g.x=g.dir*(GOAL_X-0.7); g.z=0; g.vx=0; g.vz=0; g.spd=0; g.yaw=g.dir>0?-Math.PI/2:Math.PI/2; }
     }
-    lastTouch=null; icing.armed=false; offWarn=-1; offT=0;
+    lastTouch=null; icing.armed=false; offWarn=-1; offT=0; reIn[0]=reIn[1]=false;
     for(var zz=0;zz<players.length;zz++) players[zz].os=0;
     HS[0].goalieCtl=false; HS[0].prevCtl=null;
     HS[1].goalieCtl=false; HS[1].prevCtl=null;
@@ -1324,9 +1325,11 @@ function create(env){
         for(q2=0;q2<arr2.length;q2++)
           if(arr2[q2].os && zoneOf(arr2[q2].x,dir2)!==1) arr2[q2].os=0;
 
-        /* 0. ВВЁЗ ШАЙБУ, а свои уже в зоне (не отметились за синей) — офсайд сразу, как в NHL: шайба вышла из зоны —
-           все должны выехать, только потом заходить снова; пас назад можно, ввезти или пас вперёд в зону — нет */
-        if(pz===1 && prevZone[t2]!==1 && carrier && carrier.team===t2){
+        if(!mine) reIn[t2]=false;                        /* шайба у соперника — всё сначала */
+        /* 0. СНОВА ВВЁЗ ШАЙБУ или отдал пас вперёд в зону, а свои ещё там (не отметились за синей) — офсайд сразу, как в
+           NHL: шайба вышла из зоны — все должны выехать, только потом заходить снова; пас назад можно. Первый заход — как
+           раньше (отложенный) */
+        if(pz===1 && prevZone[t2]!==1 && mine && reIn[t2]){
           var early=0;
           for(q2=0;q2<arr2.length;q2++) if(arr2[q2]!==carrier && zoneOf(arr2[q2].x,dir2)===1) early=1;
           if(early){
@@ -1351,9 +1354,10 @@ function create(env){
         if(pz!==1){
           for(q2=0;q2<arr2.length;q2++) arr2[q2].os=0;
           if(offWarn===t2) offWarn=-1;
-          /* ПРЕДУПРЕЖДЕНИЕ: шайба у команды в средней зоне, а кто-то из своих в зоне атаки */
+          /* ПРЕДУПРЕЖДЕНИЕ: шайба команды вышла из зоны атаки назад, а кто-то из своих остался там; все выехали — снято */
           var inZ=0;
-          if(mine && puck.x*dir2>-BLUE_X) for(q2=0;q2<arr2.length;q2++) if(arr2[q2]!==carrier && zoneOf(arr2[q2].x,dir2)===1) inZ=1;
+          if(mine && reIn[t2]) for(q2=0;q2<arr2.length;q2++) if(arr2[q2]!==carrier && zoneOf(arr2[q2].x,dir2)===1) inZ=1;
+          if(!inZ) reIn[t2]=false;
           if(inZ && (offWarn<0 || offWarn>=OFF_PRE)) offWarn=OFF_PRE+t2;
           else if(!inZ && offWarn===OFF_PRE+t2) offWarn=-1;
         } else if(offWarn===OFF_PRE+t2) offWarn=-1;
@@ -1381,6 +1385,7 @@ function create(env){
             }
           }
         }
+        if(pz===1 && mine) reIn[t2]=true;
         prevZone[t2]=pz;
       }
       if(icing.armed){
