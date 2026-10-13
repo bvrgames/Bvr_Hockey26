@@ -21,11 +21,13 @@ for (const name of ['skater', 'goalie']) {
   const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
   const pos = new Float32Array(nv * 3);
   for (let i = 0; i < nv * 3; i++) pos[i] = (dv.getInt16(i * 2, true) + 32767) * PD.sc[i % 3] + PD.lo[i % 3];
-  const io = nv * 6 + nv * 3 + nv * 3 + nv + nv * 4 + nv * 4;          // same layout as hdModel() in index.html
+  const io = nv * 6 + nv * 3 + nv * 3 + nv + nv * 4 + nv * 4 + (PD.uv ? nv * 4 : 0);   // same layout as hdGeo() in index.html
   const idx = new Uint32Array(ni);
   for (let i = 0; i < ni; i++) idx[i] = dv.getUint16(io + i * 2, true);
   const target = Math.floor(ni * RATIO / 3) * 3;
-  const [lo, err] = MeshoptSimplifier.simplify(idx, pos, 3, target, ERR, []);
+  // the goalie's colour areas are cut into the mesh (split vertices along the edges of stripes and pad graphics): keep
+  // those borders, otherwise the simplified model gets jagged colour edges
+  const [lo, err] = MeshoptSimplifier.simplify(idx, pos, 3, target, ERR, PD.uv ? ['LockBorder'] : []);
   const u16 = new Uint16Array(lo);
   out[name] = { ni: u16.length, idx: Buffer.from(u16.buffer).toString('base64') };
   console.log(`${name}: ${ni / 3} → ${u16.length / 3} triangles (target ${target / 3}, error ${err.toFixed(4)})`);

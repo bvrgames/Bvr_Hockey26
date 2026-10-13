@@ -18,6 +18,8 @@
 //   assets/src/fonts/*.woff2  menu font (Fira Sans Extra Condensed 800 italic, OFL) → assets/dist/font-lat|font-cyr.<hash>.woff2
 //   assets/src/kits/*.webp    kit fronts and flags for the team select (made by tools/prep-kits.mjs from the designer's
 //                             sheets) → assets/dist/kit-<name>.<hash>.webp, window.ASSETS.kits[name]
+//   assets/src/crests/*.svg   national crests for the goalie's jersey (the game draws them into the decal atlas) →
+//                             assets/dist/crest-<nation>.<hash>.svg, window.ASSETS.crests[nation]
 //   assets/src/icons/*.svg    currency icons (coin, star) → minified <symbol id="ic-<name>"> in a hidden <svg data-asset="icons">
 //                             right after <body> (used as <svg class="ic"><use href="#ic-coin"/></svg>). Inline, not a dist
 //                             file: ~1.5 KB each, needed on the first menu frame (no request, no blank icon while it loads),
@@ -36,7 +38,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = join(ROOT, 'assets', 'src'), DIST = join(ROOT, 'assets', 'dist'), HTML = join(ROOT, 'index.html');
 const IMAGES = ['env', 'ads', 'logo'];
 const SFX = join(SRC, 'sfx-ready'), LOOP_TAIL = 1;   // = tools/prep-sfx.mjs LOOP_TAIL
-const MUSIC = join(SRC, 'music'), FONTS = join(SRC, 'fonts'), ICONS = join(SRC, 'icons'), KITS = join(SRC, 'kits');
+const MUSIC = join(SRC, 'music'), FONTS = join(SRC, 'fonts'), ICONS = join(SRC, 'icons'), KITS = join(SRC, 'kits'), CRESTS = join(SRC, 'crests');
 // the drawing's own bounds (getBBox in Chromium) instead of the artboard: the icon is exactly as tall as the text it
 // stands next to; both share the artboard's rows 55.4…870.2. Measure again when the art changes.
 const ICON_BOX = { coin: '66.8 55.4 814.8 814.8', star: '49.5 55.4 849.5 814.8' };
@@ -68,17 +70,18 @@ function extract() {
 }
 
 // Mesh bytes, per vertex attribute one after another (SoA): position int16×3, normal int8×3, colour u8×3, slot u8,
-// joints u8×4, weights u8×4 — then indices u16. Same layout as hdGeo() in index.html.
-const ATTR = [6, 3, 3, 1, 4, 4];
+// joints u8×4, weights u8×4, [uv u16×2 when the model has `uv` — decal atlas, the goalie] — then indices u16.
+// Same layout as hdGeo() in index.html.
+const ATTR = [6, 3, 3, 1, 4, 4], ATTR_UV = [...ATTR, 4];
 // the LOD mesh with only the vertices its indices use (a third of the full mesh): its own compact vertex set
-function compactLod(meshB64, nv, ni, idxB64) {
+function compactLod(meshB64, nv, ni, idxB64, uv) {
   const mesh = Buffer.from(meshB64, 'base64'), idx = new Uint16Array(new Uint8Array(Buffer.from(idxB64, 'base64')).buffer);
   const remap = new Int32Array(nv).fill(-1), order = [];
   const out = new Uint16Array(idx.length);
   for (let i = 0; i < idx.length; i++) { let r = remap[idx[i]]; if (r < 0) { r = remap[idx[i]] = order.length; order.push(idx[i]); } out[i] = r; }
   const n = order.length, parts = [];
   let off = 0;
-  for (const sz of ATTR) {
+  for (const sz of (uv ? ATTR_UV : ATTR)) {
     const src = mesh.subarray(off, off + nv * sz), dst = Buffer.alloc(n * sz);
     for (let v = 0; v < n; v++) src.copy(dst, v * sz, order[v] * sz, order[v] * sz + sz);
     parts.push(dst); off += nv * sz;
@@ -104,7 +107,7 @@ function packPlayers() {
   const lo = packFile((add) => {
     const head = {};
     for (const k of Object.keys(hd)) {
-      const m = { ...hd[k] }, g = compactLod(m.mesh, m.nv, m.ni, lod[k].idx);
+      const m = { ...hd[k] }, g = compactLod(m.mesh, m.nv, m.ni, lod[k].idx, m.uv);
       delete m.mesh; delete m.nv; delete m.ni;
       m.anim = add(Buffer.from(m.anim, 'base64'));
       m.geo = { nv: g.nv, ni: g.ni, mesh: add(g.mesh) };
@@ -128,9 +131,16 @@ function build() {
   // kit and flag pictures for the team select (tools/prep-kits.mjs): manifest.kits = { rus0, rus1, 'rus-flag', … }
   const kits = existsSync(KITS) ? readdirSync(KITS).filter((f) => /\.webp$/.test(f)).sort() : [];
   for (const f of kits) files['kit:' + f.replace(/\.webp$/, '')] = ['kit-' + f.replace(/\.webp$/, ''), 'webp', readFileSync(join(KITS, f))];
+  // crests on the goalie's jersey (the game draws them into the decal atlas): assets/src/crests/<nation>.svg → manifest.crests
+  const crests = existsSync(CRESTS) ? readdirSync(CRESTS).filter((f) => /\.svg$/.test(f)).sort() : [];
+  for (const f of crests) files['crest:' + f.replace(/\.svg$/, '')] = ['crest-' + f.replace(/\.svg$/, ''), 'svg', readFileSync(join(CRESTS, f))];
   const manifest = {}, dist = {};
   for (const [k, [n, ext, buf]] of Object.entries(files)) dist[k] = `assets/dist/${n}.${hash(buf)}.${ext}`;
-  for (const k of Object.keys(dist)) if (k.startsWith('kit:')) (manifest.kits = manifest.kits || {})[k.slice(4)] = dist[k]; else manifest[k] = dist[k];
+  for (const k of Object.keys(dist)) {
+    if (k.startsWith('kit:')) (manifest.kits = manifest.kits || {})[k.slice(4)] = dist[k];
+    else if (k.startsWith('crest:')) (manifest.crests = manifest.crests || {})[k.slice(6)] = dist[k];
+    else manifest[k] = dist[k];
+  }
   manifest.loBytes = P.lo.length; manifest.hiBytes = P.hi.length;   // loading progress (content-length is compressed)
   for (const [k, f] of Object.entries(FONT_FILES)) {
     const buf = readFileSync(join(FONTS, f));
