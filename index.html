@@ -5591,6 +5591,8 @@ var ONESHOT={wrist_shot:1, slap_shot:1, pass_forehand:1, poke_check:1,
              butterfly_down:1, butterfly_up:1, save_glove_high:1,
              save_pad_c:1, freeze_puck:1, save_pad_b:1, save_blocker:1,
              rvh_c:1, rvh_b:1, bfly_slide_c:1, bfly_slide_b:1};
+/* клипы, после которых вратарь на коленях: встаёт через butterfly_up */
+var GK_DOWN={butterfly_down:1, save_pad_c:1, save_pad_b:1, rvh_c:1, rvh_b:1, bfly_slide_c:1, bfly_slide_b:1, freeze_puck:1};
 
 /* Циклы катания сделаны под эти скорости (из спеки моделей).
    Игровые скорости выше, поэтому темп ограничиваем — иначе ноги мельтешат. */
@@ -5601,8 +5603,13 @@ function hdModelFor(p){ return p.goalie ? HD.m.goalie : HD.m.skater; }
 function animPick(p){
   if(p.goalie){
     if(p._act && p._actT>0) return p._act;
-    var vz=Math.abs(p.vz||0);
-    if(vz>0.9) return (p.vz>0) ? 'shuffle_c' : 'shuffle_b';
+    /* боковое движение — шаг в сторону ловушки (_c) или блина (_b); вратарь внизу — скольжение в «бабочке» */
+    var lv=gkSide(p, p._gvx||0, p._gvz||0), cur=p._an && p._an.c;
+    /* порог с гистерезисом: шаг начинается с 0.9 м/с, заканчивается ниже 0.5 — без дрожи стойка↔шаг */
+    if(Math.abs(lv)>((cur==='shuffle_c'||cur==='shuffle_b'||cur==='bfly_slide_c'||cur==='bfly_slide_b')?0.5:0.9)){
+      if(p._an && GK_DOWN[p._an.c]) return lv>0 ? 'bfly_slide_c' : 'bfly_slide_b';
+      return lv>0 ? 'shuffle_c' : 'shuffle_b';
+    }
     return 'ready';
   }
   if(p.down>0){ p._animState='fall'; return 'fall'; }
@@ -5668,8 +5675,15 @@ function animTick(p, dt){
   if(!p._an) p._an={c:'ready', t:Math.random()*0.9, pc:null, pt:0, mix:0};
   var a=p._an;
   if(p._actT>0){ p._actT-=dt; if(p._actT<=0) p._act=null; }
+  if(p.goalie) gkVel(p, dt);
   var want=animPick(p);
   if(p._foT>0){ p._foT-=dt; want=FOV.clip; }          /* вбрасывание: центр в стойке (FOV) */
+  if(p.goalie && !(p._actT>0)){
+    /* вратарь: с колен — через подъём, начатый клип (подъём, сейв) доигрывает, а не обрывается стойкой */
+    var cur=M.clips[a.c];
+    if(GK_DOWN[a.c] && !GK_DOWN[want] && M.clips.butterfly_up) want='butterfly_up';
+    else if(ONESHOT[a.c] && cur && a.t<cur.dur && !GK_DOWN[want]) want=a.c;
+  }
   if(!M.clips[want]) want='ready';
   /* play() не перезапускает уже играющий клип — иначе дёргается каждый кадр */
   if(want!==a.c){
@@ -5684,8 +5698,10 @@ function animTick(p, dt){
     a.t=cl.dur-0.001;
     if(!(p._actT>0) && p.down<=0){
       a.pc=a.c; a.pt=a.t; a.mix=1;
-      /* из «бабочки» вратарь встаёт отдельным клипом */
-      a.c = (a.pc==='butterfly_down' && M.clips.butterfly_up) ? 'butterfly_up' : animPick(p); if(!M.clips[a.c]) a.c='ready';
+      /* с колен (бабочка, щиток, RVH, скольжение, накрыл) вратарь встаёт отдельным клипом, если не скользит дальше */
+      a.c=animPick(p);
+      if(GK_DOWN[a.pc] && !GK_DOWN[a.c] && M.clips.butterfly_up) a.c='butterfly_up';
+      if(!M.clips[a.c]) a.c='ready';
       a.t=0;
     }
   }
@@ -8491,21 +8507,40 @@ EV.on('post',    function(){ SFX.post(); buzz(30,'hard'); fxKick('m',7,12); fxPo
 EV.on('save',    function(e){ SFX.save(); if(e.kind==='line') flash(T('save'),'',0.7); gkAnimSave(e); });
 /* вратарь (анимации из модели, раньше не включались). Только по событиям, без Math.random: случайные числа клиента
    входят в матч (balance). Высокий бросок — ловушка, сбоку — щиток, по центру — «бабочка»; накрыл — лёг на шайбу. */
+/* Сторона ловушки: у модели вратаря ловушка на локальной −X, в мире это (−sin yaw, cos yaw). gkSide > 0 — смещение
+   (dx, dz) от вратаря в сторону ловушки, < 0 — в сторону блина. */
+function gkSide(g, dx, dz){ return -dx*Math.sin(g.yaw||0) + dz*Math.cos(g.yaw||0); }
+/* скорость вратаря по смещению (симуляция двигает его без vx/vz), сглаженная; скачок при расстановке не считается */
+function gkVel(p, dt){
+  if(p._gx!==undefined && dt>0){
+    var vx=(p.x-p._gx)/dt, vz=(p.z-p._gz)/dt;
+    if(Math.hypot(vx,vz)>8){ vx=0; vz=0; }
+    var k=Math.min(1, dt*8); p._gvx+=(vx-p._gvx)*k; p._gvz+=(vz-p._gvz)*k;
+  } else { p._gvx=0; p._gvz=0; }
+  p._gx=p.x; p._gz=p.z;
+}
 function gkAnimSave(e){
   var g=players[e.g]; if(!g || !g.goalie) return;
   if(e.cover){ playAction(g,'freeze_puck',1.1); return; }
-  if(e.kind==='line'){
-    if((e.y||0)>0.55) playAction(g,'save_glove_high',0.7);
-    else if(Math.abs(e.z||0)>0.4) playAction(g,'save_pad_c',0.65);
-    else playAction(g,'butterfly_down',0.6);
-  } else if(e.shot) playAction(g,'butterfly_down',0.6);
+  /* куда пришла шайба: у сейва в створе — из события, у сейва телом (шайба долетела до вратаря) — где она сейчас */
+  var L, y;
+  if(e.kind==='line'){ L=gkSide(g, 0, e.z||0); y=e.y||0; }
+  else if(e.shot){ L=gkSide(g, puck.x-g.x, puck.z-g.z); y=puck.y||0; }
+  else return;
+  if(y>0.55) playAction(g, L<-0.15 ? 'save_blocker' : 'save_glove_high', 0.75);   /* верх: ловушка, со стороны блина — блин */
+  else if(Math.abs(L)>0.4) playAction(g, L>0 ? 'save_pad_c' : 'save_pad_b', 0.7);   /* низ сбоку — щиток в сторону */
+  else playAction(g,'butterfly_down',0.7);
 }
-/* бросок с близкой дистанции — вратарь заранее садится «бабочкой» */
+/* бросок с близкой дистанции — вратарь заранее садится «бабочкой»; с острого угла (от линии ворот) — RVH у той штанги */
 EV.on('shot', function(e){
   var p=players[e.p]; if(!p) return;
   for(var i=0;i<players.length;i++){ var g=players[i];
-    if(!g.goalie || g.team===p.team) continue;
-    if(Math.hypot(g.x-p.x, g.z-p.z)<9 && !(g._actT>0)) playAction(g,'butterfly_down',0.6);
+    if(!g.goalie || g.team===p.team || g._actT>0) continue;
+    var dx=p.x-g.x, dz=p.z-g.z, d=Math.hypot(dx,dz);
+    if(d>=9) continue;
+    var fwd=dx*Math.cos(g.yaw||0)+dz*Math.sin(g.yaw||0), L=gkSide(g,dx,dz);
+    if(d<6 && Math.abs(L)>fwd*1.2) playAction(g, L>0 ? 'rvh_c' : 'rvh_b', 1.0);
+    else playAction(g,'butterfly_down',0.7);
   }
 });
 EV.on('goal',    function(e){ SFX.whistle(); SFX.horn(); SFX.joy(); buzz([60,50,120],'goal'); fxGoal(e.t);
